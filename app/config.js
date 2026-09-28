@@ -6,5 +6,5 @@ window.LBZ_CONFIG = {
   supabaseAnonKey: "",
   // Adresa webovej aplikácie „LBZ appka v2“ zo skladového Apps Scriptu (SKLAD LBZ → Nasadiť).
   // Kým je prázdna, moduly Sklad a Furmanky ukazujú „čoskoro“.
-  skladApiUrl: ""
+  skladApiUrl: "https://script.google.com/macros/s/AKfycbzx3P0Jk0nHCWanpfACXVjvIR8_ntBb_gRBeFox8lGczH4CqT1BuTar0jf3lM9kfns2/exec"
 };

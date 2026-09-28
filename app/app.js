@@ -74,7 +74,7 @@
   if (SKLAD) MODULY.forEach(function (m) { if (m.kod === "sklad" || m.kod === "furmanky") m.aktivny = true; });
   var db = OSTRY ? window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey) : null;
 
-  var stav = { pouzivatel: null, rola: null, modul: "prehlad", loginTab: "ucet", pin: "" };
+  var stav = { pouzivatel: null, rola: null, modul: "prehlad", loginTab: SKLAD && !OSTRY ? "pin" : "ucet", pin: "" };
   var root = document.getElementById("app");
 
   function esc(s) {
@@ -251,7 +251,7 @@
     if (t.dataset.pin) {
       if (t.dataset.pin === "⌫") stav.pin = stav.pin.slice(0, -1);
       else if (stav.pin.length < 4) stav.pin += t.dataset.pin;
-      if (stav.pin.length === 4 && !OSTRY) { stav.rola = "prevadzka"; stav.pouzivatel = "Ukážka – tablet"; stav.pin = ""; }
+      if (stav.pin.length === 4 && !OSTRY) { stav.rola = "prevadzka"; stav.pouzivatel = SKLAD ? "Tablet na prevádzke" : "Ukážka – tablet"; stav.pin = ""; stav.modul = SKLAD ? "sklad" : "prehlad"; }
       // Ostrý režim: PIN overí Edge Function (doplní sa v ďalšom kroku).
       render(); return;
     }
