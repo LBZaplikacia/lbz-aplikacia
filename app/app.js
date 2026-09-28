@@ -69,6 +69,9 @@
 
   var cfg = window.LBZ_CONFIG || {};
   var OSTRY = !!(cfg.supabaseUrl && cfg.supabaseAnonKey && window.supabase);
+  // Sklad a furmanky bežia naostro, keď je v config.js adresa skladového Apps Scriptu
+  var SKLAD = window.LBZ_SKLAD && window.LBZ_SKLAD.zapnute() ? window.LBZ_SKLAD : null;
+  if (SKLAD) MODULY.forEach(function (m) { if (m.kod === "sklad" || m.kod === "furmanky") m.aktivny = true; });
   var db = OSTRY ? window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey) : null;
 
   var stav = { pouzivatel: null, rola: null, modul: "prehlad", loginTab: "ucet", pin: "" };
@@ -158,6 +161,7 @@
   }
 
   function kartaFurmanky() {
+    if (SKLAD) return SKLAD.kartaFurmanky();
     return '<section class="card"><h3>Furmanky dnes <span class="pill ok">' + UKAZKA.trasy.length + " trasy</span></h3><div class=\"rows\">" +
       UKAZKA.trasy.map(function (t) {
         var cls = t.stav === "na ceste" ? "ok" : t.stav === "balí sa" ? "warn" : "ok";
@@ -165,6 +169,7 @@
       }).join("") + "</div></section>";
   }
   function kartaSklad() {
+    if (SKLAD) return SKLAD.kartaSklad();
     var nizke = UKAZKA.sklad.filter(function (p) { return p.ks < p.min; }).length;
     return '<section class="card"><h3>Sklad <span class="pill ' + (nizke ? "warn" : "ok") + '">' + (nizke ? nizke + " dochádza" : "v poriadku") + "</span></h3>" +
       UKAZKA.sklad.map(function (p) {
@@ -221,13 +226,20 @@
       return hlavicka("Nastavenia", "Používatelia a prístupy") +
         '<div class="empty"><strong>Tu bude správa používateľov</strong><span class="muted">Priradenie rolí, PIN pre tablet a zapnutie modulov pre jednotlivé roly.</span></div>';
     }
+    if (SKLAD && (stav.modul === "sklad" || stav.modul === "furmanky")) {
+      return '<div id="sklad-root" data-modul="' + stav.modul + '"></div>';
+    }
     var m = MODULY.filter(function (x) { return x.kod === stav.modul; })[0];
     return hlavicka(m.nazov, "Modul") +
       '<div class="empty"><strong>Tento modul ešte preklápame</strong>' +
       '<span class="muted">Kým nebude hotový, funguje pôvodný nástroj (skener v Upgates, Google tabuľky). Moduly pribúdajú postupne, po jednom.</span></div>';
   }
 
-  function render() { if (stav.rola) renderApp(); else renderLogin(); }
+  function render() {
+    if (stav.rola) renderApp(); else renderLogin();
+    var sk = document.getElementById("sklad-root");
+    if (sk && SKLAD) SKLAD.mount(sk, sk.getAttribute("data-modul"));
+  }
 
   // ---------- udalosti ----------
   root.addEventListener("click", function (e) {
@@ -255,6 +267,7 @@
   });
 
   root.addEventListener("submit", function (e) {
+    if (e.target.id !== "f-ucet") return; // ostatné formuláre si obsluhujú moduly samy
     e.preventDefault();
     var email = document.getElementById("in-email").value.trim();
     if (OSTRY) {

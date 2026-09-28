@@ -120,3 +120,89 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
 }
 @media (min-width: 761px) { .mtop { display: none; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ---------- modul Sklad / Furmanky ---------- */
+#sklad-root { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.pill.info { color: var(--accent); background: var(--accent-soft); }
+.s-taby { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 10px; max-width: 480px; }
+.s-taby button { border: 0; background: transparent; border-radius: 8px; padding: 10px; font-weight: 700; color: var(--muted); min-height: 44px; }
+.s-taby button[aria-selected="true"] { background: var(--surface); color: var(--ink); }
+.s-rezimy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.s-rezim { border: 2px solid var(--line); background: var(--surface); border-radius: 12px; min-height: 76px; padding: 10px 6px;
+  display: grid; place-items: center; gap: 2px; font: 700 16px var(--font-display); }
+.s-ikona { font-size: 24px; line-height: 1; }
+.s-rezim[aria-pressed="true"] { color: #fff; border-color: transparent; }
+.s-prijem[aria-pressed="true"] { background: #2f7d4f; }
+.s-krcmicka[aria-pressed="true"] { background: #583934; }
+.s-vydaj[aria-pressed="true"] { background: #2C5167; }
+#s-kamera { width: 100%; max-width: 420px; border-radius: 12px; overflow: hidden; background: #000; }
+.s-sprava { border-radius: 12px; padding: 16px 18px; font: 700 20px/1.3 var(--font-display); display: grid; gap: 4px; }
+.s-sprava .s-kod { font: 500 14px var(--font-body); opacity: .85; }
+.s-ok { background: #e3f1e8; color: #1d5635; }
+.s-chyba { background: #fbe4e2; color: #8c1d16; }
+.s-info { background: var(--accent-soft); color: var(--ink); }
+.s-ovladanie { display: flex; flex-wrap: wrap; gap: 10px; align-items: stretch; }
+.s-rucne { display: flex; gap: 8px; flex: 1 1 280px; min-width: 0; }
+.s-rucne input, .s-hladat { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--surface); min-height: 48px; }
+.s-zoznam { display: grid; }
+.s-riadok { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 38%); gap: 10px; align-items: center; padding: 9px 0 9px 10px;
+  border-top: 1px solid var(--line); border-left: 6px solid var(--pf); font-size: 14px; }
+.s-riadok:first-child { border-top: 0; }
+.s-telo { display: grid; min-width: 0; }
+.s-telo strong, .s-telo .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-stav { font-size: 13px; text-align: right; overflow-wrap: anywhere; padding-right: 4px; }
+.s-riadok.s-chyba { background: #fbe4e2; color: #8c1d16; }
+.s-riadok.s-chyba .muted { color: inherit; }
+.s-riadok.s-caka .s-stav { color: var(--muted); }
+.s-lista { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.s-lista-tl { display: flex; gap: 8px; flex-wrap: wrap; }
+.s-dlazdice { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+.s-dlazdica { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; display: grid; gap: 2px; }
+.s-dlazdica strong { font: 700 26px/1.1 var(--font-display); }
+.s-filtre { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.s-filtre .chip { flex: none; min-height: 40px; }
+.s-filtre .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.s-tabulka { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.s-thead, .s-prow { display: grid; grid-template-columns: 1fr 64px 56px; gap: 8px; align-items: center; padding: 10px 12px; }
+.s-thead.s-4, .s-prow.s-4 { grid-template-columns: 1fr 56px 48px 84px; }
+.s-thead { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; background: var(--surface-2); }
+.s-thead span:not(:first-child), .s-velke { text-align: center; }
+.s-produkt { border-top: 1px solid var(--line); border-left: 8px solid var(--pf); }
+.s-prow > span:first-child { display: grid; min-width: 0; }
+.s-mono { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.s-velke { font: 700 20px var(--font-display); }
+.s-zle { color: var(--bad); }
+.s-exp { display: flex; justify-content: space-between; gap: 10px; padding: 6px 12px 6px 28px; font-size: 13px; background: var(--warn-soft); flex-wrap: wrap; }
+.s-exp-zle { background: #fbe4e2; color: #8c1d16; }
+.s-furmanky { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.s-furmanka { text-align: left; font: inherit; color: inherit; cursor: pointer; min-height: 110px; }
+.s-furmanka strong { font: 700 20px var(--font-display); }
+.s-furmanka .pill { justify-self: start; }
+.s-furmanka:hover { border-color: var(--accent); }
+.s-pozn { margin: 0; font-size: 14px; }
+.card .btn { justify-self: start; }
+@media (max-width: 760px) {
+  .s-rezim { min-height: 68px; font-size: 15px; }
+  .s-sprava { font-size: 18px; }
+  .s-riadok { grid-template-columns: auto minmax(0, 1fr); }
+  .s-stav { grid-column: 2; text-align: left; }
+  .s-thead.s-4, .s-prow.s-4 { grid-template-columns: 1fr 44px 40px 72px; }
+}
+
+/* ---------- tlač (A4, obyčajný papier) ---------- */
+#tlac-oblast { display: none; }
+@media print {
+  @page { size: A4 portrait; margin: 8mm; }
+  body.tlaci > *:not(#tlac-oblast) { display: none !important; }
+  body.tlaci { background: #fff; color: #000; }
+  body.tlaci #tlac-oblast { display: block; font: 11pt/1.3 "Montserrat", Arial, sans-serif; }
+  #tlac-oblast h1 { font-size: 16pt; margin: 0 0 2mm; }
+  #tlac-oblast .t-datum { margin: 0 0 4mm; font-size: 9pt; }
+  #tlac-oblast table { width: 100%; border-collapse: collapse; }
+  #tlac-oblast th, #tlac-oblast td { border: 1px solid #999; padding: 1.5mm 2mm; }
+  #tlac-oblast th { background: #cfe2f3 !important; font-size: 10pt; }
+  #tlac-oblast th:first-child { text-align: left; }
+  #tlac-oblast td.t-c { text-align: center; font-weight: 700; font-size: 14pt; width: 22mm; }
+  #tlac-oblast td.t-zle { color: #c00; }
+  #tlac-oblast tr { break-inside: avoid; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

@@ -1,6 +1,6 @@
 // Service worker: appka sa otvorí aj pri slabom signáli (uložené základné súbory).
-const CACHE = "lbz-v0.1";
-const SUBORY = ["./", "index.html", "styles.css", "app.js", "config.js", "manifest.webmanifest", "icons/logo.svg"];
+const CACHE = "lbz-v0.2";
+const SUBORY = ["./", "index.html", "styles.css", "app.js", "sklad.js", "config.js", "manifest.webmanifest", "icons/logo.svg"];
 self.addEventListener("install", e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(SUBORY))));
 self.addEventListener("activate", e => e.waitUntil(
   caches.keys().then(k => Promise.all(k.filter(x => x !== CACHE).map(x => caches.delete(x))))
