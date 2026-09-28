@@ -8,7 +8,7 @@
 // • Volá sa z doPost, keď požiadavka obsahuje "v2": true.
 //
 // Akcie:  PING | KATALOG | STAV | SKENY | FURMANKY_OBNOV
-// Spustiť RAZ ručne: v2ZapniAutomatickeFurmanky (obnova furmaniek každých 15 min)
+// Obnova furmaniek každých 15 min: spúšťač sa vytvorí sám pri prvom STAV (alebo ručne v2ZapniAutomatickeFurmanky)
 // ==========================================================================
 
 var V2_TZ = "Europe/Bratislava";
@@ -21,7 +21,7 @@ function lbzV2(params) {
     var akcia = String(params.akcia || "");
     if (akcia === "PING") out = { ok: true, cas: v2Cas_(new Date(), "HH:mm:ss") };
     else if (akcia === "KATALOG") out = { ok: true, katalog: v2Katalog_(null, params.cerstvy === true) };
-    else if (akcia === "STAV") out = v2Stav_(params.cerstvy === true);
+    else if (akcia === "STAV") { v2ZabezpecSpustac_(); out = v2Stav_(params.cerstvy === true); }
     else if (akcia === "SKENY") out = v2Skeny_(params.skeny || []);
     else if (akcia === "FURMANKY_OBNOV") out = v2ObnovFurmanky_();
     else out = { ok: false, chyba: "Neznáma akcia: " + akcia };
@@ -72,6 +72,17 @@ function v2ZapniAutomatickeFurmanky() {
   });
   ScriptApp.newTrigger("v2AutomatickeFurmanky").timeBased().everyMinutes(15).create();
   Logger.log("Automatická obnova furmaniek zapnutá (každých 15 min).");
+}
+
+// Pri prvom otvorení stavu v appke sa spúšťač vytvorí sám (ak ešte neexistuje)
+function v2ZabezpecSpustac_() {
+  var c = CacheService.getScriptCache();
+  if (c.get("v2_spustac_ok")) return;
+  try {
+    var existuje = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === "v2AutomatickeFurmanky"; });
+    if (!existuje) ScriptApp.newTrigger("v2AutomatickeFurmanky").timeBased().everyMinutes(15).create();
+    c.put("v2_spustac_ok", "1", 21600);
+  } catch (e) { console.log("Spúšťač furmaniek: " + e); }
 }
 
 function v2AutomatickeFurmanky() {
