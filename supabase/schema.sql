@@ -1303,6 +1303,50 @@ grant execute on function public.som_furmankar(), public.furmanky_zoznam(), publ
   to authenticated;
 revoke all on function public.objednavka_json(text) from authenticated;
 
+
+-- =========================================================================
+-- 9) PRENOS UZAVRETÝCH FURMANIEK ZO SPRÁVY OBJEDNÁVOK (jednorazovo, dá sa zopakovať)
+--    Objednávky, ktoré sú v starej tabuľke v uzavretom (FULL) hárku, ostanú v appke v tej istej furmanke
+--    a automatika ich nepresunie (ako getMinuleObjednavkyPreTrasu v starom skripte).
+--    p: [{nazov: "Stredná 30.09.2026 [FULL]", cisla: ["FO003633", …]}] – zoradené od najstaršieho
+-- =========================================================================
+create or replace function public.furmanky_import_stare(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare h jsonb; m text[]; v_reg text; v_dat date; v_id bigint; v_ids bigint[] := '{}'; v_cisla text[] := '{}'; v_n int := 0; c text;
+begin
+  if not (public.som_spravca() or current_user in ('postgres', 'service_role', 'supabase_admin')) then
+    return jsonb_build_object('ok', false, 'text', 'Len IT a CEO');
+  end if;
+  for h in select * from jsonb_array_elements(coalesce(p, '[]'::jsonb)) loop
+    m := regexp_match(h->>'nazov', '^\s*(\S+)\s+(\d{1,2})\.(\d{1,2})\.(\d{4})?');
+    continue when m is null;
+    select region into v_reg from public.furmanky_regiony where rozvoz and public.norm_text(region) = public.norm_text(m[1]);
+    continue when v_reg is null;
+    v_dat := make_date(coalesce(m[4]::int, 2026), m[3]::int, m[2]::int);
+    insert into public.furmanky (region, datum, stav, uzavreta, dovod)
+      values (v_reg, v_dat, case when v_dat < public.dnes_sk() then 'rozvezena' else 'full' end, now(), 'Uzavreté v Správe objednávok (prenesené)')
+      on conflict (region, datum) do update set
+        stav = case when furmanky.stav = 'otvorena' or (furmanky.stav = 'full' and excluded.stav = 'rozvezena') then excluded.stav else furmanky.stav end,
+        dovod = excluded.dovod, uzavreta = coalesce(furmanky.uzavreta, now())
+      returning id into v_id;
+    v_ids := v_ids || v_id;
+    for c in select trim(x) from jsonb_array_elements_text(h->'cisla') x loop
+      continue when c = '' or c like 'M-%' or not exists (select 1 from public.objednavky where cislo = c);
+      insert into public.zaradenia (cislo, furmanka_id, rucne, kedy) values (c, v_id, false, now())
+        on conflict (cislo) do update set furmanka_id = excluded.furmanka_id, kedy = now() where not zaradenia.rucne;
+      v_cisla := v_cisla || c;
+      v_n := v_n + 1;
+    end loop;
+  end loop;
+  -- čo appka dala do týchto (v starej tabuľke uzavretých) furmaniek navyše, pôjde na ďalší termín
+  delete from public.zaradenia z where z.furmanka_id = any(v_ids) and not z.rucne and not (z.cislo = any(v_cisla));
+  perform public.furmanky_prirad();
+  insert into public.furmanky_log (typ, text, pocet) values ('import', 'Prenos uzavretých furmaniek zo Správy objednávok: ' || v_n || ' objednávok', v_n);
+  return jsonb_build_object('ok', true, 'furmanky', coalesce(array_length(v_ids, 1), 0), 'objednavky', v_n);
+end $$;
+revoke all on function public.furmanky_import_stare(jsonb) from public, anon;
+grant execute on function public.furmanky_import_stare(jsonb) to authenticated;
+
 -- ---------- plánované sťahovanie 6:00, 11:30, 14:00 (spustiť AŽ po nasadení Edge Function „upgates-sync“) ----------
 -- Plánovač volá funkciu v UTC časoch pre letný aj zimný čas; funkcia sama pustí len ten, ktorý v Bratislave padne na 6:00/11:30/14:00.
 create extension if not exists pg_cron;
