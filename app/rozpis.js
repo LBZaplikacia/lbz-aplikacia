@@ -224,7 +224,7 @@
         obsah = '<p style="margin:0">Voľná smena' + (m.od ? ' <span class="num">' + esc(m.od + (m.do ? "–" + m.do : "")) + "</span>" : "") + ".</p>";
         if (mozemUpravovat() && !minule(m.datum)) {
           obsah += '<form class="f-form" data-r-akcia="zapisat" data-id="' + m.id + '">' +
-            (rola() === "osobny" ? "" : '<label class="field"><span class="label">Kto</span>' + vyberOsoby("osoba") + "</label>") + casy(m) +
+            (rola() === "osobny" ? "" : '<label class="field"><span class="label">Kto</span>' + vyberOsoby("osoba") + "</label>") + (rola() === "sprava" ? casy(m) : "") +
             '<button class="btn btn-primary" type="submit" data-r-fokus>' + (rola() === "osobny" ? "Zapísať sa" : "Zapísať") + "</button></form>";
         }
         if (rola() === "sprava") obsah += '<div class="f-akcie"><button class="btn" data-r-akcia-tl="zmazat" data-id="' + m.id + '">Zrušiť toto miesto</button></div>';
@@ -234,9 +234,9 @@
           (m.poznamka ? '<p class="f-pozn" style="margin:0">' + esc(m.poznamka) + "</p>" : "");
         if (moze) {
           var ine = (R.data.miesta || []).filter(function (x) { return x.osoba != null && x.osoba !== m.osoba && x.id !== m.id && !minule(x.datum); });
-          obsah += '<form class="f-form" data-r-akcia="cas" data-id="' + m.id + '"><h4 class="r-h4">Pracovný čas</h4>' + casy(m) +
+          obsah += (rola() === "sprava" ? '<form class="f-form" data-r-akcia="cas" data-id="' + m.id + '"><h4 class="r-h4">Pracovný čas</h4>' + casy(m) +
               '<label class="field"><span class="label">Poznámka</span><input name="poznamka" value="' + esc(m.poznamka || "") + '" placeholder="napr. príde skôr, zaúča sa"></label>' +
-              '<button class="btn" type="submit">Uložiť čas</button></form>' +
+              '<button class="btn" type="submit">Uložiť čas</button></form>' : "") +
             '<form class="f-form" data-r-akcia="odovzdat" data-id="' + m.id + '"><h4 class="r-h4">Odovzdať smenu kolegovi</h4><div class="r-riadok">' + vyberOsoby("komu", m.osoba) +
               '<button class="btn" type="submit">Odovzdať</button></div></form>' +
             (ine.length ? '<form class="f-form" data-r-akcia="prehodit" data-id="' + m.id + '"><h4 class="r-h4">Prehodiť s kolegom</h4><div class="r-riadok"><select name="s_id" class="r-select">' +
@@ -255,7 +255,7 @@
         (poz ? "" : '<label class="field"><span class="label">Pozícia</span><select name="pozicia" class="r-select">' + pozicie().map(function (p) { return '<option value="' + p.kod + '">' + esc(p.nazov) + "</option>"; }).join("") + "</select></label>") +
         (poz ? '<p style="margin:0"><b>' + esc(pozicia(poz).nazov) + "</b></p>" : "") +
         (nerobi ? '<p class="s-varovanie s-varovanie-info" style="margin:0">V tento deň sa na pozícii bežne nerobí – zapíšete sa výnimočne.</p>' : "") +
-        (rola() === "osobny" ? "" : '<label class="field"><span class="label">Kto</span>' + vyberOsoby("osoba") + "</label>") + casy(null) +
+        (rola() === "osobny" ? "" : '<label class="field"><span class="label">Kto</span>' + vyberOsoby("osoba") + "</label>") + (rola() === "sprava" ? casy(null) : "") +
         '<button class="btn btn-primary" type="submit" data-r-fokus>' + (rola() === "osobny" ? "Zapísať sa" : "Zapísať") + "</button>" +
         (rola() === "sprava" ? '<button class="btn" type="button" data-r-otvorit>Len otvoriť voľné miesto</button>' : "") + "</form>";
     }
@@ -325,7 +325,7 @@
     if (f.dataset.id) p.id = f.dataset.id;
     if (f.dataset.datum) p.datum = f.dataset.datum;
     p.pozicia = f.dataset.pozicia || (x.pozicia && x.pozicia.value) || undefined;
-    ["osoba", "komu", "s_id", "od", "do", "poznamka"].forEach(function (k) { if (x[k]) p[k] = x[k].value; });
+    ["osoba", "komu", "s_id", "od", "do", "poznamka"].forEach(function (k) { if (x[k] && x[k].value !== undefined) p[k] = x[k].value; });
     if (akcia === "zapisat" && !p.id && p.datum && p.pozicia && !miesta(p.datum, p.pozicia).length) p.vynimka = true;
     zmena(p);
   }

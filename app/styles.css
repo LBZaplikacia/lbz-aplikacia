@@ -519,3 +519,31 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 .f-tl-vrat { background: #fff4e0; border-color: #e6c48a; color: #7a4a0c; }
 .f-tl-full:hover, .f-tl-napl:hover, .f-tl-rozv:hover, .f-tl-vrat:hover { filter: brightness(.96); }
 .f-dalsie { justify-self: start; }
+/* v0.12.2 – kompaktnejší sklad v mobile, užší rozpis na PC */
+@media (max-width: 760px) {
+  .main { gap: 12px; padding-top: 16px; }
+  #sklad-root { gap: 10px; }
+  .s-taby button { min-height: 36px; padding: 6px 4px; font-size: 13px; }
+  .s-rezimy { gap: 8px; }
+  .s-rezim { min-height: 54px; font-size: 14px; padding: 6px 4px; border-radius: 10px; }
+  .s-ikona { font-size: 19px; }
+  .s-sprava { font-size: 16px; padding: 10px 12px; }
+  .s-lista .btn, .s-lista-tl .btn, .s-rucne .btn { min-height: 40px; padding: 6px 12px; font-size: 14px; }
+  .s-rucne input { min-height: 40px; }
+  .s-dlazdice { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .s-dlazdica { padding: 6px 8px; }
+  .s-dlazdica strong { font-size: 20px; }
+  .s-prow, .s-thead { padding: 7px 8px; }
+  .s-velke { font-size: 17px; }
+  .s-furmanka { min-height: 0; padding: 12px; }
+  .card { padding: 14px; }
+  .head h2 { font-size: 22px; }
+}
+.r-tab { min-width: 640px; }
+.r-tab th.r-poz { width: 92px; font-size: 12px; }
+.r-tab th, .r-tab td { padding: 4px; }
+.r-tab thead th { font-size: 12px; padding: 6px 2px; }
+.r-cip { font-size: 12px; padding: 3px 6px; min-height: 26px; border-radius: 7px; }
+.r-cip small { font-size: 10px; }
+.r-plus { min-width: 24px; min-height: 26px; font-size: 14px; }
+@media (hover: hover) { .r-bunka .r-plus { opacity: 0; } .r-bunka:hover .r-plus, .r-plus:focus-visible { opacity: 1; } }

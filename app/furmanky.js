@@ -264,10 +264,10 @@
         (f.id ? '<button class="btn" data-f="pridat">+ Objednávka</button>' : "") +
         (f.id ? (f.stav === "otvorena" ? '<button class="btn f-tl-full" data-f="stav" data-stav="full">🔒 Uzavrieť (FULL)</button>' :
           '<button class="btn" data-f="stav" data-stav="otvorena">Otvoriť</button>') : "") +
-        (f.id && f.rozvoz && f.stav !== "rozvezena" ? (f.naplanovane ? '<span class="pill ok f-napl">✓ Naplánované ' + esc(casSk(f.naplanovane)) + "</span>" +
-          '<button class="btn f-tl-vrat" data-f="vrat-statusy">↩️ Vrátiť statusy</button>' :
-          '<button class="btn f-tl-napl" data-f="naplanovane">✅ Naplánované</button>') : "") +
-        (f.id && f.stav === "full" ? '<button class="btn f-tl-rozv" data-f="stav" data-stav="rozvezena">🚚 Rozvezené</button>' : "") +
+        (f.id && f.rozvoz && f.stav !== "rozvezena" ? (f.naplanovane ? '<span class="pill ok f-napl">✓ Naplánované ' + esc(casSk(f.naplanovane)) + "</span>" :
+          '<button class="btn f-tl-napl" data-f="naplanovane">✅ Naplánované</button>') +
+          '<button class="btn f-tl-vrat" data-f="vrat-statusy">↩️ Vrátiť statusy</button>' : "") +
+        // Rozvezené nastaví furman v module Trasa (bez uzavretého rozvozu sa neodhlási z práce)
         '<button class="btn" data-f="sumar">🖨️ Sumár výroby</button>' +
       "</span></div>" +
       '<div class="f-prepinace">' +
