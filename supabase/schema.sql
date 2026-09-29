@@ -2862,3 +2862,54 @@ begin
 end $$;
 revoke all on function public.dochadzka_norma(bigint, numeric) from public, anon;
 grant execute on function public.dochadzka_norma(bigint, numeric) to authenticated;
+
+-- osoba v rozpise môže mať aj druhý e-mail (napr. CEO účet aj osobný Gmail tej istej osoby) – 29. 9. 2026
+alter table public.rozpis_osoby add column if not exists email2 text;
+create or replace function public.rozpis_moja_osoba() returns bigint
+language sql stable security definer set search_path = public as $$
+  select o.id from public.rozpis_osoby o join public.profily p on lower(p.email) in (lower(o.email), lower(o.email2))
+  where p.id = auth.uid() and o.aktivny order by o.id limit 1
+$$;
+
+-- =========================================================================
+-- 20) UPOZORNENIA DO MOBILU (web push) – 29. 9. 2026
+--     Odbery zariadení (každý používateľ si ich zapne v appke), Edge Function „upozornenia“ ich posiela.
+--     Kontrola každých 30 min (pg_cron): šichta dlhšia ako 14 h → upozornenie zamestnancovi aj vedeniu.
+-- =========================================================================
+create table if not exists public.push_odbery (
+  endpoint   text primary key,
+  uid        uuid not null,
+  p256dh     text not null,
+  auth       text not null,
+  zariadenie text,
+  vytvorene  timestamptz not null default now()
+);
+alter table public.push_odbery enable row level security;
+alter table public.dochadzka add column if not exists upozornene timestamptz;
+
+create or replace function public.push_uloz(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then return jsonb_build_object('ok', false, 'text', 'Treba sa prihlásiť'); end if;
+  insert into public.push_odbery (endpoint, uid, p256dh, auth, zariadenie) values (p->>'endpoint', auth.uid(), p->'keys'->>'p256dh', p->'keys'->>'auth', left(p->>'zariadenie', 200))
+  on conflict (endpoint) do update set uid = excluded.uid, p256dh = excluded.p256dh, auth = excluded.auth, zariadenie = excluded.zariadenie, vytvorene = now();
+  return jsonb_build_object('ok', true, 'text', 'Upozornenia sú zapnuté');
+end $$;
+create or replace function public.push_zmaz(p_endpoint text) returns jsonb
+language sql security definer set search_path = public as $$
+  delete from public.push_odbery where endpoint = p_endpoint and uid = auth.uid();
+  select jsonb_build_object('ok', true)
+$$;
+revoke all on function public.push_uloz(jsonb), public.push_zmaz(text) from public, anon;
+grant execute on function public.push_uloz(jsonb), public.push_zmaz(text) to authenticated;
+
+-- plánovač: každých 30 minút kontrola (token z trezoru ako pri Furmankách)
+select cron.unschedule('lbz-upozornenia') where exists (select 1 from cron.job where jobname = 'lbz-upozornenia');
+select cron.schedule('lbz-upozornenia', '*/30 * * * *', $cron$
+  select net.http_post(
+    url := 'https://ykwiqsneroxzpkwpadie.supabase.co/functions/v1/upozornenia',
+    headers := jsonb_build_object('Content-Type', 'application/json',
+                                  'x-lbz-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'furmanky_cron')),
+    body := '{"akcia":"kontrola"}'::jsonb,
+    timeout_milliseconds := 60000)
+$cron$);
