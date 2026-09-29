@@ -88,7 +88,7 @@
       (moze && f.stav !== "rozvezena" ? '<form class="f-trasa-riadok" id="f-trasa-form"><label class="field"><span class="label">Čas odchodu</span>' +
           '<input type="time" name="odchod" required value="' + esc(t ? hhmm(t.odchod) : "07:00") + '"></label>' +
           '<button class="btn btn-primary" type="submit"' + (F.trasaPocita ? " disabled" : "") + ">" + (F.trasaPocita ? "⏳ Počítam trasu…" : t ? "🔄 Prepočítať trasu" : "🗺️ Vytvoriť trasu") + "</button>" +
-          '<span class="muted f-mini">Poradie a časy vypočíta Google Mapy (PORADIE: n a PRIORITA v poznámke platia). Furman ju hneď uvidí v module Trasa.</span></form>'
+          '<span class="muted f-mini">Poradie a časy vypočíta Google Mapy – ⭐ priorita ide prvá, ručné poradie (↕️) sa dodrží, vykládka podľa stĺpca Vykládka. Furman ju hneď uvidí v module Trasa.</span></form>'
         : '<p class="muted" style="margin:0">Furman už je na ceste – trasa sa nedá prepočítať.</p>') +
       (z.length ? "<ol>" + z.map(function (x) {
         return "<li>" + (x.eta ? '<b class="num">' + esc(hhmm(x.eta)) + "</b> " : "") + esc(x.meno || x.firma || x.cislo) + ' <span class="muted">' + esc(x.adresa || "") + "</span>" +
@@ -107,7 +107,7 @@
     }).catch(function (e) { F.trasaPocita = false; F.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
   }
   function otvor(id) {
-    F.id = id; F.data = null; F.sprava = null; F.dialog = null;
+    F.id = id; F.data = null; F.sprava = null; F.dialog = null; F.poradieRezim = false;
     prekresli(); window.scrollTo(0, 0);
     nacitajFurmanku();
   }
@@ -191,6 +191,39 @@
     koren.innerHTML = html + (F.dialog ? dialogHtml() : "");
     koren.classList.toggle("f-siroke", F.id != null && zobrazenie() === "tabulka");
     var fok = koren.querySelector("[data-f-fokus]"); if (fok) fok.focus();
+    var zoz = koren.querySelector("#f-poradie-zoz"); if (zoz) zapniTahanie(zoz);
+  }
+  // ---------- poradie ťahaním (myš aj prst) – knižnica SortableJS ----------
+  function zapniTahanie(el) {
+    var spusti = function () { if (window.Sortable && el.isConnected) window.Sortable.create(el, { animation: 150, delay: 120, delayOnTouchOnly: true, ghostClass: "f-por-duch" }); };
+    if (window.Sortable) return spusti();
+    var sc = document.createElement("script");
+    sc.src = "https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js";
+    sc.onload = spusti;
+    sc.onerror = function () { F.sprava = { typ: "chyba", text: "Knižnica na ťahanie sa nenačítala (bez signálu?)" }; prekresli(); };
+    document.head.appendChild(sc);
+  }
+  function jeDobierka(o) { return o.platba !== "ZAPLATENÉ" && o.platba !== "NA FAKTÚRU"; }
+  function poradieHtml(obj) {
+    var zor = obj.slice().sort(function (a, b) { return (a.poradie || 999) - (b.poradie || 999); });
+    return '<section class="card f-poradie"><h3>↕️ Poradie zastávok</h3><p class="muted" style="margin:0">Potiahnite objednávky myšou alebo prstom. Trasa pôjde presne v tomto poradí (bez optimalizácie). Po uložení dajte v Trase pre furmana <b>Prepočítať trasu</b>.</p>' +
+      '<ol id="f-poradie-zoz" class="f-poradie-zoz">' + zor.map(function (o) {
+        return '<li data-c="' + esc(o.cislo) + '"><span class="f-uchyt" aria-hidden="true">≡</span><span><b>' + esc(o.meno || o.firma || o.cislo) + "</b>" + (o.priorita ? " ⭐" : "") +
+          '<br><span class="muted f-mini">' + esc([o.ulica, [o.psc, o.mesto].filter(Boolean).join(" ")].filter(Boolean).join(", ")) + "</span></span></li>";
+      }).join("") + "</ol>" +
+      '<div class="f-tl"><button class="btn btn-primary" data-f="poradie-uloz">💾 Uložiť poradie</button>' +
+      '<button class="btn" data-f="poradie-auto">🔄 Automatické poradie</button><button class="btn" data-f="poradie-zrus">Zrušiť</button></div></section>';
+  }
+  function trasaRiadky(obj) {
+    return '<tr class="f-hl f-hl-trasa"><th class="f-n" colspan="3">Poradie</th>' + obj.map(function (o) {
+        return '<td class="f-o">' + (o.poradie_pevne ? "<b>" + esc(o.poradie) + ".</b> pevné" : o.priorita ? "⭐ prvá" : '<span class="muted">auto</span>') + "</td>";
+      }).join("") + "</tr>" +
+      '<tr class="f-hl f-hl-trasa"><th class="f-n" colspan="3">Priorita (ide prvá)</th>' + obj.map(function (o) {
+        return '<td class="f-o"><input type="checkbox" data-f-prio="' + esc(o.cislo) + '"' + (o.priorita ? " checked" : "") + ' aria-label="Priorita ' + esc(o.meno || o.cislo) + '"></td>';
+      }).join("") + "</tr>" +
+      '<tr class="f-hl f-hl-trasa"><th class="f-n" colspan="3">Vykládka (min)</th>' + obj.map(function (o) {
+        return '<td class="f-o"><input class="f-vykl" inputmode="numeric" data-f-vykl="' + esc(o.cislo) + '" value="' + (o.vykladka_min != null ? esc(o.vykladka_min) : "") + '" placeholder="' + (jeDobierka(o) ? 10 : 5) + '" aria-label="Vykládka v minútach ' + esc(o.meno || o.cislo) + '"></td>';
+      }).join("") + "</tr>";
   }
   function spravaHtml() {
     if (!F.sprava) return "";
@@ -306,6 +339,7 @@
           '<button class="btn f-tl-vrat" data-f="vrat-statusy">↩️ Vrátiť statusy</button>' : "") +
         // Rozvezené nastaví furman v module Trasa (bez uzavretého rozvozu sa neodhlási z práce); ručne sa dá archivovať kedykoľvek
         (f.id && f.stav !== "rozvezena" ? '<button class="btn" data-f="stav" data-stav="rozvezena">🗄️ Archivovať</button>' : "") +
+        (f.id && f.rozvoz && f.stav !== "rozvezena" ? '<button class="btn" data-f="poradie">↕️ Upraviť poradie</button>' : "") +
         '<button class="btn" data-f="sumar">🖨️ Sumár výroby</button>' +
       "</span></div>" +
       '<div class="f-prepinace">' +
@@ -314,7 +348,7 @@
         '<button data-f-zobraz="zoznam" aria-pressed="' + (zobrazenie() === "zoznam") + '">Zoznam</button></span>' +
         '<button class="btn-link" data-f="obnov-f">Obnoviť</button></div>';
     var telo = !obj.length ? '<div class="empty"><strong>Vo furmanke nie sú objednávky</strong></div>'
-      : (zobrazenie() === "tabulka" ? tabulkaHtml(obj) : zoznamHtml(obj));
+      : F.poradieRezim ? poradieHtml(obj) : (zobrazenie() === "tabulka" ? tabulkaHtml(obj) : zoznamHtml(obj));
     return hore + (f.id ? testHtml() : "") + spravaHtml() + lista + trasaHtml(f) + telo;
   }
 
@@ -370,7 +404,8 @@
         '<td class="f-k f-num"' + farba + ">" + (x.ks == null ? "" : (r.typ === "suma" ? "SUM" : cislo(x.ks))) + "</td>" +
         '<td class="f-d f-num"' + farba + ">" + (x.davky == null ? "" : (r.typ === "suma" ? esc(eur(x.davky)) : cislo(x.davky, 2))) + "</td>" + bunky + "</tr>";
     }).join("");
-    return '<div class="f-obal"><table class="f-tab"><tbody>' + hl + hlavy + telo + "</tbody></table></div>";
+    var tr = F.data && F.data.furmanka && F.data.furmanka.rozvoz ? trasaRiadky(obj) : "";
+    return '<div class="f-obal"><table class="f-tab"><tbody>' + hl + tr + hlavy + telo + "</tbody></table></div>";
   }
 
   function zoznamHtml(obj) {
@@ -390,6 +425,9 @@
         '<h3><span>' + hlavickaObjednavky(o) + '</span><span class="muted num f-mini">' + esc(o.cislo) + "</span></h3>" +
         '<div class="muted f-mini">' + HLAVICKA[3][1](o) + (o.telefon ? " · " + HLAVICKA[2][1](o) : "") + "</div>" +
         '<div class="f-mini">' + HLAVICKA[6][1](o) + " " + esc(eur(o.suma)) + " · " + esc(o.status || "") + "</div>" +
+        (F.data && F.data.furmanka && F.data.furmanka.rozvoz ? '<div class="f-mini f-trasa-obj"><label class="f-check"><input type="checkbox" data-f-prio="' + esc(o.cislo) + '"' + (o.priorita ? " checked" : "") + "> ⭐ Priorita</label>" +
+          '<label>Vykládka <input class="f-vykl" inputmode="numeric" data-f-vykl="' + esc(o.cislo) + '" value="' + (o.vykladka_min != null ? esc(o.vykladka_min) : "") + '" placeholder="' + (jeDobierka(o) ? 10 : 5) + '"> min</label>' +
+          '<span class="muted">' + (o.poradie_pevne ? "poradie " + esc(o.poradie) + ". (pevné)" : "poradie auto") + "</span></div>" : "") +
         (o.poznamka || o.upozornenie ? '<div class="f-pozn">' + HLAVICKA[8][1](o) + "</div>" : "") +
         '<div class="rows">' + pol.map(function (p) {
           return '<div class="row"' + (p.farba ? ' style="background:' + esc(p.farba) + ';color:#1d1412"' : "") + "><span>" + esc(p.nazov) + "</span>" +
@@ -477,7 +515,7 @@
   function po(promise, okText) {
     return promise.then(function (r) {
       if (r && r.ok === false) { F.sprava = { typ: "chyba", text: r.text || "Nepodarilo sa" }; prekresli(); return r; }
-      if (okText) F.sprava = { typ: "ok", text: okText };
+      if (okText) F.sprava = { typ: "ok", text: typeof okText === "function" ? okText(r) : okText };
       return r;
     }).catch(function (e) { F.sprava = { typ: "chyba", text: "Neuložené: " + chybaText(e) }; prekresli(); });
   }
@@ -669,6 +707,16 @@
         break;
       case "dalsie": F.vsetky = !F.vsetky; prekresli(); break;
       case "sumar": tlacSumar(); break;
+      case "poradie": F.poradieRezim = true; F.sprava = null; prekresli(); break;
+      case "poradie-zrus": F.poradieRezim = false; prekresli(); break;
+      case "poradie-uloz":
+      case "poradie-auto":
+        var cisla = d.f === "poradie-auto" ? [] : Array.prototype.map.call(koren.querySelectorAll("#f-poradie-zoz li"), function (li) { return li.getAttribute("data-c"); });
+        if (d.f === "poradie-auto" && !window.confirm("Zrušiť ručné poradie? Google zoradí zastávky sám (priority pôjdu prvé).")) return;
+        po(rpc("furmanka_poradie_pevne", { p_id: F.data.furmanka.id, p_cisla: cisla }), function (r) { return r.text + " · v Trase pre furmana dajte Prepočítať trasu"; }).then(function (r) {
+          if (r && r.ok) { F.poradieRezim = false; nacitajFurmanku(true); }
+        });
+        break;
       case "stitky": tlacStitky(); break;
       case "pridat": F.dialog = { typ: "pridat" }; prekresli(); break;
       case "nova": F.dialog = { typ: "obj", nova: true, zmeny: {} }; prekresli(); break;
@@ -700,6 +748,19 @@
   function zmena(e) {
     var t = e.target;
     if (t.hasAttribute("data-f-bunka")) { ulozBunku(t); return; }
+    if (t.hasAttribute("data-f-prio")) {
+      var oc = objednavka(t.getAttribute("data-f-prio")); if (oc) oc.priorita = t.checked;
+      po(rpc("zaradenie_trasa", { p: { cislo: t.getAttribute("data-f-prio"), priorita: t.checked } }), "Priorita uložená · v Trase pre furmana dajte Prepočítať trasu").then(function () { prekresli(); });
+      return;
+    }
+    if (t.hasAttribute("data-f-vykl")) {
+      var v = String(t.value || "").trim();
+      if (v !== "" && !(/^\d{1,3}$/.test(v) && +v <= 240)) { t.classList.add("f-zla"); return; }
+      t.classList.remove("f-zla");
+      var ov = objednavka(t.getAttribute("data-f-vykl")); if (ov) ov.vykladka_min = v === "" ? null : +v;
+      po(rpc("zaradenie_trasa", { p: { cislo: t.getAttribute("data-f-vykl"), vykladka_min: v === "" ? null : +v } }), "Vykládka uložená · v Trase pre furmana dajte Prepočítať trasu").then(function () { prekresli(); });
+      return;
+    }
     if (t.hasAttribute("data-f-skryt")) { F.skryt = t.checked; prekresli(); return; }
     if (t.hasAttribute("data-f-pol") && F.dialog) {
       F.dialog.zmeny = F.dialog.zmeny || {};

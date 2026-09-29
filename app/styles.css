@@ -647,3 +647,26 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 .f-trasa-riadok .field { margin: 0; }
 .f-trasa ol { margin: 0; padding-left: 22px; columns: 2 260px; font-size: 14px; }
 @media print { #tlac-oblast.t-tlac-obal table { font-size: 9pt; } }
+
+/* ---------- poradie, priorita, vykládka (v0.14.1) ---------- */
+.f-hl-trasa th, .f-hl-trasa td { background: #eef3f6; }
+.f-vykl { width: 52px; text-align: center; font: inherit; padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.f-trasa-obj { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.f-poradie-zoz { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; counter-reset: por; }
+.f-poradie-zoz li { counter-increment: por; display: flex; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: grab; user-select: none; }
+.f-poradie-zoz li::before { content: counter(por) "."; font-weight: 800; min-width: 26px; }
+.f-uchyt { font-size: 22px; color: var(--muted); }
+.f-por-duch { opacity: .4; background: var(--accent-soft); }
+@media print {
+  #tlac-oblast.t-tlac-obal { font-size: 9pt; }
+  #tlac-oblast .t-p-tab td { vertical-align: middle; }
+  #tlac-oblast .t-p-c { font-weight: 800; text-align: center; }
+  #tlac-oblast .t-p-suma, #tlac-oblast .t-p-cas { white-space: nowrap; text-align: right; font-weight: 700; }
+  #tlac-oblast .t-p-dob { color: #b3261e; font-weight: 700; }
+  #tlac-oblast .t-p-pauza td { background: #f1e4c6 !important; font-weight: 700; }
+  #tlac-oblast .t-p-qr svg { width: 18mm; height: 18mm; }
+  #tlac-oblast .t-p-nav { display: flex; gap: 6mm; flex-wrap: wrap; margin-top: 5mm; }
+  #tlac-oblast .t-p-navbox { text-align: center; font-size: 8pt; }
+  #tlac-oblast .t-p-navbox svg { width: 28mm; height: 28mm; }
+  #tlac-oblast a { color: inherit; text-decoration: none; }
+}

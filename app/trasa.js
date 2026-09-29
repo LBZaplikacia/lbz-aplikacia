@@ -65,18 +65,24 @@
     }).join("") + "</div>";
   }
 
-  function navigacia(zast) {
-    var body = zast.filter(function (z) { return z.stav === "caka" && !z.bez_gps && z.adresa; });
-    if (!body.length) return "";
-    var tl = [];
+  // odkazy na Google Mapy po 9 zastávkach (ako starý skript): /maps/dir/<odkiaľ>/<zastávka>/…; prázdny začiatok = moja poloha
+  function navOdkazy(zast, odStartu) {
+    var body = zast.filter(function (z) { return !z.bez_gps && z.adresa; });
+    var out = [];
     for (var i = 0; i < body.length; i += 9) {
       var kus = body.slice(i, i + 9), posl = i + 9 >= body.length;
-      var ciel = posl ? START : kus[kus.length - 1].adresa, cez = posl ? kus : kus.slice(0, -1);
-      var url = "https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=" + encodeURIComponent(ciel) +
-        (cez.length ? "&waypoints=" + encodeURIComponent(cez.map(function (z) { return z.adresa; }).join("|")) : "");
-      tl.push('<a class="btn t-nav" href="' + url + '" target="_blank" rel="noopener">🧭 Navigovať ' + (body.length > 9 ? (i + 1) + "–" + Math.min(i + 9, body.length) : "celú trasu") + "</a>");
+      var zac = i === 0 ? (odStartu ? START : "") : body[i - 1].adresa;
+      var body2 = kus.map(function (z) { return z.adresa; }); if (posl) body2.push(START);
+      out.push({ od: i + 1, po: Math.min(i + 9, body.length), url: "https://www.google.com/maps/dir/" + [zac].concat(body2).map(function (a) { return encodeURIComponent(a).replace(/%20/g, "+"); }).join("/") });
     }
-    return '<div class="t-navlista">' + tl.join("") + "</div>";
+    return out;
+  }
+  function navigacia(zast) {
+    var caka = zast.filter(function (z) { return z.stav === "caka"; });
+    var odk = navOdkazy(caka, false); if (!odk.length) return "";
+    return '<div class="t-navlista">' + odk.map(function (x) {
+      return '<a class="btn t-nav" href="' + x.url + '" target="_blank" rel="noopener">🧭 Navigovať ' + (odk.length > 1 ? "zastávky " + x.od + "–" + x.po : "celú trasu") + "</a>";
+    }).join("") + "</div>";
   }
 
   function zastavkaHtml(z, i) {
@@ -190,14 +196,29 @@
       return nacitajTrasu(true).then(function () { return r; });
     }).catch(function (e) { T.prace--; T.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
   }
+  // tlač ako starý skript (hárok trasy): Č. | Meno/Firma | Telefón | Č. faktúry | Suma | Adresa | Čas (+ prestávky) | Platba a poznámka | QR pre kasu
   function tlacTrasu() {
-    var d = T.data, t = d.trasa;
-    var html = '<div class="t-tlac"><h2>' + esc(t.nazov) + " – trasa</h2><p>Odchod " + esc(cas(t.odchod)) + " · návrat ~" + esc(cas(t.navrat)) + "</p>" +
-      '<table><thead><tr><th>#</th><th>Čas</th><th>Meno / firma</th><th>Telefón</th><th>Adresa</th><th>Platba</th><th>Poznámka</th></tr></thead><tbody>' +
-      (d.zastavky || []).map(function (z, i) {
-        return "<tr><td>" + (z.poradie || i + 1) + "</td><td>" + esc(cas(z.eta)) + "</td><td>" + esc(z.meno || z.firma || "") + "</td><td>" + esc(z.telefon || "") + "</td><td>" + esc(z.adresa) +
-          "</td><td>" + (dobierka(z) ? "DOBIERKA " + esc(eur(z.suma)) : esc(z.platba)) + (z.faktura ? "<br>fa " + esc(z.faktura) : "") + "</td><td>" + esc(z.pozn_obj || "") + "</td></tr>";
-      }).join("") + "</tbody></table></div>";
+    var d = T.data, t = d.trasa, z = d.zastavky || [];
+    var n = z.filter(function (x) { return !x.bez_gps; }).length, i1 = 2, i2 = n - 2, spolu = i1 >= i2, stred = Math.floor(n / 2);
+    var qr = function (text, px) { return window.LBZ_QR ? window.LBZ_QR.svg(text, px) : ""; };
+    var riadky = [], k = 0;
+    z.forEach(function (x, i) {
+      if (!x.bez_gps) {
+        var pauza = spolu ? (k === stred && n >= 3 ? 30 : 0) : (k === i1 || k === i2 ? 15 : 0);
+        if (pauza) riadky.push('<tr class="t-p-pauza"><td></td><td colspan="8">☕ Prestávka ' + pauza + " min</td></tr>");
+        k++;
+      }
+      var dob = dobierka(x);
+      riadky.push("<tr><td class=\"t-p-c\">" + (x.poradie || i + 1) + "</td><td><b>" + esc(x.meno || x.firma || "") + "</b></td><td>" + esc(x.telefon || "") + "</td><td>" + esc(x.faktura || "") +
+        "</td><td class=\"t-p-suma\">" + esc(eur(x.suma)) + '</td><td><a href="' + mapa(x.adresa) + '">' + esc(x.adresa || "") + "</a>" + (x.bez_gps ? " <b>(adresa nenájdená)</b>" : "") +
+        '</td><td class="t-p-cas">' + esc(cas(x.eta)) + '</td><td class="' + (dob ? "t-p-dob" : "") + '">' + (dob ? "DOBIERKA" : esc(x.platba)) + (x.pozn_obj ? "<br>" + esc(x.pozn_obj) : "") +
+        '</td><td class="t-p-qr">' + (dob && x.faktura ? qr(x.faktura + ";" + Math.round(Number(x.suma || 0) * 100), 70) : "") + "</td></tr>");
+    });
+    var nav = navOdkazy(z, true);
+    var html = '<div class="t-tlac"><h1>Trasa ' + esc(t.nazov) + '</h1><p class="t-datum">Odchod ' + esc(cas(t.odchod)) + " · návrat ~" + esc(cas(t.navrat)) + (t.hodiny ? " · " + String(t.hodiny).replace(".", ",") + " h" : "") + " · štart a cieľ: " + esc(START) + "</p>" +
+      '<table class="t-p-tab"><thead><tr><th>Č.</th><th>Meno/Firma</th><th>Telefón</th><th>Č. faktúry</th><th>Suma</th><th>Adresa</th><th>Čas</th><th>Platba a poznámka</th><th>QR</th></tr></thead><tbody>' +
+      riadky.join("") + '<tr class="t-p-pauza"><td></td><td colspan="8">🏠 Návrat ' + esc(cas(t.navrat)) + "</td></tr></tbody></table>" +
+      '<div class="t-p-nav">' + nav.map(function (x) { return '<div class="t-p-navbox">' + qr(x.url, 110) + "<div>Navigácia " + x.od + "–" + x.po + "</div></div>"; }).join("") + "</div></div>";
     var obal = document.getElementById("tlac-oblast");
     if (!obal) { obal = document.createElement("div"); obal.id = "tlac-oblast"; document.body.appendChild(obal); }
     obal.className = "t-tlac-obal"; obal.innerHTML = html; document.body.classList.add("tlaci");
@@ -211,8 +232,12 @@
     if (d.tOtvor) { T.id = +d.tOtvor; T.data = null; T.sprava = null; prekresli(); window.scrollTo(0, 0); nacitajTrasu(); return; }
     if (d.tAkcia) {
       var c = d.c;
-      if (d.tAkcia === "dorucene") { zastavka({ p_cislo: c, p_stav: "dorucene" }); return; }
-      if (d.tAkcia === "spat") { zastavka({ p_cislo: c, p_stav: "caka" }); return; }
+      if (d.tAkcia === "dorucene") {
+        var zd = ((T.data && T.data.zastavky) || []).filter(function (x) { return x.cislo === c; })[0] || {};
+        if (!window.confirm("Označiť ako DORUČENÉ?\n\n" + (zd.meno || zd.firma || c) + (dobierka(zd) ? "\nDobierka " + eur(zd.suma) : ""))) return;
+        zastavka({ p_cislo: c, p_stav: "dorucene" }, "Doručené: " + (zd.meno || zd.firma || c)); return;
+      }
+      if (d.tAkcia === "spat") { if (!window.confirm("Vrátiť zastávku medzi nevybavené?")) return; zastavka({ p_cislo: c, p_stav: "caka" }); return; }
       if (d.tAkcia === "nedorucene" || d.tAkcia === "poznamka") { T.dialog = { typ: d.tAkcia, cislo: c, fokus: true }; prekresli(); return; }
     }
     switch (d.t) {
