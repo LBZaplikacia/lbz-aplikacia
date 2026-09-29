@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.10 BETA";
+  var VERZIA = "0.11.0 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -35,6 +35,14 @@
     { kod: "sledovanie",      nazov: "Kde je moja furmanka" },
     { kod: "nastavenia",      nazov: "Nastavenia",              aktivny: true }
   ];
+
+  // ikony modulov (bočná lišta na PC, spodná lišta v mobile)
+  var IKONY = {
+    prehlad: "🏠", sklad: "🧊", furmanky: "🚚", balenie: "📦", trasa: "🗺️", dochadzka: "🕒", kniha_jazd: "🚗",
+    objednavky: "🧾", komentare: "💬", zamestnanci: "👥", exporty: "📊", moje_objednavky: "🛍️", sledovanie: "📍", nastavenia: "⚙️"
+  };
+  var KRATKO = { balenie: "Balenie", trasa: "Trasa", dochadzka: "Dochádzka", kniha_jazd: "Jazdy", komentare: "Komentáre",
+    exporty: "Exporty", moje_objednavky: "Objednávky", sledovanie: "Furmanka", nastavenia: "Účet" };
 
   var PRISTUPY = {
     it: MODULY.map(function (m) { return m.kod; }),
@@ -211,35 +219,31 @@
   function renderApp() {
     var moduly = mojeModuly();
     if (!moduly.some(function (m) { return m.kod === stav.modul; })) stav.modul = "prehlad";
-    var nav = moduly.map(function (m) {
-      return '<button data-mod="' + m.kod + '"' + (stav.modul === m.kod ? ' aria-current="page"' : "") + ">" +
-        "<span>" + esc(m.nazov) + "</span>" + (m.aktivny ? "" : '<span class="soon">čoskoro</span>') + "</button>";
-    }).join("");
-    var bottom = moduly.filter(function (m) { return m.kod !== "nastavenia"; }).map(function (m) {
-      return '<button data-mod="' + m.kod + '"' + (stav.modul === m.kod ? ' aria-current="page"' : "") + ">" + esc(m.nazov) + "</button>";
-    }).join("");
+    // v lište len hotové moduly; pripravované sú na Prehľade
+    var hotove = moduly.filter(function (m) { return m.aktivny && m.kod !== "nastavenia"; });
+    var polozka = function (m, trieda) {
+      return '<button class="' + trieda + '" data-mod="' + m.kod + '"' + (stav.modul === m.kod ? ' aria-current="page"' : "") + ">" +
+        '<span class="ri-ik" aria-hidden="true">' + (IKONY[m.kod] || "•") + "</span><span>" + esc(KRATKO[m.kod] || m.nazov) + "</span></button>";
+    };
+    var ucet = { kod: "nastavenia", nazov: "Účet" };
     var rolaNazov = (ROLY[stav.rola] || {}).nazov || stav.rola;
 
     el(
       '<div class="shell">' +
-        '<aside class="side"><div class="brand"><img class="brand-mark" src="icons/logo.svg" alt="">' +
-          '<div><h1 style="font-size:18px">Legendárne buchty <span class="beta">BETA</span></h1><p>' + esc(rolaNazov) + "</p></div></div>" +
-          '<nav class="nav" aria-label="Moduly">' + nav + "</nav>" +
-          '<div class="who"><span>' + esc(stav.pouzivatel) + '</span><span class="muted" style="font-size:12px">verzia ' + VERZIA + '</span>' +
-          '<button class="btn" id="btn-odhlasit">Odhlásiť</button></div>' +
+        '<aside class="rail"><div class="rail-logo"><img src="icons/logo.svg" alt="Legendárne buchty"><span class="beta">BETA</span></div>' +
+          '<nav class="rail-nav" aria-label="Moduly">' + hotove.map(function (m) { return polozka(m, "ri"); }).join("") + "</nav>" +
+          '<div class="rail-dole">' + polozka(ucet, "ri") + "</div>" +
         "</aside>" +
-        '<main class="main">' +
-          '<div class="mtop"><div class="brand"><img class="brand-mark" src="icons/logo.svg" alt=""><strong>' + esc(rolaNazov) + ' <span class="beta">BETA</span></strong></div>' +
-            '<button class="btn" data-mod="nastavenia">Účet</button></div>' +
-          obsahModulu() +
-        "</main>" +
-        '<nav class="bottom" aria-label="Moduly">' + bottom + "</nav>" +
+        '<main class="main">' + obsahModulu() + "</main>" +
+        '<nav class="bottom" aria-label="Moduly">' + hotove.concat([ucet]).map(function (m) { return polozka(m, "bi"); }).join("") + "</nav>" +
       "</div>"
     );
+    document.title = "LBZ – " + (KRATKO[stav.modul] || (moduly.filter(function (m) { return m.kod === stav.modul; })[0] || {}).nazov || "aplikácia");
+    void rolaNazov;
   }
 
   function hlavicka(nadpis, podnadpis) {
-    return '<div class="head"><div><div class="label">' + esc(podnadpis) + '</div><h2>' + esc(nadpis) + "</h2></div>" +
+    return '<div class="head"><div><h2>' + esc(nadpis) + '</h2><div class="sub">' + esc(podnadpis) + "</div></div>" +
       (OSTRY ? "" : '<span class="badge-demo">ukážkové údaje</span>') + "</div>";
   }
 
@@ -254,8 +258,11 @@
     if (skladZapnuty()) return SKLAD.kartaSklad();
     return '<section class="card"><h3>Sklad</h3><p class="muted" style="margin:0">Ukážkový režim.</p></section>';
   }
-  function kartaPripravujeme(nazov, text) {
-    return '<section class="card"><h3>' + esc(nazov) + ' <span class="soon">čoskoro</span></h3><p class="muted" style="margin:0">' + esc(text) + "</p></section>";
+  function kartaPripravujeme(zoznam) {
+    if (!zoznam.length) return "";
+    return '<section class="card pripravujeme"><h3>Pripravujeme</h3><div class="prip-zoznam">' + zoznam.map(function (m) {
+      return '<span class="prip"><span aria-hidden="true">' + (IKONY[m.kod] || "•") + "</span>" + esc(m.nazov) + "</span>";
+    }).join("") + "</div></section>";
   }
 
   function obsahModulu() {
@@ -268,16 +275,16 @@
           '<a class="btn btn-primary" href="https://www.legendarnebuchty.sk" target="_blank" rel="noopener">Otvoriť e-shop</a></div>';
       }
       var karty = [];
-      var kody = mojeModuly().map(function (m) { return m.kod; });
+      var moje = mojeModuly(), kody = moje.map(function (m) { return m.kod; });
       if (kody.indexOf("sklad") > -1) karty.push(kartaSklad());
       if (kody.indexOf("furmanky") > -1) karty.push(kartaFurmanky());
-      if (kody.indexOf("dochadzka") > -1) karty.push(kartaPripravujeme("Dochádzka a smeny", "Príchod, odchod, rozpis práce."));
-      if (kody.indexOf("zamestnanci") > -1) karty.push(kartaPripravujeme("Zamestnanci", "Karty zamestnancov, dokumenty, výplatné pásky."));
       var dnes = new Date().toLocaleDateString("sk-SK", { weekday: "long", day: "numeric", month: "numeric" });
-      return hlavicka("Dnes, " + dnes, "Prehľad") + '<div class="grid">' + karty.join("") + "</div>";
+      var meno = String(stav.pouzivatel || "").split(" ").pop();
+      return hlavicka("Dobrý deň" + (meno ? ", " + meno : "") + "!", "Dnes je " + dnes) + '<div class="grid">' + karty.join("") + "</div>" +
+        kartaPripravujeme(moje.filter(function (m) { return !m.aktivny && m.kod !== "nastavenia"; }));
     }
     if (stav.modul === "nastavenia") {
-      return hlavicka("Môj účet", "Nastavenia") +
+      return hlavicka("Môj účet", "verzia " + VERZIA) +
         '<section class="card" style="max-width:520px"><h3>Prihlásený</h3>' +
           '<div class="rows"><div class="row"><span>Meno</span><span>' + esc(stav.pouzivatel) + '</span></div>' +
           '<div class="row"><span>E-mail</span><span>' + esc(stav.email || "") + '</span></div>' +
@@ -295,7 +302,7 @@
       return '<div id="sklad-root" data-modul="' + stav.modul + '"></div>';
     }
     var m = mojeModuly().filter(function (x) { return x.kod === stav.modul; })[0] || { nazov: stav.modul };
-    return hlavicka(m.nazov, "Modul") +
+    return hlavicka(m.nazov, "Pripravujeme") +
       '<div class="empty"><strong>Tento modul ešte pripravujeme</strong>' +
       '<span class="muted">Kým nebude hotový, funguje pôvodný nástroj. Moduly pribúdajú postupne, po jednom.</span></div>';
   }
@@ -365,7 +372,7 @@
     if (t.dataset.login) { stav.login = t.dataset.login; stav.sprava = null; render(); return; }
     if (t.dataset.mod) { stav.modul = t.dataset.mod; stav.sprava = null; stav.spravaPouz = null; if (t.dataset.mod === "nastavenia") stav.pouzivatelia = null; render(); window.scrollTo(0, 0); return; }
     if (t.id === "btn-odhlasit" || t.id === "btn-odhlasit-m") {
-      if (OSTRY) db.auth.signOut();
+      if (OSTRY) db.auth.signOut({ scope: "local" }); // odhlási len toto zariadenie, ostatné ostanú prihlásené
       stav.rola = null; stav.pouzivatel = null; stav.modul = "prehlad"; stav.dbModuly = null; stav.login = "prihlasenie"; stav.sprava = null;
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(null, null);
       if (FURM) FURM.nastavDb(null, null);
@@ -422,7 +429,7 @@
     ]).then(function (v) {
       var p = v[0].data;
       stav.nacitavam = false;
-      if (!p || !p.aktivny) { stav.rola = null; stav.sprava = { typ: "chyba", text: "Účet nie je aktívny. Kontaktujte vedenie." }; db.auth.signOut(); render(); return; }
+      if (!p || !p.aktivny) { stav.rola = null; stav.sprava = { typ: "chyba", text: "Účet nie je aktívny. Kontaktujte vedenie." }; db.auth.signOut({ scope: "local" }); render(); return; }
       stav.rola = p.rola; stav.pouzivatel = p.meno || session.user.email;
       stav.dbModuly = v[1].data || [];
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(interny() ? db : null, stav.rola);
@@ -447,6 +454,9 @@
       }
     });
   }
+
+  // moduly si dotiahli údaje pre kartu na Prehľade
+  window.addEventListener("lbz-prekresli", function () { if (stav.rola && stav.modul === "prehlad") render(); });
 
   render();
   pripravGoogle();

@@ -550,7 +550,7 @@
         '<button data-s-pohlad="furmanky" aria-selected="' + (S.pohlad === "furmanky" || S.pohlad === "furmanka") + '">Na rozvozy</button>' +
         (SUPA && spravca() ? '<button data-s-pohlad="sprava" aria-selected="' + (S.pohlad === "sprava") + '">Správa</button>' : "") + "</div>"
       : "";
-    var test = SUPA && sklad ? '<p class="s-test">🧪 Testovací sklad appky – skeny sa nezapisujú do starej tabuľky. Ostrá práca zatiaľ v <a href="' + STARY_SKENER + '" target="_blank" rel="noopener">starom skeneri</a>.</p>' : "";
+    var test = SUPA && sklad ? '<p class="s-test">🧪 Test – skeny idú len do appky. Ostrá práca v <a href="' + STARY_SKENER + '" target="_blank" rel="noopener">starom skeneri</a></p>' : "";
     var st = S.stav && S.stav.nacitane;
     var stare = st && Date.now() - st > 15 * 60000;
     var varovanie = S.siet !== "ok"

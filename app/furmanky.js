@@ -163,39 +163,61 @@
     return '<p class="f-sprava f-' + F.sprava.typ + '" role="status">' + esc(F.sprava.text) + ' <button class="btn-link" data-f="zavri-spravu" aria-label="Zavrieť">✕</button></p>';
   }
   function testHtml() {
-    return '<p class="s-test">🧪 Test: appka z Upgates len číta – nevypína články, nepíše [NEPOSIELAT] ani statusy a neposiela e-maily. Ostrá práca zatiaľ v Správe objednávok.</p>';
+    return '<p class="s-test" title="Appka z Upgates len číta – nevypína články, nepíše [NEPOSIELAT] ani statusy a neposiela e-maily. Ostrá práca zatiaľ v Správe objednávok.">🧪 Test – z Upgates len číta, ostrá práca v Správe objednávok</p>';
   }
   function behHtml() {
     var b = F.beh && F.beh.posledny;
     if (!b) return '<span class="muted">Z Upgates sa ešte nesťahovalo.</span>';
-    return '<span class="muted">Z Upgates: ' + esc(casSk(b.cas)) + (b.typ === "auto" ? " (automaticky)" : " (ručne)") +
+    return '<span class="muted">⟳ Upgates ' + esc(casSk(b.cas)) + (b.typ === "auto" ? " · automaticky" : " · ručne") +
       (b.ok ? "" : ' · <strong class="f-zle">' + esc(b.text) + "</strong>") + "</span>";
   }
 
+  var MAX_HODIN = 11.75;
+  function kartaRozvozu(f) {
+    var d = f.datum ? new Date(f.datum + "T12:00:00") : null;
+    var hod = Number(f.trasa_hodiny) || 0, sirka = Math.min(100, Math.round(hod / MAX_HODIN * 100));
+    var trieda = f.stav === "full" ? " f-k-full" : f.stav === "rozvezena" ? " f-k-rozv" : "";
+    return '<button class="card f-karta' + trieda + '" data-f-otvor="' + f.id + '">' +
+      '<span class="f-k-hore"><span class="f-k-den">' + (d ? esc(d.toLocaleDateString("sk-SK", { weekday: "short" })) : "&nbsp;") + "</span>" + stavPill(f.stav) + "</span>" +
+      '<span class="f-k-datum">' + (d ? d.getDate() + ". " + (d.getMonth() + 1) + "." : "bez termínu") + "</span>" +
+      '<span class="f-k-region">' + esc(f.region) + "</span>" +
+      '<span class="f-k-cisla"><span><b class="num">' + f.pocet + "</b> obj.</span><span><b class=\"num\">" + esc(eur(f.suma)) + "</b></span></span>" +
+      (f.rozvoz ? '<span class="f-k-bar"><i style="width:' + sirka + '%"></i></span><span class="f-k-trasa">' +
+        (hod ? "trasa " + cislo(hod, 1) + " h / " + cislo(MAX_HODIN, 2) + " h" : "trasa sa ešte nepočítala") + "</span>" : "") +
+      (f.naplanovane ? '<span class="f-k-napl">✓ naplánované</span>' : "") +
+      (f.datum && !f.v_kalendari ? '<span class="pill bad">nie je v kalendári</span>' : "") +
+      "</button>";
+  }
+  function kartaIna(f, ikona, text) {
+    return '<button class="card f-karta f-k-ina" ' + (f.id === "archiv" ? 'data-f="archiv"' : 'data-f-otvor="' + f.id + '"') + ">" +
+      '<span class="f-k-ik" aria-hidden="true">' + ikona + '</span><span class="f-k-region">' + esc(f.region) + "</span>" +
+      '<span class="muted">' + text + "</span></button>";
+  }
   function pohladZoznam() {
     var z = F.zoznam || [];
     var rozvozy = z.filter(function (f) { return f.rozvoz && f.datum; });
     var ostatne = z.filter(function (f) { return !(f.rozvoz && f.datum); });
-    var karta = function (f) {
-      return '<button class="card f-karta" data-f-otvor="' + f.id + '">' +
-        '<span class="f-karta-hore"><strong>' + esc(f.region) + "</strong>" + stavPill(f.stav) + "</span>" +
-        '<span class="f-datum">' + (f.datum ? esc(new Date(f.datum + "T12:00:00").toLocaleDateString("sk-SK", { weekday: "short", day: "numeric", month: "numeric" })) : (f.rozvoz ? "bez termínu v kalendári" : "&nbsp;")) + "</span>" +
-        '<span class="muted"><span class="num">' + f.pocet + "</span> obj. · " + esc(eur(f.suma)) + (f.trasa_hodiny ? " · trasa " + cislo(f.trasa_hodiny, 1) + " h" : "") + "</span>" +
-        (f.dovod ? '<span class="muted f-mini">' + esc(f.dovod) + "</span>" : "") +
-        (f.datum && !f.v_kalendari ? '<span class="pill bad">nie je v kalendári</span>' : "") +
-        "</button>";
-    };
-    return '<div class="head"><div><div class="label">Furmanky</div><h2>Furmanky</h2></div></div>' + testHtml() +
-      '<div class="s-lista">' + behHtml() + '<span class="s-lista-tl">' +
-        '<button class="btn" data-f="obnov"' + (F.nacitavam ? " disabled" : "") + ">Obnoviť</button>" +
-        '<button class="btn btn-primary" data-f="stiahni"' + (F.stahujem ? " disabled" : "") + ">" + (F.stahujem ? "Sťahujem…" : "Aktualizovať z Upgates") + "</button></span></div>" +
-      spravaHtml() +
+    var nezar = z.filter(function (f) { return f.region === "NEZARADENÉ"; }).reduce(function (a, f) { return a + (f.pocet || 0); }, 0);
+    var objSpolu = rozvozy.reduce(function (a, f) { return a + (f.pocet || 0); }, 0);
+    var sumaSpolu = rozvozy.reduce(function (a, f) { return a + (Number(f.suma) || 0); }, 0);
+    var ikonaIne = function (f) { return f.region === "NEZARADENÉ" ? "⚠️" : f.region === "Osobný odber" ? "🏪" : f.region === "Elektronicky" ? "✉️" : "🚚"; };
+    var kpi = '<div class="kpi">' +
+      '<div class="k"><span class="k-ik" aria-hidden="true">🚚</span><b class="num">' + rozvozy.length + "</b><span>furmaniek</span></div>" +
+      '<div class="k"><span class="k-ik" aria-hidden="true">🧾</span><b class="num">' + objSpolu + "</b><span>objednávok na rozvoz</span></div>" +
+      '<div class="k"><span class="k-ik" aria-hidden="true">💶</span><b class="num">' + esc(eur(sumaSpolu).replace(",00", "")) + "</b><span>spolu</span></div>" +
+      '<div class="k' + (nezar ? " k-pozor" : "") + '"><span class="k-ik" aria-hidden="true">' + (nezar ? "⚠️" : "✅") + '</span><b class="num">' + nezar + "</b><span>nezaradených</span></div></div>";
+    return '<div class="head"><div><h2>Furmanky</h2><div class="sub">' + behHtml() + '</div></div><span class="head-tl">' +
+        '<button class="btn btn-ikona" data-f="obnov" title="Obnoviť zobrazenie" aria-label="Obnoviť zobrazenie"' + (F.nacitavam ? " disabled" : "") + ">↻</button>" +
+        '<button class="btn btn-primary" data-f="stiahni"' + (F.stahujem ? " disabled" : "") + '><span aria-hidden="true">⟳</span><span class="tl-text">' + (F.stahujem ? "Sťahujem…" : "Aktualizovať z Upgates") + "</span></button></span></div>" +
+      testHtml() + spravaHtml() +
       (F.zoznam == null ? '<div class="empty"><strong>Načítavam furmanky…</strong></div>' :
         (!z.length ? '<div class="empty"><strong>Zatiaľ žiadne furmanky</strong><span class="muted">Stlačte „Aktualizovať z Upgates“.</span></div>' :
-          '<h3 class="f-nadpis">Rozvozy</h3><div class="f-karty">' + (rozvozy.map(karta).join("") || '<p class="muted">Žiadne termíny.</p>') + "</div>" +
-          '<h3 class="f-nadpis">Ostatné</h3><div class="f-karty">' + ostatne.map(karta).join("") +
-            (F.archivN ? '<button class="card f-karta" data-f="archiv"><span class="f-karta-hore"><strong>Archív</strong></span><span class="muted"><span class="num">' + F.archivN + "</span> rozvezených furmaniek</span></button>" : "") +
-            (F.odobrate ? '<button class="card f-karta" data-f-otvor="odobrate"><span class="f-karta-hore"><strong>Odobraté</strong></span><span class="muted"><span class="num">' + F.odobrate + "</span> obj. vyradených ručne</span></button>" : "") +
+          kpi +
+          '<div class="f-karty">' + (rozvozy.map(kartaRozvozu).join("") || '<p class="muted">Žiadne termíny.</p>') + "</div>" +
+          (ostatne.length || F.archivN || F.odobrate ? '<h3 class="f-nadpis">Ostatné</h3>' : "") + '<div class="f-karty f-karty-ine">' +
+            ostatne.map(function (f) { return kartaIna(f, ikonaIne(f), '<span class="num">' + f.pocet + "</span> obj." + (f.suma ? " · " + esc(eur(f.suma)) : "")); }).join("") +
+            (F.archivN ? kartaIna({ id: "archiv", region: "Archív" }, "🗄️", '<span class="num">' + F.archivN + "</span> rozvezených") : "") +
+            (F.odobrate ? kartaIna({ id: "odobrate", region: "Odobraté" }, "🚫", '<span class="num">' + F.odobrate + "</span> vyradených ručne") : "") +
           "</div>"));
   }
 
@@ -210,7 +232,7 @@
   }
   function pohladArchiv() {
     var z = F.archiv;
-    return '<div class="head"><div><div class="label"><button class="btn-link" data-f="spat">← Furmanky</button></div><h2>Archív rozvozov</h2></div></div>' +
+    return '<div class="head"><div><button class="btn-link spat" data-f="spat">← Furmanky</button><h2>Archív rozvozov</h2></div></div>' +
       '<form id="f-archiv-form" class="f-hladaj-riadok"><input class="f-hladat" data-f-archiv-text placeholder="Číslo objednávky, meno, telefón, región alebo dátum" value="' + esc(F.archivText) + '">' +
       '<button class="btn btn-primary" type="submit">Hľadať</button></form>' + spravaHtml() +
       (z == null ? '<div class="empty"><strong>Načítavam…</strong></div>' : !z.length ? '<div class="empty"><strong>Nič sa nenašlo</strong></div>' :
@@ -224,7 +246,7 @@
 
   function pohladFurmanka() {
     var d = F.data, f = d && d.furmanka;
-    var hore = '<div class="head"><div><div class="label"><button class="btn-link" data-f="spat">← Furmanky</button></div><h2>' +
+    var hore = '<div class="head"><div><button class="btn-link spat" data-f="spat">← Furmanky</button><h2>' +
       esc(f ? f.nazov : "Furmanka") + " " + (f && f.id ? stavPill(f.stav) : "") + "</h2>" +
       (f && f.dovod ? '<div class="muted f-mini">' + esc(f.dovod) + (f.uzavreta ? " · " + esc(casSk(f.uzavreta)) : "") + "</div>" : "") +
       "</div></div>";
@@ -679,7 +701,7 @@
     },
     karta: function () {
       var z = (F.zoznam || []).filter(function (f) { return f.rozvoz && f.datum && f.stav !== "rozvezena"; }).slice(0, 5);
-      if (!F.zoznam && DB) setTimeout(function () { rpc("furmanky_zoznam").then(function (r) { if (r && r.ok) { F.zoznam = r.furmanky || []; F.beh = r.beh; F.odobrate = r.odobrate || 0; } }).catch(function () {}); }, 0);
+      if (!F.zoznam && DB) setTimeout(function () { rpc("furmanky_zoznam").then(function (r) { if (r && r.ok) { F.zoznam = r.furmanky || []; F.beh = r.beh; F.odobrate = r.odobrate || 0; F.archivN = r.archiv || 0; window.dispatchEvent(new Event("lbz-prekresli")); } }).catch(function () {}); }, 0);
       return '<section class="card"><h3>Furmanky <span class="pill ok num">' + z.length + "</span></h3>" +
         (z.length ? '<div class="rows">' + z.map(function (f) {
           return '<div class="row"><span>' + esc(f.region) + ' <span class="muted">' + esc(datumSk(f.datum)) + '</span></span><span>' + stavPill(f.stav) + ' <span class="muted num">' + f.pocet + "</span></span></div>";
