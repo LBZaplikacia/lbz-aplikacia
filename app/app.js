@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.18.0 BETA";
+  var VERZIA = "0.18.1 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -385,7 +385,17 @@
   }
 
   function render() {
+    // spodná lišta v mobile: po prekreslení ostane posunutá tam, kde bola (a ťuknutá položka ostane viditeľná)
+    var lista = document.querySelector("nav.bottom"), listaX = lista ? lista.scrollLeft : 0;
     if (stav.rola) renderApp(); else { renderLogin(); vykresliGoogle(); }
+    var lista2 = document.querySelector("nav.bottom");
+    if (lista2) {
+      lista2.scrollLeft = listaX;
+      var akt = lista2.querySelector('[aria-current="page"]');
+      if (akt && (akt.offsetLeft < lista2.scrollLeft || akt.offsetLeft + akt.offsetWidth > lista2.scrollLeft + lista2.clientWidth)) {
+        lista2.scrollLeft = akt.offsetLeft - (lista2.clientWidth - akt.offsetWidth) / 2;
+      }
+    }
     var sk = document.getElementById("sklad-root");
     if (sk && SKLAD) SKLAD.mount(sk, sk.getAttribute("data-modul"));
     var fu = document.getElementById("furm-root");

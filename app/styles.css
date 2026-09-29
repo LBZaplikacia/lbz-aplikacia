@@ -902,3 +902,38 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .zm-log summary { cursor: pointer; font-weight: 700; }
 @media (max-width: 760px) { .zm-sekcie { grid-template-columns: 1fr; } .zm-dl { grid-template-columns: 1fr; gap: 0 0; } .zm-dl dt { margin-top: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; } .zm-novy-tl { width: 100%; } }
 .zm-chyba-pol { margin: 0; font-size: 13px; }
+
+/* ---------- Dochádzka v mobile: riadky tabuliek ako karty ---------- */
+.c-mob { display: none; }
+@media (max-width: 760px) {
+  .d-modul .tbl-wrap { overflow: visible; }
+  .d-tab-mes, .d-tab-tim { display: block; }
+  .d-tab-mes thead, .d-tab-tim thead { display: none; }
+  .d-tab-mes tbody, .d-tab-tim tbody { display: grid; gap: 8px; }
+  .d-tab-mes tr, .d-tab-tim tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .d-tab-mes td, .d-tab-tim td { display: block; padding: 0; border: 0; white-space: normal; min-width: 0; }
+  .d-tab-mes td:empty, .d-tab-tim td:empty { display: none; }
+  .c-mob { display: inline; font-weight: 400; color: var(--muted); }
+  .d-tab-mes .c-den { font-weight: 700; }
+  .d-tab-mes .c-hod { grid-column: 2; grid-row: 1; text-align: right; font-size: 17px; }
+  .d-tab-mes .c-miesto { color: var(--muted); font-size: 14px; }
+  .d-tab-mes .c-cas { grid-column: 2; grid-row: 2; text-align: right; font-size: 14px; }
+  .d-tab-mes .c-prest, .d-tab-mes .c-str { font-size: 13px; }
+  .d-tab-mes .c-str { grid-column: 2; text-align: right; }
+  .d-tab-mes .c-pozn { grid-column: 1 / -1; font-size: 13px; overflow-wrap: anywhere; }
+  .d-tab-mes tr.d-abs { background: var(--accent-soft); }
+  .d-tab-mes tr.d-vikend td:first-child { color: var(--warn); }
+  .d-tab-tim .c-meno { font-weight: 700; }
+  .d-tab-tim .c-hod { grid-column: 2; grid-row: 1; text-align: right; font-size: 17px; }
+  .d-tab-tim .c-norma, .d-tab-tim .c-dni, .d-tab-tim .c-str { font-size: 13px; display: inline; }
+  .d-tab-tim .c-det { grid-column: 2; grid-row: 2 / span 3; align-self: center; }
+  .d-modul .f-seg { display: flex; width: 100%; }
+  .d-modul .f-seg button { flex: 1; padding: 8px 6px; }
+  .d-ziad { flex-direction: column; align-items: stretch; }
+  .d-ziad-tl .btn { flex: 1; }
+  .d-norma { flex-wrap: wrap; }
+  .d-modul .row { gap: 8px; }
+}
+.d-modul form, .d-modul .card { min-width: 0; }
+.d-modul .field select, .d-modul .field input { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.d-modul .d-riadok .field { min-width: 0; }

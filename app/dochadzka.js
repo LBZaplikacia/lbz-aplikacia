@@ -125,11 +125,11 @@
     var riadky = r.map(function (x) {
       var otv = x.typ === "praca" && x.prichod && !x.odchod;
       return '<tr class="' + (vikend(x.datum) ? "d-vikend " : "") + (x.typ !== "praca" ? "d-abs" : "") + '">' +
-        "<td>" + esc(denSk(x.datum)) + "</td><td>" + esc(x.typ === "praca" ? (x.miesto || "") : TYPY[x.typ]) + "</td>" +
-        '<td class="num">' + esc(cas(x.prichod)) + (x.prichod || x.odchod ? "–" : "") + esc(otv ? "…" : cas(x.odchod)) + "</td>" +
-        '<td class="num">' + (x.prestavka_min ? hodiny(x.prestavka_min) : "") + '</td><td class="num"><b>' + (x.odpracovane_min != null ? hodiny(x.odpracovane_min) : "") + "</b></td>" +
-        '<td class="num">' + (Number(x.stravne) ? eur(x.stravne) : "") + "</td>" +
-        "<td>" + (x.poznamka ? '<span class="muted">' + esc(x.poznamka) + "</span>" : "") +
+        '<td class="c-den">' + esc(denSk(x.datum)) + '</td><td class="c-miesto">' + esc(x.typ === "praca" ? (x.miesto || "") : TYPY[x.typ]) + "</td>" +
+        '<td class="num c-cas">' + esc(cas(x.prichod)) + (x.prichod || x.odchod ? "–" : "") + esc(otv ? "…" : cas(x.odchod)) + "</td>" +
+        '<td class="num c-prest">' + (x.prestavka_min ? '<span class="c-mob">prestávka </span>' + hodiny(x.prestavka_min) : "") + '</td><td class="num c-hod"><b>' + (x.odpracovane_min != null ? hodiny(x.odpracovane_min) + '<span class="c-mob"> h</span>' : "") + "</b></td>" +
+        '<td class="num c-str">' + (Number(x.stravne) ? '<span class="c-mob">stravné </span>' + eur(x.stravne) : "") + "</td>" +
+        '<td class="c-pozn">' + (x.poznamka ? '<span class="muted">' + esc(x.poznamka) + "</span>" : "") +
         (uprava && !x.len_citanie ? ' <button class="btn-link" data-d-upr="' + x.id + '">Upraviť</button>' : "") +
         (x.len_citanie ? ' <span class="muted" title="Prenesené zo starej dochádzky">🔒</span>' : "") +
         (!uprava && D.zalozka === "mesiac" && !x.len_citanie && x.typ === "praca" ? ' <button class="btn-link" data-d-opr="' + x.id + '">Oprava</button>' : "") +
@@ -137,7 +137,7 @@
     }).join("");
     return '<div class="d-sumar"><span>Odpracované + neprítomnosť <b class="num">' + hodiny(sum) + " h</b></span><span>Dní v práci <b class=\"num\">" + Object.keys(dni).length +
       '</b></span><span>Stravné <b class="num">' + eur(str) + "</b></span></div>" +
-      (r.length ? '<div class="tbl-wrap"><table class="d-tab"><thead><tr><th>Deň</th><th>Miesto / druh</th><th>Príchod–odchod</th><th>Prest.</th><th>Hodiny</th><th>Stravné</th><th></th></tr></thead><tbody>' +
+      (r.length ? '<div class="tbl-wrap"><table class="d-tab d-tab-mes"><thead><tr><th>Deň</th><th>Miesto / druh</th><th>Príchod–odchod</th><th>Prest.</th><th>Hodiny</th><th>Stravné</th><th></th></tr></thead><tbody>' +
         riadky + "</tbody></table></div>" : '<div class="empty"><strong>V tomto mesiaci nie sú záznamy</strong></div>');
   }
   // poloha ako text (bez mapy): známe miesto, inak adresa z GPS
@@ -233,10 +233,10 @@
           (p.uprava ? '<span class="d-ziad-tl"><button class="btn btn-primary" data-d-schval="' + x.id + '">Schváliť</button><button class="btn" data-d-zamietni="' + x.id + '">Zamietnuť</button></span>' : "") + "</div>";
       }) + "</section></div>" +
       "<h3>Mesiac – " + esc(mesiacNazov(D.mesiac)) + "</h3>" +
-      '<div class="tbl-wrap"><table class="d-tab"><thead><tr><th>Zamestnanec</th><th>Norma/deň</th><th>Hodiny</th><th>Dni</th><th>Stravné</th><th></th></tr></thead><tbody>' +
+      '<div class="tbl-wrap"><table class="d-tab d-tab-tim"><thead><tr><th>Zamestnanec</th><th>Norma/deň</th><th>Hodiny</th><th>Dni</th><th>Stravné</th><th></th></tr></thead><tbody>' +
       p.ludia.map(function (x) {
-        return "<tr><td>" + esc(x.meno) + (x.ucet ? "" : ' <span class="muted" title="Nemá prepojený účet v appke">(bez účtu)</span>') + '</td><td class="num">' + String(x.norma_h || 8).replace(".", ",") + ' h</td><td class="num"><b>' + hodiny(x.min) +
-          '</b></td><td class="num">' + x.dni + '</td><td class="num">' + eur(x.stravne) + '</td><td><button class="btn-link" data-d-osoba="' + x.id + '">Detail</button></td></tr>';
+        return '<tr><td class="c-meno">' + esc(x.meno) + (x.ucet ? "" : ' <span class="muted" title="Nemá prepojený účet v appke">(bez účtu)</span>') + '</td><td class="num c-norma"><span class="c-mob">norma </span>' + String(x.norma_h || 8).replace(".", ",") + ' h</td><td class="num c-hod"><b>' + hodiny(x.min) +
+          '<span class="c-mob"> h</span></b></td><td class="num c-dni">' + x.dni + '<span class="c-mob"> dní</span></td><td class="num c-str"><span class="c-mob">stravné </span>' + eur(x.stravne) + '</td><td class="c-det"><button class="btn-link" data-d-osoba="' + x.id + '">Detail</button></td></tr>';
       }).join("") + "</tbody></table></div>";
   }
   function dialogHtml() {
