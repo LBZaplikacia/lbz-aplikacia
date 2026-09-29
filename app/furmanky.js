@@ -265,6 +265,7 @@
       '<span class="f-lista-tl">' +
         (f.id ? '<button class="btn" data-f="pridat">+ Objednávka</button>' : "") +
         (f.id ? (f.stav === "otvorena" ? '<button class="btn f-tl-full" data-f="stav" data-stav="full">🔒 Uzavrieť (FULL)</button>' :
+          f.stav === "rozvezena" ? '<button class="btn" data-f="stav" data-stav="full">↩️ Vrátiť z archívu</button>' :
           '<button class="btn" data-f="stav" data-stav="otvorena">Otvoriť</button>') : "") +
         (f.id && f.rozvoz && f.stav !== "rozvezena" ? (f.naplanovane ? '<span class="pill ok f-napl">✓ Naplánované ' + esc(casSk(f.naplanovane)) + "</span>" :
           '<button class="btn f-tl-napl" data-f="naplanovane">✅ Naplánované</button>') +
@@ -654,8 +655,9 @@
       case "z-upgates-cislo": nacitajZUpgates(F.dialog.text.trim(), true); break;
       case "stav":
         var s = d.stav, n = F.data.furmanka.nazov;
-        var otazka = s === "full" ? "Uzavrieť furmanku " + n + "? Nové objednávky pôjdu na ďalší termín." :
-          s === "otvorena" ? "Znova otvoriť furmanku " + n + "? Automatika do nej môže pridať nové objednávky." : "Archivovať furmanku " + n + "? Presunie sa do Archívu (späť ju vrátite tlačidlom Otvoriť).";
+        var otazka = s === "full" && F.data.furmanka.stav === "rozvezena" ? "Vrátiť furmanku " + n + " z archívu medzi aktívne? Ostane uzavretá (FULL), nové objednávky do nej nepribudnú a statusy objednávok sa nemenia." :
+          s === "full" ? "Uzavrieť furmanku " + n + "? Nové objednávky pôjdu na ďalší termín." :
+          s === "otvorena" ? "Znova otvoriť furmanku " + n + "? Automatika do nej môže pridať nové objednávky." : "Archivovať furmanku " + n + "? Presunie sa do Archívu (späť ju vrátite tlačidlom Vrátiť z archívu).";
         if (!window.confirm(otazka)) return;
         po(rpc("furmanka_stav", { p_id: F.data.furmanka.id, p_stav: s }), "Hotovo").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
         break;

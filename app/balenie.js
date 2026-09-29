@@ -81,7 +81,8 @@
     rpc("balenie_objednavka", { p_cislo: cislo }).then(function (d) {
       if (!d || d.ok === false) { pip(false); B.sprava = { typ: "chyba", text: (d && d.text) || "Objednávka sa nenašla" }; prekresli(); return; }
       B.cislo = d.objednavka.cislo; B.obj = d.objednavka; B.pohlad = "objednavka";
-      if (B.fData && d.objednavka.furmanka_id !== (B.fData.furmanka || {}).id) {
+      if (!B.fData && d.objednavka.furmanka_id) { B.fId = d.objednavka.furmanka_id; nacitajFurmanku(true); }   // sken štítku zo zoznamu furmaniek
+      else if (B.fData && d.objednavka.furmanka_id !== (B.fData.furmanka || {}).id) {
         B.sprava = { typ: "chyba", text: "Pozor: objednávka je vo furmanke " + (d.furmanka || "– (nezaradená)") + ", nie v tejto." };
         pip(false);
       }
@@ -164,7 +165,7 @@
   // čítačka cez Bluetooth píše ako klávesnica – zachytíme rýchle písanie + Enter (mimo políčok)
   var buffer = "", bufferCas = 0;
   document.addEventListener("keydown", function (e) {
-    if (!koren || !koren.isConnected || B.pohlad === "zoznam" || B.dialog) return;
+    if (!koren || !koren.isConnected || B.dialog) return;   // čítačka funguje bez kurzora v políčku, aj na zozname furmaniek
     var t = e.target;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
     var teraz = Date.now();
