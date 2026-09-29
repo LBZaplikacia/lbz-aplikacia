@@ -1347,6 +1347,127 @@ end $$;
 revoke all on function public.furmanky_import_stare(jsonb) from public, anon;
 grant execute on function public.furmanky_import_stare(jsonb) to authenticated;
 
+
+-- =========================================================================
+-- 10) ÚPRAVY 30. 9. 2026
+--  a) šablóna: medzisúčet 30 ks mini sčíta všetkých 16 riadkov; POLOTOVARY len mrazené
+--     (sladké = medzisúčty 5ks, 15ks, 10ks mini, 30ks mini; škvarkové = to isté vrátane 30ks mini, ktoré predtým chýbalo)
+--  b) zaradenie: keď mesto ani PSČ nesedí, použije sa furmanka, ktorú si zákazník zvolil (NEZARADENÉ až nakoniec)
+--  c) archív rozvezených furmaniek (zoznam ich neukazuje, dajú sa vyhľadať)
+--  d) „Naplánované“ – potvrdí zákaznícky servis tlačidlom (do Upgates sa zapíše až po ostrom štarte)
+-- =========================================================================
+update public.furmanky_sablona set vzorec_ks = 'SUM(R[-16]C[0]:R[-1]C[0])' where riadok = 116;
+update public.furmanky_sablona set vzorec_ks = 'R[-5]C[0]+R[-26]C[0]+R[-48]C[0]+R[-70]C[0]',
+                                   vzorec_davky = 'R[-5]C[0]+R[-26]C[0]+R[-48]C[0]+R[-70]C[0]' where riadok = 121;
+update public.furmanky_sablona set vzorec_ks = 'R[-2]C[0]+R[-23]C[0]+R[-45]C[0]+R[-67]C[0]',
+                                   vzorec_davky = 'R[-2]C[0]+R[-23]C[0]+R[-45]C[0]+R[-67]C[0]' where riadok = 122;
+
+create or replace function public.region_pre(p_doprava text, p_mesto text, p_psc text) returns text
+language plpgsql stable set search_path = public as $$
+declare v_ship text := public.norm_text(p_doprava); v_mesto text := public.norm_text(p_mesto);
+        v_psc text := regexp_replace(coalesce(p_psc, ''), '\s', '', 'g'); r record;
+begin
+  if v_ship like '%zbojska%' then return 'Osobný odber'; end if;
+  if v_ship like '%elektronicky%' then return 'Elektronicky'; end if;
+  for r in select region, mesta from public.furmanky_regiony where rozvoz order by hladanie loop
+    if v_mesto <> '' and exists (select 1 from unnest(r.mesta) m where position(m in v_mesto) > 0) then return r.region; end if;
+  end loop;
+  for r in select region, psc from public.furmanky_regiony where rozvoz order by hladanie loop
+    if v_psc <> '' and (left(v_psc, 3) = any(r.psc) or left(v_psc, 2) = any(r.psc)) then return r.region; end if;
+  end loop;
+  -- záloha: furmanka, ktorú si zákazník zvolil v e-shope
+  for r in select region, kluc from public.furmanky_regiony where rozvoz and kluc is not null order by hladanie loop
+    if v_ship like '%' || r.kluc || '%' then return r.region; end if;
+  end loop;
+  return 'NEZARADENÉ';
+end $$;
+
+alter table public.furmanky add column if not exists naplanovane timestamptz;
+alter table public.furmanky add column if not exists naplanoval uuid;
+
+-- zoznam: bez rozvezených (tie sú v archíve)
+create or replace function public.furmanky_zoznam() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Furmanky vidí len IT, CEO a zákaznícky servis'); end if;
+  return jsonb_build_object('ok', true, 'beh', public.furmanky_posledny_beh(), 'furmanky', coalesce((
+    select jsonb_agg(jsonb_build_object('id', f.id, 'region', f.region, 'datum', f.datum, 'nazov', public.furmanka_nazov(f.region, f.datum),
+             'stav', f.stav, 'v_kalendari', f.v_kalendari, 'dovod', f.dovod, 'uzavreta', f.uzavreta, 'rozvoz', r.rozvoz,
+             'trasa_hodiny', f.trasa_hodiny, 'naplanovane', f.naplanovane, 'pocet', coalesce(z.pocet, 0), 'suma', coalesce(z.suma, 0))
+           order by (f.datum is null), f.datum, r.poradie)
+    from public.furmanky f
+    join public.furmanky_regiony r on r.region = f.region
+    left join lateral (select count(*) pocet, sum(o.suma) suma from public.zaradenia z join public.objednavky o on o.cislo = z.cislo
+                       where z.furmanka_id = f.id) z on true
+    where f.stav <> 'rozvezena'
+      and ((f.datum is null and coalesce(z.pocet, 0) > 0) or (f.datum is not null and (f.v_kalendari or coalesce(z.pocet, 0) > 0)))
+  ), '[]'::jsonb),
+  'odobrate', (select count(*) from public.zaradenia where rucne and furmanka_id is null),
+  'archiv', (select count(*) from public.furmanky where stav = 'rozvezena'));
+end $$;
+
+-- archív: rozvezené furmanky, hľadanie podľa názvu/dátumu alebo čísla, mena, telefónu objednávky
+create or replace function public.furmanky_archiv(p_text text default null) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v text := public.norm_text(p_text); v_cisla text := regexp_replace(coalesce(p_text, ''), '\D', '', 'g');
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Nemáte oprávnenie'); end if;
+  return jsonb_build_object('ok', true, 'furmanky', coalesce((
+    select jsonb_agg(x order by (x->>'datum') desc nulls last) from (
+      select jsonb_build_object('id', f.id, 'region', f.region, 'datum', f.datum, 'nazov', public.furmanka_nazov(f.region, f.datum),
+               'stav', f.stav, 'pocet', (select count(*) from public.zaradenia z where z.furmanka_id = f.id),
+               'suma', (select sum(o.suma) from public.zaradenia z join public.objednavky o on o.cislo = z.cislo where z.furmanka_id = f.id),
+               'najdene', (select jsonb_agg(o.cislo || ' ' || coalesce(o.meno, o.firma, '')) from public.zaradenia z join public.objednavky o on o.cislo = z.cislo
+                           where z.furmanka_id = f.id and length(v) >= 2
+                             and (public.norm_text(o.cislo) like '%' || v || '%' or public.norm_text(o.meno) like '%' || v || '%'
+                                  or public.norm_text(o.firma) like '%' || v || '%'
+                                  or (length(v_cisla) >= 4 and regexp_replace(coalesce(o.telefon, ''), '\D', '', 'g') like '%' || v_cisla || '%')))) x
+      from public.furmanky f
+      where f.stav = 'rozvezena'
+      limit 400) q
+    where coalesce(length(v), 0) < 2 or jsonb_typeof(x->'najdene') = 'array'
+       or public.norm_text(x->>'nazov') like '%' || v || '%'
+  ), '[]'::jsonb));
+end $$;
+
+create or replace function public.furmanka_naplanovana(p_id bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Nemáte oprávnenie'); end if;
+  update public.furmanky set naplanovane = now(), naplanoval = auth.uid() where id = p_id;
+  insert into public.furmanky_log (typ, kto, text) select 'naplanovane', auth.uid(), public.furmanka_nazov(region, datum) || ' – Naplánované (do Upgates po ostrom štarte)' from public.furmanky where id = p_id;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- furmanka_data: pridaný čas „Naplánované“
+create or replace function public.furmanka_data(p_id bigint) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_f jsonb;
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Furmanky vidí len IT, CEO a zákaznícky servis'); end if;
+  if p_id is not null then
+    select jsonb_build_object('id', f.id, 'region', f.region, 'datum', f.datum, 'nazov', public.furmanka_nazov(f.region, f.datum), 'stav', f.stav,
+                              'dovod', f.dovod, 'uzavreta', f.uzavreta, 'rozvoz', r.rozvoz, 'trasa_hodiny', f.trasa_hodiny, 'v_kalendari', f.v_kalendari,
+                              'naplanovane', f.naplanovane)
+      into v_f from public.furmanky f join public.furmanky_regiony r on r.region = f.region where f.id = p_id;
+    if v_f is null then return jsonb_build_object('ok', false, 'text', 'Furmanka neexistuje'); end if;
+  else
+    v_f := jsonb_build_object('id', null, 'nazov', 'Odobraté objednávky', 'stav', 'otvorena', 'rozvoz', false);
+  end if;
+  return jsonb_build_object('ok', true, 'furmanka', v_f, 'objednavky', coalesce((
+    select jsonb_agg(public.objednavka_json(z.cislo) order by z.poradie nulls last, o.vytvorena nulls last, z.cislo)
+    from public.zaradenia z join public.objednavky o on o.cislo = z.cislo
+    where (p_id is not null and z.furmanka_id = p_id) or (p_id is null and z.furmanka_id is null and z.rucne)), '[]'::jsonb));
+end $$;
+
+revoke all on function public.furmanky_archiv(text), public.furmanka_naplanovana(bigint) from public, anon;
+grant execute on function public.furmanky_archiv(text), public.furmanka_naplanovana(bigint) to authenticated;
+
+-- prepočítať regióny existujúcich objednávok podľa novej zálohy a zaradiť
+update public.objednavky o set region = public.region_pre(o.doprava, o.mesto, o.psc), upozornenie = null where o.zdroj = 'upgates';
+update public.objednavky o set upozornenie = public.zla_doprava(o.region, o.doprava) where o.zdroj = 'upgates';
+select public.furmanky_prirad();
+
 -- ---------- plánované sťahovanie 6:00, 11:30, 14:00 (spustiť AŽ po nasadení Edge Function „upgates-sync“) ----------
 -- Plánovač volá funkciu v UTC časoch pre letný aj zimný čas; funkcia sama pustí len ten, ktorý v Bratislave padne na 6:00/11:30/14:00.
 create extension if not exists pg_cron;
