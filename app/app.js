@@ -143,7 +143,7 @@
         '<aside class="side"><div class="brand"><img class="brand-mark" src="icons/logo.svg" alt="">' +
           '<div><h1 style="font-size:18px">Legendárne buchty</h1><p>' + esc(ROLY[stav.rola].nazov) + "</p></div></div>" +
           '<nav class="nav" aria-label="Moduly">' + nav + "</nav>" +
-          '<div class="who"><span>' + esc(stav.pouzivatel) + '</span><button class="btn" id="btn-odhlasit">Odhlásiť</button></div>' +
+          '<div class="who"><span>' + esc(stav.pouzivatel) + '</span><span class="muted" style="font-size:12px">verzia 0.3</span><button class="btn" id="btn-odhlasit">Odhlásiť</button></div>' +
         "</aside>" +
         '<main class="main">' +
           '<div class="mtop"><div class="brand"><img class="brand-mark" src="icons/logo.svg" alt=""><strong>' + esc(ROLY[stav.rola].nazov) + '</strong></div>' +
@@ -298,6 +298,11 @@
   render();
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
-    navigator.serviceWorker.register("sw.js").catch(function () {});
+    // updateViaCache "none" = nová verzia appky sa zistí hneď pri otvorení; po jej zapnutí sa stránka raz obnoví
+    var malKontrolera = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange", function () { if (malKontrolera) location.reload(); });
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(function (reg) {
+      document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") reg.update(); });
+    }).catch(function () {});
   }
 })();
