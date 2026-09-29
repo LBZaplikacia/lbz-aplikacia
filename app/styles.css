@@ -739,3 +739,38 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 .t-gmapa-nav { position: absolute; right: 10px; bottom: 34px; min-height: 42px; padding: 6px 14px; background: var(--accent); color: #fff; border-color: var(--accent); text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
 .t-navlista-mala { margin-top: 4px; }
 .t-navlista-mala .t-nav { min-height: 40px; padding: 6px 12px; font-size: 14px; background: var(--surface); color: var(--blue); border-color: var(--blue); }
+
+/* Dochádzka */
+.d-karta { display: grid; gap: 10px; border-top: 4px solid var(--gold); }
+.d-karta.d-v-praci { border-top-color: var(--ok); }
+.d-stav { font-size: 16px; }
+.d-bezi { font: 800 34px var(--font-display); color: var(--ok); }
+.d-velke { min-height: 64px; font-size: 22px; font-family: var(--font-display); width: 100%; }
+.d-tl-prichod { background: var(--ok); border-color: var(--ok); color: #fff; }
+.d-tl-odchod { background: var(--bad); border-color: var(--bad); color: #fff; }
+.d-miesta { display: flex; flex-wrap: wrap; gap: 6px; }
+.d-miesto { border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); border-radius: 999px; padding: 8px 12px; font-weight: 600; font-size: 14px; min-height: 40px; }
+.d-miesto[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.d-suhrn { margin: 0; color: var(--muted); font-size: 14px; }
+.d-pozn { margin: 0; font-size: 13px; }
+.d-suhlas p { margin: 0; line-height: 1.5; }
+.d-grid-karta { margin-bottom: 12px; }
+.d-zalozky { margin: 8px 0 12px; }
+.d-sumar { display: flex; flex-wrap: wrap; gap: 8px 18px; background: var(--surface-2); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.d-tab { width: 100%; border-collapse: collapse; font-size: 14px; }
+.d-tab th, .d-tab td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.d-tab td:last-child { white-space: normal; }
+.d-tab tr.d-vikend td:first-child { color: var(--warn); font-weight: 700; }
+.d-tab tr.d-abs td { background: var(--accent-soft); }
+.d-riadok { display: flex; gap: 10px; flex-wrap: wrap; }
+.d-riadok .field { flex: 1 1 140px; }
+.d-cela { flex: 1 1 100%; margin: 0; font-size: 13px; }
+.d-ziad { flex-wrap: wrap; gap: 6px; }
+.d-ziad-tl { display: flex; gap: 6px; }
+.d-ziad-tl .btn { min-height: 36px; padding: 4px 10px; }
+.d-osoba-hl { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+.d-norma { display: flex; align-items: center; gap: 6px; }
+.d-norma input { width: 70px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+.d-norma .btn { min-height: 36px; padding: 4px 10px; }
+.tbl-wrap { overflow-x: auto; }
+.d-dlho { color: var(--bad); font-weight: 700; }
