@@ -2515,3 +2515,29 @@ language sql stable security definer set search_path = public as $$
   from public.furmanky f join public.furmanky_regiony r on r.region = f.region and r.rozvoz
   where f.stav = 'otvorena' and f.datum > public.dnes_sk()
 $$;
+
+
+-- =========================================================================
+-- 18) TRASA – REŽIM JAZDA (29. 9. 2026): súradnice zastávky (z uložených geokódov) → appka pozná príchod na miesto
+-- =========================================================================
+create or replace function public.trasa_data(p_id bigint) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when not public.som_furman() then jsonb_build_object('ok', false, 'text', 'Nemáte prístup k trase') else
+  jsonb_build_object('ok', true,
+    'trasa', (select jsonb_build_object('id', f.id, 'nazov', public.furmanka_nazov(f.region, f.datum), 'datum', f.datum, 'region', f.region,
+                'stav', t.stav, 'odchod', t.odchod, 'navrat', t.navrat, 'hodiny', t.hodiny, 'zacata', t.zacata, 'ukoncena', t.ukoncena)
+              from public.trasy t join public.furmanky f on f.id = t.furmanka_id where t.furmanka_id = p_id),
+    'zastavky', coalesce((select jsonb_agg(jsonb_build_object('cislo', s.cislo, 'poradie', s.poradie, 'eta', s.eta, 'bez_gps', s.bez_gps,
+        'stav', s.stav, 'cas', s.cas, 'poznamka', s.poznamka, 'foto', s.foto, 'presun_datum', s.presun_datum,
+        'meno', o.meno, 'firma', o.firma, 'telefon', o.telefon,
+        'adresa', concat_ws(', ', nullif(o.ulica, ''), nullif(trim(concat_ws(' ', o.psc, o.mesto)), '')),
+        'platba', coalesce(o.platba, 'DOBIERKA'), 'suma', o.suma, 'faktura', o.faktura,
+        'pozn_obj', nullif(concat_ws(' | ', nullif(o.poznamka, ''), nullif(o.upozornenie, '')), ''),
+        'kusy', (select coalesce(sum(p.mnozstvo), 0) from public.objednavky_polozky p where p.cislo = o.cislo),
+        'balenie', (select b.stav from public.balenie b where b.cislo = o.cislo),
+        'lat', g.lat, 'lng', g.lng)
+      order by s.poradie nulls last, s.cislo)
+      from public.trasy_zastavky s join public.objednavky o on o.cislo = s.cislo
+      left join public.geokody g on g.ok and g.adresa = concat_ws(', ', nullif(o.ulica, ''), nullif(trim(concat_ws(' ', o.psc, o.mesto)), ''))
+      where s.furmanka_id = p_id), '[]'::jsonb)) end
+$$;
