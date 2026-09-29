@@ -1,9 +1,9 @@
 // Service worker: appka sa otvorí aj pri slabom signáli (uložené základné súbory).
 // Pri každej novej verzii appky zvýš číslo VERZIA – zariadenia si ju stiahnu samé.
-const VERZIA = "0.12.4";
+const VERZIA = "0.13.0";
 const CACHE = "lbz-v" + VERZIA;
 const SUPABASE = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
-const SUBORY = ["./", "index.html", "styles.css", "app.js", "sklad.js", "furmanky.js", "rozpis.js", "lib/qr.js", "config.js", "manifest.webmanifest", "icons/logo.svg", "icons/icon-192.png"];
+const SUBORY = ["./", "index.html", "styles.css", "app.js", "sklad.js", "furmanky.js", "rozpis.js", "balenie.js", "lib/qr.js", "config.js", "manifest.webmanifest", "icons/logo.svg", "icons/icon-192.png"];
 self.addEventListener("install", e => {
   self.skipWaiting(); // nová verzia sa zapne hneď, nečaká na zatvorenie appky
   e.waitUntil(caches.open(CACHE).then(c => {

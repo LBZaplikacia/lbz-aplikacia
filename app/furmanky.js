@@ -185,6 +185,8 @@
       (f.rozvoz ? '<span class="f-k-bar"><i style="width:' + sirka + '%"></i></span><span class="f-k-trasa">' +
         (hod ? "trasa " + cislo(hod, 1) + " h / " + cislo(MAX_HODIN, 2) + " h" : "trasa sa ešte nepočítala") + "</span>" : "") +
       (f.naplanovane ? '<span class="f-k-napl">✓ naplánované</span>' : "") +
+      (f.zabalene ? '<span class="f-k-trasa">📦 zabalené ' + f.zabalene + " / " + f.pocet + "</span>" : "") +
+      (f.odlozene ? '<span class="b-st b-st-odl">⚠️ odložené pri balení: ' + f.odlozene + "</span>" : "") +
       (f.datum && !f.v_kalendari ? '<span class="pill bad">nie je v kalendári</span>' : "") +
       "</button>";
   }
@@ -294,7 +296,9 @@
 
   function hlavickaObjednavky(o) {
     var ozn = (o.rucne_polia && o.rucne_polia.length) || o.rucne ? ' <span class="f-rucne" title="Zmenené v appke">✎</span>' : "";
-    return esc(o.meno || o.firma || "(bez mena)") + ozn;
+    var b = o.balenie, bal = !b ? "" : b.stav === "odlozena" ? ' <span class="b-st b-st-odl" title="' + esc(b.dovod || "") + '">📦 odložená: ' + esc(b.dovod || "") + "</span>"
+      : b.stav === "zabalena" ? ' <span class="b-st b-st-ok">📦 zabalená</span>' : ' <span class="b-st b-st-rozp">📦 balí sa</span>';
+    return esc(o.meno || o.firma || "(bez mena)") + ozn + bal;
   }
   var HLAVICKA = [
     ["Meno/Firma", function (o) { return hlavickaObjednavky(o); }],
@@ -697,7 +701,15 @@
       DB = klient || null; ROLA = klient ? rola : null;
       if (!DB) { F.zoznam = null; F.data = null; F.id = null; F.sablona = null; }
     },
-    tlacStitky: function () { if (F.data) tlacStitky(); },   // použije modul Balenie
+    tlacStitky: function () { if (F.data) tlacStitky(); },
+    // modul Balenie: štítky celej furmanky z jeho dát (prevádzka nemá prístup k modulu Furmanky)
+    tlacStitkyZ: function (furmanka, objednavky) {
+      if (!DB) return Promise.reject(new Error("Nie ste prihlásený"));
+      return nacitajSablonu().then(function () {
+        var bol = F.data; F.data = { furmanka: furmanka, objednavky: objednavky };
+        try { tlacStitky(); } finally { F.data = bol; }
+      });
+    },
     mozem: function () { return !!DB && (ROLA === "it" || ROLA === "ceo" || ROLA === "zakaznicky_servis"); },
     mount: function (el) {
       koren = el;

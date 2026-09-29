@@ -553,3 +553,58 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 .r-cip small { font-size: 10px; }
 .r-plus { min-width: 24px; min-height: 26px; font-size: 14px; }
 @media (hover: hover) { .r-bunka .r-plus { opacity: 0; } .r-bunka:hover .r-plus, .r-plus:focus-visible { opacity: 1; } }
+
+/* ---------- Balenie (v0.13.0) ---------- */
+.b-furmanky { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.b-furm { display: grid; gap: 10px; }
+.b-furm-hl { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.b-furm-hl h3 { margin: 0; }
+.b-prog { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.b-prog span { display: block; height: 100%; background: var(--ok); }
+.b-furm-cisla { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 14px; }
+.b-balit { font-size: 17px; min-height: 52px; }
+.b-st { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px; white-space: nowrap; background: var(--surface-2); color: var(--muted); }
+.b-st-rozp { background: #e3edf3; color: var(--blue); }
+.b-st-ok { background: #e7f3ea; color: var(--ok); }
+.b-st-odl { background: var(--warn-soft); color: var(--warn); }
+.b-sken { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin: 0; }
+.b-sken .field { flex: 1 1 200px; margin: 0; }
+.b-sken input { font-size: 18px; letter-spacing: .02em; }
+#b-kamera { max-width: 420px; margin: 8px auto 0; border-radius: 12px; overflow: hidden; }
+.b-obj-zoznam { gap: 0; }
+.b-obj-riadok { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; width: 100%; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); padding: 10px 4px; font: inherit; color: inherit; cursor: pointer; }
+.b-obj-riadok:hover { background: var(--accent-soft); }
+.b-obj-poradie { width: 28px; height: 28px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+.b-obj-kto { display: grid; gap: 2px; min-width: 0; }
+.b-obj-stav { display: flex; gap: 8px; align-items: center; }
+.b-dovod { font-size: 13px; color: var(--warn); }
+.b-posledny { border-radius: 12px; padding: 12px 14px; font-weight: 700; font-size: 17px; }
+.b-posledny-ok { background: #e7f3ea; color: #1d5635; }
+.b-posledny-chyba { background: #fbe3df; color: #8c1d16; }
+.b-posledny-caka { background: var(--surface-2); color: var(--muted); }
+.b-polozky { display: grid; gap: 0; padding-top: 6px; padding-bottom: 6px; }
+.b-pol { display: grid; grid-template-columns: 10px 1fr auto auto; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.b-pol:last-child { border-bottom: 0; }
+.b-pol-farba { width: 10px; align-self: stretch; border-radius: 4px; border: 1px solid rgba(0,0,0,.12); }
+.b-pol-nazov { font-weight: 600; }
+.b-pol-pocet { font-size: 18px; white-space: nowrap; }
+.b-pol-ok .b-pol-nazov, .b-pol-ok .b-pol-pocet { color: var(--ok); }
+.b-pol-tl { display: flex; gap: 6px; align-items: center; }
+.b-pol-pozn { font-size: 12px; }
+.b-baliky summary { cursor: pointer; font-weight: 700; }
+.b-baliky .rows { margin-top: 8px; }
+.b-zrus { color: var(--bad); font-size: 13px; }
+.b-akcie { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.b-akcie .btn { min-height: 56px; font-size: 17px; font-weight: 800; }
+.b-tl-hotovo { background: #e7f3ea; border-color: #9fcfae; color: #1d5635; }
+.b-tl-hotovo:not(:disabled) { background: var(--ok); border-color: var(--ok); color: #fff; }
+.b-tl-odl { background: var(--warn-soft); border-color: #e2b98a; color: var(--warn); }
+.b-znova { margin: 0; text-align: center; }
+.b-znova .btn-link { font-size: 13px; color: var(--muted); }
+@media (max-width: 600px) {
+  .b-pol { grid-template-columns: 8px 1fr auto; }
+  .b-pol-tl, .b-pol-pozn { grid-column: 2 / -1; }
+  .b-pol-pozn { display: none; }
+}
+#b-obsah { display: grid; gap: 14px; }
+.b-pol-tl .btn:disabled { opacity: .4; }

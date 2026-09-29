@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.12.4 BETA";
+  var VERZIA = "0.13.0 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -72,6 +72,7 @@
   var SKLAD = window.LBZ_SKLAD || null;
   var FURM = window.LBZ_FURMANKY || null;
   var ROZ = window.LBZ_ROZPIS || null;
+  var BAL = window.LBZ_BALENIE || null;
 
   var stav = {
     pouzivatel: null, email: null, rola: null, modul: "prehlad",
@@ -149,6 +150,7 @@
   function skladZapnuty() { return !!(SKLAD && SKLAD.zapnute()); }
   function furmankyZapnute() { return !!(FURM && FURM.mozem()); }
   function rozpisZapnuty() { return !!(ROZ && ROZ.mozem()); }
+  function balenieZapnute() { return !!(BAL && BAL.mozem()); }
 
   // ---------- prihlásenie ----------
   var GOOGLE_IKONA = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.3 6.9-17.7z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.1 1.4-4.9 2.3-8.2 2.3-6.2 0-11.5-4.2-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
@@ -216,7 +218,7 @@
       if (m.kod === "sklad") m.aktivny = skladZapnuty();
       if (m.kod === "furmanky") m.aktivny = furmankyZapnute();
       if (m.kod === "rozpis") m.aktivny = rozpisZapnuty();
-      if (m.kod === "balenie") m.aktivny = false; // modul Balenie sa ešte stavia
+      if (m.kod === "balenie") m.aktivny = balenieZapnute();
     });
     return zoznam;
   }
@@ -284,6 +286,7 @@
       if (kody.indexOf("sklad") > -1) karty.push(kartaSklad());
       if (kody.indexOf("rozpis") > -1 && rozpisZapnuty()) karty.push(ROZ.karta());
       if (kody.indexOf("furmanky") > -1) karty.push(kartaFurmanky());
+      if (kody.indexOf("balenie") > -1 && balenieZapnute()) karty.push(BAL.karta());
       var dnes = new Date().toLocaleDateString("sk-SK", { weekday: "long", day: "numeric", month: "numeric" });
       var meno = String(stav.pouzivatel || "").split(" ").pop();
       return hlavicka("Dobrý deň" + (meno ? ", " + meno : "") + "!", "Dnes je " + dnes) + '<div class="grid">' + karty.join("") + "</div>" +
@@ -305,6 +308,7 @@
     }
     if (furmankyZapnute() && stav.modul === "furmanky") return '<div id="furm-root"></div>';
     if (rozpisZapnuty() && stav.modul === "rozpis") return '<div id="rozpis-root"></div>';
+    if (balenieZapnute() && stav.modul === "balenie") return '<div id="balenie-root"></div>';
     if (skladZapnuty() && stav.modul === "sklad") {
       return '<div id="sklad-root" data-modul="' + stav.modul + '"></div>';
     }
@@ -364,6 +368,8 @@
     if (fu && FURM) FURM.mount(fu);
     var ro = document.getElementById("rozpis-root");
     if (ro && ROZ) ROZ.mount(ro);
+    var ba = document.getElementById("balenie-root");
+    if (ba && BAL) BAL.mount(ba); else if (BAL) BAL.odchod();
   }
 
   // ---------- udalosti ----------
@@ -386,6 +392,7 @@
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(null, null);
       if (FURM) FURM.nastavDb(null, null);
       if (ROZ) ROZ.nastavDb(null, null);
+      if (BAL) BAL.nastavDb(null, null);
       render();
     }
   });
@@ -431,6 +438,7 @@
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(null, null);
       if (FURM) FURM.nastavDb(null, null);
       if (ROZ) ROZ.nastavDb(null, null);
+      if (BAL) BAL.nastavDb(null, null);
       render(); return;
     }
     stav.email = session.user.email; stav.uid = session.user.id;
@@ -446,6 +454,7 @@
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(interny() ? db : null, stav.rola);
       if (FURM) FURM.nastavDb(interny() ? db : null, stav.rola);
       if (ROZ) ROZ.nastavDb(db, stav.rola);
+      if (BAL) BAL.nastavDb(interny() ? db : null, stav.rola);
       render();
     }).catch(function () { stav.nacitavam = false; stav.sprava = { typ: "chyba", text: "Bez spojenia so serverom." }; render(); });
   }
