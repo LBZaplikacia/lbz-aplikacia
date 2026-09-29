@@ -234,13 +234,15 @@
   function mapaUkaz(miesto) {
     var a = aktualna(); if (!a || a.lat == null || a.lng == null) return;
     if (!GM.el) { GM.el = document.createElement("iframe"); GM.el.className = "t-gmapa"; GM.el.setAttribute("loading", "lazy"); GM.el.setAttribute("referrerpolicy", "no-referrer-when-downgrade"); GM.el.title = "Mapa k zastávke"; }
-    if (GM.cislo !== a.cislo || (!GM.sGps && T.gps)) {   // nová zastávka (alebo prvá poloha) → trasa z aktuálnej polohy, inak len špendlík
-      GM.cislo = a.cislo; GM.sGps = !!T.gps;
+    // nová zastávka, prvá poloha, alebo sa furman od začiatku trasy na mape posunul o viac ako 1,5 km (najviac raz za 90 s) → trasa z aktuálnej polohy
+    var posun = T.gps && GM.s ? vzdialenost({ lat: GM.s.lat, lng: GM.s.lng }) : 0;
+    if (GM.cislo !== a.cislo || (!GM.sGps && T.gps) || (posun > 1500 && Date.now() - GM.t > 90000)) {
+      GM.cislo = a.cislo; GM.sGps = !!T.gps; GM.s = T.gps ? { lat: T.gps.lat, lng: T.gps.lng } : null; GM.t = Date.now();
       var ciel = a.lat + "," + a.lng;
       GM.el.src = T.gps ? "https://maps.google.com/maps?saddr=" + T.gps.lat + "," + T.gps.lng + "&daddr=" + ciel + "&hl=sk&output=embed"
         : "https://maps.google.com/maps?q=" + ciel + "&z=15&hl=sk&output=embed";
     }
-    miesto.appendChild(GM.el);
+    if (GM.el.parentNode !== miesto) miesto.appendChild(GM.el);
   }
 
   function prekresli() {
@@ -340,8 +342,10 @@
         if (T.id != null && (T.rezim || "jazda") === "jazda" && !T.dialog) {
           // len vzdialenosť → prepísať text (mapa sa neobnovuje); prekresliť až keď sa zmení „na mieste“ alebo chýba údaj
           var el = koren && koren.querySelector(".t-vzd"), zmena = (bol == null) !== (teraz == null) || (bol != null && teraz != null && (bol < NA_MIESTE_M) !== (teraz < NA_MIESTE_M));
-          if (el && teraz != null && !zmena) el.textContent = teraz < 1000 ? Math.round(teraz) + " m" : (teraz / 1000).toFixed(1).replace(".", ",") + " km";
-          else prekresli();
+          if (el && teraz != null && !zmena) {
+            el.textContent = teraz < 1000 ? Math.round(teraz) + " m" : (teraz / 1000).toFixed(1).replace(".", ",") + " km";
+            var mm = document.getElementById("t-gmapa-miesto"); if (mm) mapaUkaz(mm);
+          } else prekresli();
         }
       }, function () { T.gpsChyba = true; }, { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 });
     }

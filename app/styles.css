@@ -786,3 +786,78 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 html, body { max-width: 100%; overflow-x: hidden; }
 @media (max-width: 760px) { input, select, textarea { font-size: 16px !important; } }
 .d-gps{font-size:13px;color:var(--muted,#7d6c64);margin-top:2px}
+
+/* ---------- Kniha jázd ---------- */
+.k-zalozky { margin: 8px 0 12px; }
+.k-voz { border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--surface); color: var(--ink); }
+.k-nova { max-width: 640px; border-top: 4px solid var(--gold); gap: 14px; }
+.k-tach-hl { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.k-tach-posl { font: 700 18px var(--font-display); color: var(--muted); }
+.k-tach { font: 800 30px var(--font-display) !important; letter-spacing: .02em; text-align: center; }
+.k-vysledok { min-height: 28px; font-size: 18px; text-align: center; }
+.k-vysledok b { font: 800 22px var(--font-display); color: var(--ok); }
+.k-vysledok.k-zle { color: var(--bad); font-weight: 700; }
+.k-prepinac { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.k-prepinac input { width: 22px; height: 22px; accent-color: var(--accent); }
+.k-navrhy { margin-bottom: 4px; }
+.k-navrhy .chip.k-vybrane, .k-ucely .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.k-navrhy .chip.k-vybrane .muted { color: inherit; opacity: .8; }
+.k-ucely .chip { min-height: 40px; }
+.k-viac summary { cursor: pointer; color: var(--accent); font-weight: 600; padding: 6px 0; }
+.k-viac[open] summary { margin-bottom: 8px; }
+.k-ulozit { width: 100%; min-height: 58px; font: 700 19px var(--font-display); }
+.k-ulozit:disabled { opacity: .45; cursor: not-allowed; }
+.k-chyba { margin: -4px 0 0; text-align: center; font-size: 14px; }
+.k-mes { font-size: 14px; }
+.k-mes-hl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.k-mes-hl b { font: 700 18px var(--font-display); text-transform: capitalize; min-width: 150px; text-align: center; }
+.k-mes-tl { margin-left: auto; display: flex; gap: 6px; }
+.k-mes-tl .btn { min-height: 40px; padding: 6px 12px; }
+.k-suhrn { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.k-suhrn > div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; }
+.k-suhrn b { font: 800 22px var(--font-display); }
+.k-suhrn .k-suhrn-zle b { color: var(--bad); }
+.k-ucely-graf { display: grid; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+.k-graf-r { display: grid; grid-template-columns: minmax(130px, 1fr) 2fr auto; gap: 10px; align-items: center; font-size: 14px; }
+.k-bar { height: 10px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.k-bar i { display: block; height: 100%; background: var(--gold); border-radius: 99px; }
+.k-tab .t-r { text-align: right; }
+.k-tab tr.k-navrat td { color: var(--muted); }
+.k-tab tr.k-poc td { background: var(--accent-soft); font-weight: 700; }
+.k-nesedi { color: var(--bad); cursor: help; }
+.k-pozn { font-size: 13px; }
+.k-zmaz { color: var(--bad); margin-left: auto; }
+.k-karta { border-top: 4px solid var(--gold); }
+@media (max-width: 760px) { .k-graf-r { grid-template-columns: 1fr auto; } .k-graf-r .k-bar { grid-column: 1 / -1; order: 3; } .k-mes-tl { margin-left: 0; width: 100%; } .k-mes-tl .btn { flex: 1; } }
+@media print { body.tlaci .k-tlac table { width: 100%; border-collapse: collapse; font-size: 10pt; } body.tlaci .k-tlac th { background: #d9d2e9; } body.tlaci .k-tlac th, body.tlaci .k-tlac td { border: 1px solid #999; padding: 3px 5px; } body.tlaci .k-tlac .t-r { text-align: right; } body.tlaci .k-tlac tfoot td { font-weight: 700; } body.tlaci .k-tlac h2 { font-size: 15pt; margin: 0 0 2px; } body.tlaci .k-tlac p { margin: 0 0 8px; } }
+.k-modul { min-width: 0; max-width: 100%; }
+.k-modul .field, .k-modul .field input, .k-modul .d-riadok .field { min-width: 0; width: 100%; }
+.main > * { min-width: 0; }   /* tabuľky sa posúvajú vo vnútri .tbl-wrap, nie celá stránka */
+.k-len-mob { display: none; }
+.k-zoznam { display: grid; gap: 8px; }
+.k-pol { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; }
+.k-pol-zle { border-color: var(--bad); }
+.k-pol-poc { display: flex; justify-content: space-between; background: var(--accent-soft); font-weight: 600; }
+.k-pol-hl { display: flex; justify-content: space-between; gap: 10px; font-size: 16px; }
+.k-pol-det { font-size: 13px; }
+.k-pol-tl { display: flex; gap: 16px; }
+.k-pol-tl .btn-link { min-height: 32px; padding: 2px 0; }
+@media (max-width: 760px) { .k-len-mob { display: grid; } .k-len-pc { display: none; } }
+
+/* ---------- Vybaviť (osobné úlohy) ---------- */
+.v-karta { border-top: 4px solid var(--blue); }
+.v-zoznam { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.v-pol { display: flex; align-items: flex-start; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.v-pol:last-child { border-bottom: 0; }
+.v-krug { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--gold); background: transparent; color: #fff; font-weight: 800; font-size: 14px; line-height: 1; padding: 0; margin-top: 1px; }
+.v-krug:hover { background: var(--accent-soft); }
+.v-hotovo .v-krug { background: var(--ok); border-color: var(--ok); }
+.v-text { flex: 1; min-width: 0; overflow-wrap: anywhere; line-height: 1.4; padding-top: 2px; }
+.v-hotovo .v-text { text-decoration: line-through; color: var(--muted); }
+.v-zmaz { flex: none; border: 0; background: none; color: var(--muted); font-size: 16px; padding: 2px 6px; opacity: .55; }
+.v-zmaz:hover { opacity: 1; color: var(--bad); }
+.v-hotove summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+.v-prazdne { margin: 0; }
+.v-nova { display: flex; gap: 8px; }
+.v-nova input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--bg); min-height: 44px; }
+.v-nova .btn { min-height: 44px; min-width: 48px; padding: 0 12px; font-size: 20px; }
