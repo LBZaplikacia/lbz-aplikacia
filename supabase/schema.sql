@@ -1468,6 +1468,31 @@ update public.objednavky o set region = public.region_pre(o.doprava, o.mesto, o.
 update public.objednavky o set upozornenie = public.zla_doprava(o.region, o.doprava) where o.zdroj = 'upgates';
 select public.furmanky_prirad();
 
+
+-- =========================================================================
+-- 11) ÚPRAVA 30. 9. 2026: zvolená furmanka sa NEPOUŽÍVA na zaradenie (zákazník mohol zvoliť nezmysel a trasa by vyšla zle)
+--     Keď mesto ani PSČ nesedí → NEZARADENÉ a zákaznícky servis objednávku presunie ručne (tlačidlo Presunúť).
+-- =========================================================================
+create or replace function public.region_pre(p_doprava text, p_mesto text, p_psc text) returns text
+language plpgsql stable set search_path = public as $$
+declare v_ship text := public.norm_text(p_doprava); v_mesto text := public.norm_text(p_mesto);
+        v_psc text := regexp_replace(coalesce(p_psc, ''), '\s', '', 'g'); r record;
+begin
+  if v_ship like '%zbojska%' then return 'Osobný odber'; end if;
+  if v_ship like '%elektronicky%' then return 'Elektronicky'; end if;
+  for r in select region, mesta from public.furmanky_regiony where rozvoz order by hladanie loop
+    if v_mesto <> '' and exists (select 1 from unnest(r.mesta) m where position(m in v_mesto) > 0) then return r.region; end if;
+  end loop;
+  for r in select region, psc from public.furmanky_regiony where rozvoz order by hladanie loop
+    if v_psc <> '' and (left(v_psc, 3) = any(r.psc) or left(v_psc, 2) = any(r.psc)) then return r.region; end if;
+  end loop;
+  return 'NEZARADENÉ';
+end $$;
+
+update public.objednavky o set region = public.region_pre(o.doprava, o.mesto, o.psc), upozornenie = null where o.zdroj = 'upgates';
+update public.objednavky o set upozornenie = public.zla_doprava(o.region, o.doprava) where o.zdroj = 'upgates';
+select public.furmanky_prirad();
+
 -- ---------- plánované sťahovanie 6:00, 11:30, 14:00 (spustiť AŽ po nasadení Edge Function „upgates-sync“) ----------
 -- Plánovač volá funkciu v UTC časoch pre letný aj zimný čas; funkcia sama pustí len ten, ktorý v Bratislave padne na 6:00/11:30/14:00.
 create extension if not exists pg_cron;
