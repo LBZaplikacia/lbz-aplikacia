@@ -1493,6 +1493,224 @@ update public.objednavky o set region = public.region_pre(o.doprava, o.mesto, o.
 update public.objednavky o set upozornenie = public.zla_doprava(o.region, o.doprava) where o.zdroj = 'upgates';
 select public.furmanky_prirad();
 
+
+-- =========================================================================
+-- 12) ZARADENIE PODĽA OKRESU (schválená mapa 29. 9. 2026)
+--     Poradie: okres (Google geokód obce + PSČ, uložený natrvalo) → mesto → PSČ → NEZARADENÉ.
+--     Topoľčany → Severná, Žarnovica → Západná, Rožňava a Gelnica → Košická.
+-- =========================================================================
+create or replace function public.okres_kluc(t text) returns text
+language sql immutable as $$
+  select regexp_replace(regexp_replace(public.norm_text(t), '^okres\s+', ''), '[^a-z0-9]', '', 'g')
+$$;
+create or replace function public.obec_kluc(p_mesto text, p_psc text) returns text
+language sql immutable as $$
+  select public.norm_text(p_mesto) || '|' || regexp_replace(coalesce(p_psc, ''), '\s', '', 'g')
+$$;
+
+create table if not exists public.furmanky_okresy (
+  okres   text primary key,
+  region  text not null references public.furmanky_regiony(region),
+  kluc    text not null
+);
+insert into public.furmanky_okresy (okres, region, kluc)
+select v.okres, v.region, public.okres_kluc(v.okres) from (values
+  ('Banská Bystrica', 'Stredná'),
+  ('Banská Štiavnica', 'Stredná'),
+  ('Bardejov', 'Prešovská'),
+  ('Bratislava', 'Západná'),
+  ('Bratislava I', 'Západná'),
+  ('Bratislava II', 'Západná'),
+  ('Bratislava III', 'Západná'),
+  ('Bratislava IV', 'Západná'),
+  ('Bratislava V', 'Západná'),
+  ('Brezno', 'Stredná'),
+  ('Bytča', 'Severná'),
+  ('Bánovce nad Bebravou', 'Severná'),
+  ('Detva', 'Stredná'),
+  ('Dolný Kubín', 'Severná'),
+  ('Dunajská Streda', 'Južná'),
+  ('Galanta', 'Južná'),
+  ('Gelnica', 'Košická'),
+  ('Hlohovec', 'Západná'),
+  ('Humenné', 'Prešovská'),
+  ('Ilava', 'Severná'),
+  ('Kežmarok', 'Prešovská'),
+  ('Komárno', 'Južná'),
+  ('Košice', 'Košická'),
+  ('Košice - okolie', 'Košická'),
+  ('Košice I', 'Košická'),
+  ('Košice II', 'Košická'),
+  ('Košice III', 'Košická'),
+  ('Košice IV', 'Košická'),
+  ('Krupina', 'Stredná'),
+  ('Kysucké Nové Mesto', 'Severná'),
+  ('Levice', 'Južná'),
+  ('Levoča', 'Prešovská'),
+  ('Liptovský Mikuláš', 'Severná'),
+  ('Lučenec', 'Stredná'),
+  ('Malacky', 'Západná'),
+  ('Martin', 'Severná'),
+  ('Medzilaborce', 'Prešovská'),
+  ('Michalovce', 'Košická'),
+  ('Myjava', 'Západná'),
+  ('Nitra', 'Západná'),
+  ('Nové Mesto nad Váhom', 'Severná'),
+  ('Nové Zámky', 'Južná'),
+  ('Námestovo', 'Severná'),
+  ('Partizánske', 'Severná'),
+  ('Pezinok', 'Západná'),
+  ('Piešťany', 'Západná'),
+  ('Poltár', 'Stredná'),
+  ('Poprad', 'Prešovská'),
+  ('Považská Bystrica', 'Severná'),
+  ('Prešov', 'Prešovská'),
+  ('Prievidza', 'Severná'),
+  ('Púchov', 'Severná'),
+  ('Revúca', 'Stredná'),
+  ('Rimavská Sobota', 'Stredná'),
+  ('Rožňava', 'Košická'),
+  ('Ružomberok', 'Severná'),
+  ('Sabinov', 'Prešovská'),
+  ('Senec', 'Západná'),
+  ('Senica', 'Západná'),
+  ('Skalica', 'Západná'),
+  ('Snina', 'Prešovská'),
+  ('Sobrance', 'Košická'),
+  ('Spišská Nová Ves', 'Prešovská'),
+  ('Stará Ľubovňa', 'Prešovská'),
+  ('Stropkov', 'Prešovská'),
+  ('Svidník', 'Prešovská'),
+  ('Topoľčany', 'Severná'),
+  ('Trebišov', 'Košická'),
+  ('Trenčín', 'Severná'),
+  ('Trnava', 'Západná'),
+  ('Turčianske Teplice', 'Severná'),
+  ('Tvrdošín', 'Severná'),
+  ('Veľký Krtíš', 'Stredná'),
+  ('Vranov nad Topľou', 'Prešovská'),
+  ('Zlaté Moravce', 'Západná'),
+  ('Zvolen', 'Stredná'),
+  ('Čadca', 'Severná'),
+  ('Šaľa', 'Južná'),
+  ('Žarnovica', 'Západná'),
+  ('Žiar nad Hronom', 'Stredná'),
+  ('Žilina', 'Severná')
+) v(okres, region)
+on conflict (okres) do update set region = excluded.region, kluc = excluded.kluc;
+create unique index if not exists furmanky_okresy_kluc on public.furmanky_okresy (kluc);
+
+-- okres obce z Google (kľúč = mesto|PSČ); ok = false → Google okres nenašiel, skúsi sa znova o 7 dní
+create table if not exists public.obce_okres (
+  kluc   text primary key,
+  mesto  text,
+  psc    text,
+  okres  text,
+  ok     boolean not null default true,
+  cas    timestamptz not null default now()
+);
+alter table public.furmanky_okresy enable row level security;
+alter table public.obce_okres      enable row level security;
+drop policy if exists furmanky_okresy_citanie on public.furmanky_okresy;
+create policy furmanky_okresy_citanie on public.furmanky_okresy for select to authenticated using (public.som_furmankar());
+drop policy if exists obce_okres_citanie on public.obce_okres;
+create policy obce_okres_citanie on public.obce_okres for select to authenticated using (public.som_furmankar());
+
+-- PSČ a mestá doplnené podľa mapy okresov (keď Google okres nenájde)
+update public.furmanky_regiony set
+  mesta = array_remove(mesta, 'zarnovica'),
+  psc   = (select array_agg(distinct x) from unnest(psc || array['967','975','992']) x)
+where region = 'Stredná';
+update public.furmanky_regiony set
+  mesta = (select array_agg(distinct x) from unnest(mesta || array['zarnovica','nova bana']) x)
+where region = 'Západná';
+update public.furmanky_regiony set
+  psc = (select array_agg(distinct x) from unnest(psc || array['926','932','943']) x)
+where region = 'Južná';
+update public.furmanky_regiony set
+  mesta = array_remove(mesta, 'gelnica'),
+  psc   = (select array_agg(distinct x) from unnest(array_remove(psc, '055') || array['061','062','087']) x)
+where region = 'Prešovská';
+update public.furmanky_regiony set
+  mesta = (select array_agg(distinct x) from unnest(mesta || array['gelnica','margecany']) x),
+  psc   = (select array_agg(distinct x) from unnest(psc || array['041','042','043','045','055','056','079']) x)
+where region = 'Košická';
+update public.furmanky_regiony set
+  psc = (select array_agg(distinct x) from unnest(psc || array['015','028','033']) x)
+where region = 'Severná';
+
+create or replace function public.region_pre(p_doprava text, p_mesto text, p_psc text) returns text
+language plpgsql stable set search_path = public as $$
+declare v_ship text := public.norm_text(p_doprava); v_mesto text := public.norm_text(p_mesto);
+        v_psc text := regexp_replace(coalesce(p_psc, ''), '\s', '', 'g'); v_reg text; r record;
+begin
+  if v_ship like '%zbojska%' then return 'Osobný odber'; end if;
+  if v_ship like '%elektronicky%' then return 'Elektronicky'; end if;
+  -- 1) okres z Google
+  select k.region into v_reg
+    from public.obce_okres o
+    join public.furmanky_okresy k on k.kluc = public.okres_kluc(o.okres)
+    join public.furmanky_regiony g on g.region = k.region and g.rozvoz
+   where o.kluc = public.obec_kluc(p_mesto, p_psc) and o.ok;
+  if v_reg is not null then return v_reg; end if;
+  -- 2) mesto (presnejšie ako PSČ – napr. Žarnovica má PSČ 966 ako Žiar)
+  for r in select region, mesta from public.furmanky_regiony where rozvoz order by hladanie loop
+    if v_mesto <> '' and exists (select 1 from unnest(r.mesta) m where position(m in v_mesto) > 0) then return r.region; end if;
+  end loop;
+  -- 3) PSČ
+  for r in select region, psc from public.furmanky_regiony where rozvoz order by hladanie loop
+    if v_psc <> '' and (left(v_psc, 3) = any(r.psc) or left(v_psc, 2) = any(r.psc)) then return r.region; end if;
+  end loop;
+  return 'NEZARADENÉ';
+end $$;
+
+-- ktoré obce (mesto + PSČ) ešte nemajú okres – z práve stiahnutých objednávok aj zo živých objednávok v databáze
+create or replace function public.obce_bez_okresu(p jsonb) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with vsetky as (
+    select x->>'mesto' as mesto, x->>'psc' as psc, x->>'doprava' as doprava from jsonb_array_elements(coalesce(p, '[]'::jsonb)) x
+    union all
+    select o.mesto, o.psc, o.doprava from public.objednavky o where o.zdroj = 'upgates' and public.ziva_objednavka(o.status)
+  ), k as (
+    select distinct on (public.obec_kluc(mesto, psc)) public.obec_kluc(mesto, psc) as kluc, trim(coalesce(mesto, '')) as mesto,
+           regexp_replace(coalesce(psc, ''), '\s', '', 'g') as psc
+    from vsetky
+    where public.region_pre(doprava, '', '') not in ('Osobný odber', 'Elektronicky')
+      and (trim(coalesce(mesto, '')) <> '' or trim(coalesce(psc, '')) <> '')
+  )
+  select coalesce(jsonb_agg(jsonb_build_object('mesto', k.mesto, 'psc', k.psc)), '[]'::jsonb)
+  from k
+  where not exists (select 1 from public.obce_okres o where o.kluc = k.kluc and (o.ok or o.cas > now() - interval '7 days'))
+$$;
+
+-- uloží okresy z Google a prepočíta región dotknutých objednávok (zaradenie do furmanky urobí furmanky_prirad)
+create or replace function public.obce_okres_uloz(p jsonb) returns int
+language plpgsql security definer set search_path = public as $$
+declare v_kluce text[]; v_n int;
+begin
+  with u as (
+    insert into public.obce_okres (kluc, mesto, psc, okres, ok, cas)
+    select public.obec_kluc(x->>'mesto', x->>'psc'), x->>'mesto', x->>'psc', nullif(x->>'okres', ''),
+           coalesce(nullif(x->>'okres', ''), '') <> '', now()
+    from jsonb_array_elements(coalesce(p, '[]'::jsonb)) x
+    on conflict (kluc) do update set okres = excluded.okres, ok = excluded.ok, cas = now()
+    returning kluc
+  ) select array_agg(kluc) into v_kluce from u;
+  update public.objednavky o set region = public.region_pre(o.doprava, o.mesto, o.psc)
+   where o.zdroj = 'upgates' and public.obec_kluc(o.mesto, o.psc) = any(coalesce(v_kluce, '{}'));
+  update public.objednavky o set upozornenie = public.zla_doprava(o.region, o.doprava)
+   where o.zdroj = 'upgates' and public.obec_kluc(o.mesto, o.psc) = any(coalesce(v_kluce, '{}'));
+  get diagnostics v_n = row_count;
+  return v_n;
+end $$;
+
+revoke all on function public.obce_bez_okresu(jsonb), public.obce_okres_uloz(jsonb) from public, anon, authenticated;
+grant execute on function public.obce_bez_okresu(jsonb), public.obce_okres_uloz(jsonb) to service_role;
+
+update public.objednavky o set region = public.region_pre(o.doprava, o.mesto, o.psc), upozornenie = null where o.zdroj = 'upgates';
+update public.objednavky o set upozornenie = public.zla_doprava(o.region, o.doprava) where o.zdroj = 'upgates';
+select public.furmanky_prirad();
+
 -- ---------- plánované sťahovanie 6:00, 11:30, 14:00 (spustiť AŽ po nasadení Edge Function „upgates-sync“) ----------
 -- Plánovač volá funkciu v UTC časoch pre letný aj zimný čas; funkcia sama pustí len ten, ktorý v Bratislave padne na 6:00/11:30/14:00.
 create extension if not exists pg_cron;
