@@ -25,6 +25,8 @@ function lbzV2(params) {
     else if (akcia === "SKENY") out = v2Skeny_(params.skeny || []);
     else if (akcia === "FURMANKY_OBNOV") out = v2ObnovFurmanky_();
     else if (akcia === "BALIKY") out = v2Baliky_();
+    else if (akcia === "SABLONA") out = v2Sablona_();
+    else if (akcia === "HISTORIA") out = v2Historia_();
     else out = { ok: false, chyba: "Neznáma akcia: " + akcia };
   } catch (err) {
     out = { ok: false, chyba: String((err && err.message) || err) };
@@ -354,4 +356,29 @@ function v2CacheZmaz_(kluc) { try { CacheService.getScriptCache().remove(kluc + 
 function v2Test() {
   var out = lbzV2({ v2: true, akcia: "STAV", cerstvy: true });
   Logger.log(out.getContent().substring(0, 300));
+}
+
+// ---------------------------------------------------------------------------
+// Šablóna furmanky (hárok Default zo Správy objednávok) – na jednorazový prenos do appky
+// ---------------------------------------------------------------------------
+function v2Sablona_() {
+  var sh = SpreadsheetApp.openById("1vVafbxeiL9HhoBDOep8wmdj64-C4H6cRfr_eFmOhXpA").getSheetByName("Default");
+  var n = sh.getLastRow();
+  var r = sh.getRange(1, 1, n, 8);
+  return { ok: true, hodnoty: r.getDisplayValues(), vzorce: r.getFormulasR1C1(), farby: sh.getRange(1, 1, n, 3).getBackgrounds(),
+    produkty: (function () { var p = sh.getParent().getSheetByName("Produkty"); return p ? p.getRange(1, 1, p.getLastRow(), Math.min(6, p.getLastColumn())).getDisplayValues() : []; })() };
+}
+
+// Uzavreté (FULL) hárky Správy objednávok: názov + čísla objednávok (riadok 5 od stĺpca I) – na prenos histórie do appky
+function v2Historia_() {
+  var ss = SpreadsheetApp.openById("1vVafbxeiL9HhoBDOep8wmdj64-C4H6cRfr_eFmOhXpA");
+  var out = [];
+  ss.getSheets().forEach(function (sh) {
+    var n = sh.getName();
+    var c1 = String(sh.getRange("C1").getValue()).trim().toUpperCase();
+    var last = sh.getLastColumn();
+    var cisla = last >= 9 ? sh.getRange(5, 9, 1, last - 8).getDisplayValues()[0].map(function (x) { return String(x).trim(); }).filter(String) : [];
+    out.push({ nazov: n, full: c1 === "FULL" || /\[FULL\]/i.test(n), cisla: cisla });
+  });
+  return { ok: true, harky: out };
 }
