@@ -861,3 +861,44 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .v-nova { display: flex; gap: 8px; }
 .v-nova input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--bg); min-height: 44px; }
 .v-nova .btn { min-height: 44px; min-width: 48px; padding: 0 12px; font-size: 20px; }
+
+/* ---------- Zamestnanci ---------- */
+.zm-lista { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.zm-hladaj { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface); min-height: 44px; }
+.zm-novy-tl { margin-left: auto; }
+.zm-tip { font-size: 14px; margin: 0 0 10px; }
+.zm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.zm-karta { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: center; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px 10px; box-shadow: var(--shadow); color: var(--ink); }
+.zm-karta:hover { border-color: var(--gold); }
+.zm-karta.zm-ukonc { opacity: .55; }
+.zm-av { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font: 800 18px var(--font-display); flex: none; box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); }
+.zm-av-v { width: 64px; height: 64px; font-size: 28px; }
+.zm-k-txt { display: grid; gap: 2px; min-width: 0; }
+.zm-k-txt b { font-size: 16px; }
+.zm-k-pod { font-size: 13px; color: var(--muted); }
+.zm-k-stitky { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.zm-k-vypl { grid-column: 1 / -1; height: 4px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin-top: 6px; }
+.zm-k-vypl i { display: block; height: 100%; background: var(--gold); }
+.zm-spat { margin-bottom: 4px; }
+.zm-hlava { display: flex; gap: 14px; align-items: center; margin-bottom: 12px; }
+.zm-hlava h2 { font-size: 24px; }
+.zm-hlava .sub { color: var(--muted); font-size: 14px; }
+.zm-sekcie { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+.zm-s-hl { display: flex; align-items: center; gap: 8px; }
+.zm-s-hl h3 { flex: 1; font-size: 17px; justify-content: flex-start; }
+.zm-s-poc { font: 600 12px var(--font-body); }
+.zm-upr { min-height: 36px; padding: 4px 12px; font-size: 14px; }
+.zm-dl { display: grid; grid-template-columns: minmax(120px, 42%) 1fr; gap: 6px 12px; margin: 0; font-size: 14px; }
+.zm-dl dt { color: var(--muted); }
+.zm-dl dd { margin: 0; overflow-wrap: anywhere; }
+.zm-skryte { margin: 0; }
+.zm-polia { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.zm-polia .zm-siroke { grid-column: 1 / -1; }
+.zm-polia select, .zm-polia textarea, .zm-polia input { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--bg); color: var(--ink); font: inherit; min-height: 44px; }
+.zm-edit { border-color: var(--gold); }
+.zm-vyzva { border-top: 4px solid var(--gold); margin-bottom: 12px; }
+.zm-vyzva p { margin: 0; }
+.zm-log { margin-top: 12px; }
+.zm-log summary { cursor: pointer; font-weight: 700; }
+@media (max-width: 760px) { .zm-sekcie { grid-template-columns: 1fr; } .zm-dl { grid-template-columns: 1fr; gap: 0 0; } .zm-dl dt { margin-top: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; } .zm-novy-tl { width: 100%; } }
+.zm-chyba-pol { margin: 0; font-size: 13px; }

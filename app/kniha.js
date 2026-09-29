@@ -84,7 +84,7 @@
       '<div class="k-vysledok' + (t != null && !ok ? " k-zle" : "") + '" aria-live="polite">' +
       (ok ? '<b class="num">' + km(naj, 0) + " km</b>" + (f.navrat ? ' <span class="muted">→ ' + km(jedna) + " km tam + " + km(naj - jedna) + " km späť</span>" : "") :
         t != null ? "Musí byť viac ako " + km(s.tach) + " km" : '<span class="muted">Zadaj, čo ukazuje tachometer po návrate</span>') + "</div>" +
-      '<label class="k-prepinac"><input type="checkbox" id="k-navrat"' + (f.navrat ? " checked" : "") + '> <span>Cesta tam aj späť (návrat na ' + esc(((s.vozidla || [])[0] || {}).domov || "Zbojskú") + ")</span></label>" +
+      '<label class="k-prepinac"><input type="checkbox" id="k-navrat"' + (f.navrat ? " checked" : "") + '> <span>Cesta tam aj späť (návrat na prevádzku ' + esc(((s.vozidla || [])[0] || {}).domov || "Zbojská") + ")</span></label>" +
       '<div class="field"><span class="label">Kam</span>' +
       (nav.length ? '<div class="chips k-navrhy">' + nav.map(function (x) {
         return '<button type="button" class="chip' + (norm(f.miesto) === norm(x.n) ? " k-vybrane" : "") + '" data-k-miesto="' + esc(x.n) + '">' + esc(x.n) + ' <span class="muted num">~' + km(x.km) + " km</span></button>";
