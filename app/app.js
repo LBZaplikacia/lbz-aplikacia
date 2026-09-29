@@ -96,7 +96,7 @@
     el(
       '<main class="login"><div class="login-card">' +
         '<div class="brand"><img class="brand-mark" src="icons/logo.svg" alt="">' +
-          '<div><h1>Legendárne buchty</h1><p>Aplikácia pre tím a zákazníkov</p></div></div>' +
+          '<div><h1>Legendárne buchty <span class="beta">BETA</span></h1><p>Aplikácia pre tím a zákazníkov – testovacia verzia</p></div></div>' +
         '<div class="tabs" role="tablist">' +
           '<button role="tab" id="tab-ucet" aria-selected="' + ucet + '" data-tab="ucet">Môj účet</button>' +
           '<button role="tab" id="tab-pin" aria-selected="' + !ucet + '" data-tab="pin">Tablet na prevádzke</button>' +
@@ -141,12 +141,12 @@
     el(
       '<div class="shell">' +
         '<aside class="side"><div class="brand"><img class="brand-mark" src="icons/logo.svg" alt="">' +
-          '<div><h1 style="font-size:18px">Legendárne buchty</h1><p>' + esc(ROLY[stav.rola].nazov) + "</p></div></div>" +
+          '<div><h1 style="font-size:18px">Legendárne buchty <span class="beta">BETA</span></h1><p>' + esc(ROLY[stav.rola].nazov) + "</p></div></div>" +
           '<nav class="nav" aria-label="Moduly">' + nav + "</nav>" +
-          '<div class="who"><span>' + esc(stav.pouzivatel) + '</span><span class="muted" style="font-size:12px">verzia 0.4</span><button class="btn" id="btn-odhlasit">Odhlásiť</button></div>' +
+          '<div class="who"><span>' + esc(stav.pouzivatel) + '</span><span class="muted" style="font-size:12px">verzia 0.5 BETA</span><button class="btn" id="btn-odhlasit">Odhlásiť</button></div>' +
         "</aside>" +
         '<main class="main">' +
-          '<div class="mtop"><div class="brand"><img class="brand-mark" src="icons/logo.svg" alt=""><strong>' + esc(ROLY[stav.rola].nazov) + '</strong></div>' +
+          '<div class="mtop"><div class="brand"><img class="brand-mark" src="icons/logo.svg" alt=""><strong>' + esc(ROLY[stav.rola].nazov) + ' <span class="beta">BETA</span></strong></div>' +
             '<button class="btn" id="btn-odhlasit-m">Odhlásiť</button></div>' +
           obsahModulu() +
         "</main>" +
