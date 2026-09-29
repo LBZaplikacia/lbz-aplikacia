@@ -670,3 +670,43 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
   #tlac-oblast .t-p-navbox svg { width: 28mm; height: 28mm; }
   #tlac-oblast a { color: inherit; text-decoration: none; }
 }
+
+/* ---------- Trasa – režim jazda (v0.15.0) ---------- */
+.t-rezim { align-self: start; }
+.t-akt { display: grid; gap: 10px; border: 2px solid var(--gold); }
+.t-akt-miesto { border-color: var(--ok); box-shadow: 0 0 0 4px #e7f3ea; }
+.t-akt-hore { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.t-vzd { margin-left: auto; font-weight: 800; background: var(--surface-2); border-radius: 999px; padding: 3px 10px; }
+.t-akt-meno { margin: 0; font-size: 26px; line-height: 1.15; }
+.t-akt-adresa { font-size: 17px; }
+.t-akt-platba { font: 800 20px var(--font-display); }
+.t-akt-platba span { font: 500 15px var(--font-body); color: var(--muted); }
+.t-akt-platba.t-dob { color: var(--bad); }
+.t-akt-platba.t-ok { color: var(--ok); }
+.t-akt-platba.t-fa { color: var(--blue); }
+.t-akt-pozn { margin: 0; font-weight: 700; }
+.t-akt-tl { display: grid; gap: 10px; }
+.t-velke-tl { min-height: 64px; font: 800 20px var(--font-display); display: flex; align-items: center; justify-content: center; text-decoration: none; border-radius: 14px; }
+.t-tl-nav { background: var(--blue); color: #fff; border-color: var(--blue); }
+.t-tl-tel { background: var(--ok); color: #fff; border-color: var(--ok); }
+.t-tl-miesto { background: var(--surface); border: 2px dashed var(--gold); color: var(--accent); }
+.t-tl-plat { background: #583934; color: #CBA75B; border-color: #583934; }
+.t-tl-tel2 { text-decoration: none; justify-content: center; }
+.t-akt-male { display: flex; gap: 8px; flex-wrap: wrap; }
+.t-akt-male .btn { flex: 1 1 100px; min-height: 46px; }
+.t-akt-stav { margin: 0; text-align: center; }
+.t-hotovo { text-align: center; display: grid; gap: 10px; }
+.t-velke { font-size: 54px; }
+.t-vybrat { justify-self: end; min-height: 40px; }
+.t-plat { position: fixed; inset: 0; z-index: 60; background: #fff; color: #1b120f; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 20px; text-align: center; }
+.t-plat-suma { font: 800 44px var(--font-display); color: #b3261e; }
+.t-plat-kto { font-size: 17px; }
+.t-plat-qr svg { width: min(78vw, 320px); height: auto; }
+.t-plat-tl { display: grid; gap: 10px; width: min(92vw, 420px); }
+.t-plat-tl .btn { color: #1b120f; }
+.t-plat-tl .t-tl-ok { color: #fff; }
+.t-akt-tl .btn { width: 100%; }
+.t-akt-tl .t-tl-nav { background: var(--blue); color: #fff; border-color: var(--blue); }
+.t-akt-tl .t-tl-tel { background: var(--ok); color: #fff; border-color: var(--ok); }
+.t-akt-tl .t-tl-ok { background: var(--ok); color: #fff; border-color: var(--ok); }
+.t-akt-tl .t-tl-plat { background: #583934; color: #CBA75B; border-color: #583934; }
