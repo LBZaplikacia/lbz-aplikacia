@@ -613,3 +613,37 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 #b-obsah { display: grid; gap: 14px; }
 .b-pol-tl .btn:disabled { opacity: .4; }
 .b-pol .btn { background: #fff; color: #2b1d1a; border-color: rgba(0,0,0,.2); }
+
+/* ---------- Trasa (v0.14.0) ---------- */
+.t-karta { display: grid; gap: 6px; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.t-k-hore { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.t-k-nazov { font: 700 18px var(--font-display); }
+.t-navlista { display: flex; gap: 8px; flex-wrap: wrap; }
+.t-nav { background: var(--blue); color: #fff; border-color: var(--blue); text-decoration: none; min-height: 48px; }
+.t-dalsia { margin: 0; }
+.t-zast { display: grid; gap: 6px; border-left: 6px solid var(--gold); }
+.t-zast.t-dorucene { border-left-color: var(--ok); opacity: .75; }
+.t-zast.t-nedorucene { border-left-color: var(--bad); opacity: .85; }
+.t-z-hore { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.t-z-cislo { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; }
+.t-z-cas { font: 800 22px var(--font-display); }
+.t-z-meno { margin: 0; font-size: 18px; }
+.t-z-adresa, .t-z-tel { color: var(--ink); text-decoration: none; font-size: 16px; }
+.t-z-tel { font-weight: 700; }
+.t-z-platba { font-weight: 700; }
+.t-z-platba.t-dob { color: var(--bad); font-size: 17px; }
+.t-z-pozn, .t-z-moja { margin: 0; }
+.t-z-tl { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.t-z-tl .btn { min-height: 50px; font-size: 16px; }
+.t-tl-ok { background: var(--ok); border-color: var(--ok); color: #fff; flex: 1 1 140px; }
+.t-tl-nie { background: #fbe3df; border-color: #e7a79d; color: #8c1d16; flex: 1 1 140px; }
+.t-foto-tl { cursor: pointer; }
+.t-foto { max-width: 100%; max-height: 260px; border-radius: 10px; object-fit: cover; }
+.t-qr summary { cursor: pointer; font-weight: 700; }
+.t-qr svg { background: #fff; padding: 8px; border-radius: 8px; margin-top: 6px; }
+.t-koniec { min-height: 58px; font-size: 18px; }
+.f-trasa { display: grid; gap: 10px; }
+.f-trasa-riadok { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.f-trasa-riadok .field { margin: 0; }
+.f-trasa ol { margin: 0; padding-left: 22px; columns: 2 260px; font-size: 14px; }
+@media print { #tlac-oblast.t-tlac-obal table { font-size: 9pt; } }

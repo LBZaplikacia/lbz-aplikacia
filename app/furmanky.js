@@ -68,9 +68,43 @@
       F.nacitavam = false;
       var r = v[1];
       if (!r || r.ok === false) { F.sprava = { typ: "chyba", text: (r && r.text) || "Furmanka sa nenačítala" }; F.data = null; }
-      else F.data = r;
+      else { F.data = r; if (r.furmanka && r.furmanka.id && r.furmanka.rozvoz) nacitajTrasu(r.furmanka.id); else F.trasa = null; }
       prekresli();
     }).catch(function (e) { F.nacitavam = false; F.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
+  }
+  // trasa pre furmana (modul Trasa): čas odchodu → poradie a časy príchodov (Edge Function, Google Mapy)
+  function nacitajTrasu(id) {
+    return rpc("trasa_data", { p_id: id }).then(function (d) { if (F.data && F.data.furmanka && F.data.furmanka.id === id) { F.trasa = d && d.ok ? d : null; prekresli(); } }).catch(function () {});
+  }
+  function trasaHtml(f) {
+    if (!f.id || !f.rozvoz || !f.datum) return "";
+    var d = F.trasa, t = d && d.trasa, z = (d && d.zastavky) || [];
+    var hhmm = function (x) { return x ? new Date(x).toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" }) : ""; };
+    var moze = !t || t.stav === "naplanovana";
+    var hotovo = z.filter(function (x) { return x.stav !== "caka"; }).length;
+    return '<details class="card f-trasa"' + (t ? "" : " open") + "><summary><strong>🗺️ Trasa pre furmana</strong> " +
+        (t ? '<span class="muted">odchod ' + esc(hhmm(t.odchod)) + " · návrat ~" + esc(hhmm(t.navrat)) + " · " + (t.stav === "naplanovana" ? "naplánovaná" : t.stav === "na_ceste" ? "na ceste " + hotovo + "/" + z.length : "ukončená") + "</span>"
+          : '<span class="muted">zatiaľ nevytvorená</span>') + "</summary>" +
+      (moze && f.stav !== "rozvezena" ? '<form class="f-trasa-riadok" id="f-trasa-form"><label class="field"><span class="label">Čas odchodu</span>' +
+          '<input type="time" name="odchod" required value="' + esc(t ? hhmm(t.odchod) : "07:00") + '"></label>' +
+          '<button class="btn btn-primary" type="submit"' + (F.trasaPocita ? " disabled" : "") + ">" + (F.trasaPocita ? "⏳ Počítam trasu…" : t ? "🔄 Prepočítať trasu" : "🗺️ Vytvoriť trasu") + "</button>" +
+          '<span class="muted f-mini">Poradie a časy vypočíta Google Mapy (PORADIE: n a PRIORITA v poznámke platia). Furman ju hneď uvidí v module Trasa.</span></form>'
+        : '<p class="muted" style="margin:0">Furman už je na ceste – trasa sa nedá prepočítať.</p>') +
+      (z.length ? "<ol>" + z.map(function (x) {
+        return "<li>" + (x.eta ? '<b class="num">' + esc(hhmm(x.eta)) + "</b> " : "") + esc(x.meno || x.firma || x.cislo) + ' <span class="muted">' + esc(x.adresa || "") + "</span>" +
+          (x.bez_gps ? ' <span class="pill warn">adresa nenájdená</span>' : "") + (x.stav === "dorucene" ? " ✅" : x.stav === "nedorucene" ? " ❌" : "") + "</li>";
+      }).join("") + "</ol>" : "") + "</details>";
+  }
+  function vytvorTrasu(odchod) {
+    var id = F.data.furmanka.id;
+    F.trasaPocita = true; F.sprava = null; prekresli();
+    DB.functions.invoke("upgates-sync", { body: { akcia: "trasa", id: id, odchod: odchod } }).then(function (res) {
+      F.trasaPocita = false;
+      var d = res.data;
+      var hotovo = function (j) { F.sprava = { typ: j && j.ok ? "ok" : "chyba", text: (j && j.text) || "Trasa sa nevytvorila" }; nacitajTrasu(id); nacitajFurmanku(true); };
+      if (res.error && !d) { var ctx = res.error.context; if (ctx && ctx.json) return ctx.json().then(hotovo, function () { hotovo({ text: chybaText(res.error) }); }); return hotovo({ text: chybaText(res.error) }); }
+      hotovo(d);
+    }).catch(function (e) { F.trasaPocita = false; F.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
   }
   function otvor(id) {
     F.id = id; F.data = null; F.sprava = null; F.dialog = null;
@@ -281,7 +315,7 @@
         '<button class="btn-link" data-f="obnov-f">Obnoviť</button></div>';
     var telo = !obj.length ? '<div class="empty"><strong>Vo furmanke nie sú objednávky</strong></div>'
       : (zobrazenie() === "tabulka" ? tabulkaHtml(obj) : zoznamHtml(obj));
-    return hore + (f.id ? testHtml() : "") + spravaHtml() + lista + telo;
+    return hore + (f.id ? testHtml() : "") + spravaHtml() + lista + trasaHtml(f) + telo;
   }
 
   function riadkyNaZobrazenie(obj) {
@@ -688,6 +722,7 @@
     }
   }
   function odoslanie(e) {
+    if (e.target.id === "f-trasa-form") { e.preventDefault(); if (!F.trasaPocita) vytvorTrasu(e.target.elements.odchod.value); return; }
     if (e.target.id === "f-obj-form") { e.preventDefault(); ulozObjednavku(e.target); }
     if (e.target.id === "f-archiv-form") { e.preventDefault(); F.archivText = e.target.querySelector("[data-f-archiv-text]").value.trim(); nacitajArchiv(); return; }
     if (e.target.id === "f-hladaj-form") { e.preventDefault(); var v = e.target.querySelector("[data-f-hladaj-obj]").value.trim(); if (v) hladajObjednavku(v); }
