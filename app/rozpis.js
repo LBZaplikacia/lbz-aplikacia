@@ -38,7 +38,8 @@
       var z = R.od, prvy = new Date(z.getFullYear(), z.getMonth(), 1, 12), posl = new Date(z.getFullYear(), z.getMonth() + 1, 0, 12);
       return { od: pondelok(prvy), do: pridaj(pondelok(posl), 6), mesiac: prvy };
     }
-    return { od: pondelok(R.od), do: pridaj(pondelok(R.od), 6), mesiac: new Date(R.od.getFullYear(), R.od.getMonth(), 1, 12) };
+    var stred = pridaj(pondelok(R.od), 3);             // mesiac týždňa podľa štvrtka
+    return { od: pondelok(R.od), do: pridaj(pondelok(R.od), 6), mesiac: new Date(stred.getFullYear(), stred.getMonth(), 1, 12) };
   }
   function nacitaj() {
     if (!DB) return;

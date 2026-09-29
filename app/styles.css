@@ -512,3 +512,10 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
   .r-clovek input[name="email"] { grid-column: 1 / -1; }
   .head-tl { flex-wrap: wrap; }
 }
+/* v0.12.1 – farebné tlačidlá stavov furmanky */
+.f-tl-full { background: #fbe3df; border-color: #e7a79d; color: #8c1d16; }
+.f-tl-napl { background: #e7f3ea; border-color: #9fcfae; color: #1d5635; }
+.f-tl-rozv { background: #e3edf5; border-color: #a9c3d8; color: #2C5167; }
+.f-tl-vrat { background: #fff4e0; border-color: #e6c48a; color: #7a4a0c; }
+.f-tl-full:hover, .f-tl-napl:hover, .f-tl-rozv:hover, .f-tl-vrat:hover { filter: brightness(.96); }
+.f-dalsie { justify-self: start; }

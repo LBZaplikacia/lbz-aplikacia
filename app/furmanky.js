@@ -195,14 +195,18 @@
   }
   function pohladZoznam() {
     var z = F.zoznam || [];
-    var rozvozy = z.filter(function (f) { return f.rozvoz && f.datum; });
+    var hranica = new Date(); hranica.setDate(hranica.getDate() + 7);
+    var do7 = hranica.getFullYear() + "-" + ("0" + (hranica.getMonth() + 1)).slice(-2) + "-" + ("0" + hranica.getDate()).slice(-2);
+    var vsetkyRozvozy = z.filter(function (f) { return f.rozvoz && f.datum; });
+    var rozvozy = vsetkyRozvozy.filter(function (f) { return F.vsetky || f.datum <= do7; });   // len najbližších 7 dní
+    var neskor = vsetkyRozvozy.length - rozvozy.length;
     var ostatne = z.filter(function (f) { return !(f.rozvoz && f.datum); });
     var nezar = z.filter(function (f) { return f.region === "NEZARADENÉ"; }).reduce(function (a, f) { return a + (f.pocet || 0); }, 0);
     var objSpolu = rozvozy.reduce(function (a, f) { return a + (f.pocet || 0); }, 0);
     var sumaSpolu = rozvozy.reduce(function (a, f) { return a + (Number(f.suma) || 0); }, 0);
     var ikonaIne = function (f) { return f.region === "NEZARADENÉ" ? "⚠️" : f.region === "Osobný odber" ? "🏪" : f.region === "Elektronicky" ? "✉️" : "🚚"; };
     var kpi = '<div class="kpi">' +
-      '<div class="k"><span class="k-ik" aria-hidden="true">🚚</span><b class="num">' + rozvozy.length + "</b><span>furmaniek</span></div>" +
+      '<div class="k"><span class="k-ik" aria-hidden="true">🚚</span><b class="num">' + rozvozy.length + "</b><span>" + (F.vsetky ? "furmaniek" : "furmaniek na 7 dní") + "</span></div>" +
       '<div class="k"><span class="k-ik" aria-hidden="true">🧾</span><b class="num">' + objSpolu + "</b><span>objednávok na rozvoz</span></div>" +
       '<div class="k"><span class="k-ik" aria-hidden="true">💶</span><b class="num">' + esc(eur(sumaSpolu).replace(",00", "")) + "</b><span>spolu</span></div>" +
       '<div class="k' + (nezar ? " k-pozor" : "") + '"><span class="k-ik" aria-hidden="true">' + (nezar ? "⚠️" : "✅") + '</span><b class="num">' + nezar + "</b><span>nezaradených</span></div></div>";
@@ -213,7 +217,8 @@
       (F.zoznam == null ? '<div class="empty"><strong>Načítavam furmanky…</strong></div>' :
         (!z.length ? '<div class="empty"><strong>Zatiaľ žiadne furmanky</strong><span class="muted">Stlačte „Aktualizovať z Upgates“.</span></div>' :
           kpi +
-          '<div class="f-karty">' + (rozvozy.map(kartaRozvozu).join("") || '<p class="muted">Žiadne termíny.</p>') + "</div>" +
+          '<div class="f-karty">' + (rozvozy.map(kartaRozvozu).join("") || '<p class="muted">Najbližších 7 dní nie je žiadny rozvoz.</p>') + "</div>" +
+          (neskor || F.vsetky ? '<button class="btn-link f-dalsie" data-f="dalsie">' + (F.vsetky ? "Zobraziť len najbližších 7 dní" : "Ďalšie termíny (" + neskor + ")") + "</button>" : "") +
           (ostatne.length || F.archivN || F.odobrate ? '<h3 class="f-nadpis">Ostatné</h3>' : "") + '<div class="f-karty f-karty-ine">' +
             ostatne.map(function (f) { return kartaIna(f, ikonaIne(f), '<span class="num">' + f.pocet + "</span> obj." + (f.suma ? " · " + esc(eur(f.suma)) : "")); }).join("") +
             (F.archivN ? kartaIna({ id: "archiv", region: "Archív" }, "🗄️", '<span class="num">' + F.archivN + "</span> rozvezených") : "") +
@@ -257,11 +262,12 @@
       '<span class="muted"><span class="num">' + obj.length + "</span> objednávok · " + esc(eur(suma)) + (f.trasa_hodiny ? " · trasa " + cislo(f.trasa_hodiny, 1) + " h" : "") + "</span>" +
       '<span class="f-lista-tl">' +
         (f.id ? '<button class="btn" data-f="pridat">+ Objednávka</button>' : "") +
-        (f.id ? (f.stav === "otvorena" ? '<button class="btn" data-f="stav" data-stav="full">Uzavrieť (FULL)</button>' :
+        (f.id ? (f.stav === "otvorena" ? '<button class="btn f-tl-full" data-f="stav" data-stav="full">🔒 Uzavrieť (FULL)</button>' :
           '<button class="btn" data-f="stav" data-stav="otvorena">Otvoriť</button>') : "") +
-        (f.id && f.rozvoz && f.stav !== "rozvezena" ? (f.naplanovane ? '<span class="pill ok f-napl">✓ Naplánované ' + esc(casSk(f.naplanovane)) + "</span>" :
-          '<button class="btn" data-f="naplanovane">Naplánované</button>') : "") +
-        (f.id && f.stav === "full" ? '<button class="btn" data-f="stav" data-stav="rozvezena">Rozvezené</button>' : "") +
+        (f.id && f.rozvoz && f.stav !== "rozvezena" ? (f.naplanovane ? '<span class="pill ok f-napl">✓ Naplánované ' + esc(casSk(f.naplanovane)) + "</span>" +
+          '<button class="btn f-tl-vrat" data-f="vrat-statusy">↩️ Vrátiť statusy</button>' :
+          '<button class="btn f-tl-napl" data-f="naplanovane">✅ Naplánované</button>') : "") +
+        (f.id && f.stav === "full" ? '<button class="btn f-tl-rozv" data-f="stav" data-stav="rozvezena">🚚 Rozvezené</button>' : "") +
         '<button class="btn" data-f="sumar">🖨️ Sumár výroby</button>' +
       "</span></div>" +
       '<div class="f-prepinace">' +
@@ -617,6 +623,11 @@
         if (!window.confirm("Potvrdiť, že furmanka " + F.data.furmanka.nazov + " je skontrolovaná a naplánovaná?\n\nPo ostrom štarte sa tým objednávky v Upgates označia ako Naplánované. Počas testu sa len zapíše v appke.")) return;
         po(rpc("furmanka_naplanovana", { p_id: F.data.furmanka.id }), "Označené ako naplánované").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
         break;
+      case "vrat-statusy":
+        if (!window.confirm("Vrátiť statusy vo furmanke " + F.data.furmanka.nazov + "?\n\nZruší sa „Naplánované“. Po ostrom štarte sa tým v Upgates vrátia pôvodné statusy všetkých objednávok vo furmanke. Počas testu sa to len zapíše v appke.")) return;
+        po(rpc("furmanka_vrat_statusy", { p_id: F.data.furmanka.id }), "Statusy vrátené").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
+        break;
+      case "dalsie": F.vsetky = !F.vsetky; prekresli(); break;
       case "sumar": tlacSumar(); break;
       case "stitky": tlacStitky(); break;
       case "pridat": F.dialog = { typ: "pridat" }; prekresli(); break;
@@ -700,7 +711,9 @@
       if (F.id != null) nacitajFurmanku(true);
     },
     karta: function () {
-      var z = (F.zoznam || []).filter(function (f) { return f.rozvoz && f.datum && f.stav !== "rozvezena"; }).slice(0, 5);
+      var dnes = new Date(), h7 = new Date(); h7.setDate(h7.getDate() + 7);
+      var iso = function (d) { return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); };
+      var z = (F.zoznam || []).filter(function (f) { return f.rozvoz && f.datum && f.stav !== "rozvezena" && f.datum >= iso(dnes) && f.datum <= iso(h7); }).slice(0, 5);
       if (!F.zoznam && DB) setTimeout(function () { rpc("furmanky_zoznam").then(function (r) { if (r && r.ok) { F.zoznam = r.furmanky || []; F.beh = r.beh; F.odobrate = r.odobrate || 0; F.archivN = r.archiv || 0; window.dispatchEvent(new Event("lbz-prekresli")); } }).catch(function () {}); }, 0);
       return '<section class="card"><h3>Furmanky <span class="pill ok num">' + z.length + "</span></h3>" +
         (z.length ? '<div class="rows">' + z.map(function (f) {

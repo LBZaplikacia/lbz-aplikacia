@@ -243,6 +243,8 @@
 
   // furmanky zo starej tabuľky objednávok (ak zlyhajú, sklad sa aj tak ukáže)
   function furmankyZGas(obnov) {
+    // v appke: furmanky na najbližších 7 dní priamo z databázy (stará tabuľka odpovedala aj 45 s)
+    if (SUPA) return rpc("sklad_na_rozvozy").then(function (r) { return r && r.ok ? r : null; }, function () { return null; });
     if (!API) return Promise.resolve(null);
     return api({ akcia: obnov ? "FURMANKY_OBNOV" : "STAV" }, obnov ? 120000 : 60000)
       .then(function (r) { return r && r.ok ? r : null; }, function () { return null; });
@@ -281,12 +283,13 @@
   }
 
   function obnovFurmanky() {
-    if (!API || !backend() || S.nacitavam) return;
-    S.nacitavam = true; S.sprava = { typ: "info", text: "Sťahujem furmanky z tabuľky objednávok…" }; prekresli();
+    if (!backend() || S.nacitavam || (!SUPA && !API)) return;
+    S.nacitavam = true; S.sprava = SUPA ? null : { typ: "info", text: "Sťahujem furmanky z tabuľky objednávok…" }; prekresli();
     var hotovo = function (st, chyba) {
       S.nacitavam = false;
       if (st) { S.stav = st; S.stav.nacitane = Date.now(); LS.set("lbz2_stav", S.stav); S.sprava = { typ: "ok", text: "Furmanky aktualizované" }; }
       else S.sprava = { typ: "chyba", text: chyba || "Furmanky sa nepodarilo obnoviť" };
+      if (st && SUPA) S.sprava = null;
       prekresli();
     };
     if (SUPA) {
@@ -785,8 +788,9 @@
   // ----- furmanky -----
   function pohladFurmanky() {
     var st = S.stav;
-    var info = '<span class="muted">' + (st && st.furmankyCas ? "Z objednávok o " + esc(st.furmankyCas) : "Obnovujú sa samé každých 15 min.") + (S.nacitavam ? " · načítavam…" : "") + "</span>";
-    var lista = '<div class="s-lista">' + info + '<span class="s-lista-tl"><button class="btn" data-s-akcia="obnov-furmanky"' + (S.nacitavam ? " disabled" : "") + ">Obnoviť z objednávok</button></span></div>";
+    var info = '<span class="muted">' + (SUPA ? "Furmanky na 7 dní z appky" + (st && st.furmankyCas ? " · Upgates " + esc(st.furmankyCas) : "") + " (sťahuje sa o 6:00, 11:30 a 14:00)" :
+      st && st.furmankyCas ? "Z objednávok o " + esc(st.furmankyCas) : "Obnovujú sa samé každých 15 min.") + (S.nacitavam ? " · načítavam…" : "") + "</span>";
+    var lista = '<div class="s-lista">' + info + '<span class="s-lista-tl"><button class="btn" data-s-akcia="obnov-furmanky"' + (S.nacitavam ? " disabled" : "") + ">" + (SUPA ? "Obnoviť" : "Obnoviť z objednávok") + "</button></span></div>";
     if (!st || !st.rozvozy) {
       return lista + '<div class="empty"><strong>' + (S.nacitavam ? "Načítavam furmanky…" : "Furmanky ešte nie sú načítané") + "</strong></div>";
     }
