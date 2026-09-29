@@ -2240,3 +2240,191 @@ $$;
 update public.moduly set aktivny = true where kod = 'balenie';
 insert into public.pristupy (rola, modul, uprava) values ('it','balenie',true), ('ceo','balenie',true), ('zakaznicky_servis','balenie',true), ('prevadzka','balenie',true)
   on conflict do nothing;
+
+
+-- =========================================================================
+-- 16) TRASA PRE FURMANA (29. 9. 2026)
+--     Zákaznícky servis zadá čas odchodu a dá „Vytvoriť trasu“ (Edge Function upgates-sync, akcia „trasa“ –
+--     poradie a časy príchodov cez Google Mapy ako doteraz). Furman (spoločný účet furman@) ju vidí v module Trasa:
+--     navigácia, Doručené / Nedoručené, poznámka, fotka. Ukončenie rozvozu → furmanka ide do Archívu,
+--     nedoručené objednávky do ďalšej furmanky alebo na termín, ktorý zadá furman.
+--     Statusy do Upgates (Rozvezené, pôvodný status pri nedoručenej) až po ostrom štarte.
+-- =========================================================================
+create table if not exists public.trasy (
+  furmanka_id  bigint primary key references public.furmanky(id) on delete cascade,
+  odchod       timestamptz not null,
+  navrat       timestamptz,
+  hodiny       numeric(5,2),
+  stav         text not null default 'naplanovana' check (stav in ('naplanovana','na_ceste','ukoncena')),
+  vytvorena    timestamptz not null default now(),
+  kto          uuid default auth.uid(),
+  zacata       timestamptz,
+  ukoncena     timestamptz
+);
+create table if not exists public.trasy_zastavky (
+  furmanka_id   bigint not null references public.trasy(furmanka_id) on delete cascade,
+  cislo         text not null references public.objednavky(cislo) on delete cascade,
+  poradie       int,
+  eta           timestamptz,
+  jazda_min     numeric(7,1),
+  cakanie_min   numeric(7,1),
+  bez_gps       boolean not null default false,
+  stav          text not null default 'caka' check (stav in ('caka','dorucene','nedorucene')),
+  cas           timestamptz,
+  poznamka      text,
+  foto          text,
+  presun_datum  date,
+  primary key (furmanka_id, cislo)
+);
+alter table public.trasy enable row level security;            -- prístup len cez funkcie nižšie
+alter table public.trasy_zastavky enable row level security;
+
+create or replace function public.som_furman() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce(public.moja_rola() in ('it','ceo','zakaznicky_servis','furman'), false)
+$$;
+
+-- podklady pre výpočet trasy (volá Edge Function s prihlásením zákazníckeho servisu)
+create or replace function public.trasa_podklady(p_id bigint) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when not public.som_furmankar() then jsonb_build_object('ok', false, 'text', 'Trasu vytvára IT, CEO alebo zákaznícky servis') else
+  jsonb_build_object('ok', true, 'datum', f.datum, 'nazov', public.furmanka_nazov(f.region, f.datum),
+    'stav_trasy', (select stav from public.trasy where furmanka_id = f.id),
+    'zastavky', coalesce((select jsonb_agg(jsonb_build_object('cislo', o.cislo,
+        'adresa', concat_ws(', ', nullif(o.ulica, ''), nullif(trim(concat_ws(' ', o.psc, o.mesto)), '')),
+        'dobierka', coalesce(o.platba, 'DOBIERKA') not in ('ZAPLATENÉ', 'NA FAKTÚRU'),
+        'poznamka', o.poznamka) order by z.poradie nulls last, o.vytvorena)
+      from public.zaradenia z join public.objednavky o on o.cislo = z.cislo where z.furmanka_id = f.id), '[]'::jsonb)) end
+  from public.furmanky f where f.id = p_id
+$$;
+
+-- uloženie vypočítanej trasy: p_odchod 'HH:MM', zastávky [{cislo, poradie, prichod_min, jazda_min, cakanie_min, bez_gps}]
+create or replace function public.trasa_uloz(p_id bigint, p_odchod text, p_zastavky jsonb, p_navrat_min numeric, p_hodiny numeric) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_datum date; v_odchod timestamptz; v_stav text;
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Trasu vytvára IT, CEO alebo zákaznícky servis'); end if;
+  select datum into v_datum from public.furmanky where id = p_id;
+  if v_datum is null then return jsonb_build_object('ok', false, 'text', 'Furmanka nemá dátum'); end if;
+  select stav into v_stav from public.trasy where furmanka_id = p_id;
+  if v_stav in ('na_ceste', 'ukoncena') then return jsonb_build_object('ok', false, 'text', 'Furman už je na ceste – trasu nemožno prepočítať'); end if;
+  v_odchod := (v_datum + p_odchod::time) at time zone 'Europe/Bratislava';
+  insert into public.trasy (furmanka_id, odchod, navrat, hodiny, stav, vytvorena, kto)
+    values (p_id, v_odchod, v_odchod + make_interval(mins => round(p_navrat_min)::int), p_hodiny, 'naplanovana', now(), auth.uid())
+    on conflict (furmanka_id) do update set odchod = excluded.odchod, navrat = excluded.navrat, hodiny = excluded.hodiny,
+      stav = 'naplanovana', vytvorena = now(), kto = auth.uid();
+  delete from public.trasy_zastavky where furmanka_id = p_id;
+  insert into public.trasy_zastavky (furmanka_id, cislo, poradie, eta, jazda_min, cakanie_min, bez_gps)
+    select p_id, z->>'cislo', (z->>'poradie')::int,
+           case when z->>'prichod_min' is null then null else v_odchod + make_interval(mins => round((z->>'prichod_min')::numeric)::int) end,
+           (z->>'jazda_min')::numeric, (z->>'cakanie_min')::numeric, coalesce((z->>'bez_gps')::boolean, false)
+    from jsonb_array_elements(coalesce(p_zastavky, '[]'::jsonb)) z
+    where exists (select 1 from public.objednavky o where o.cislo = z->>'cislo');
+  update public.zaradenia z set poradie = (x->>'poradie')::int
+    from jsonb_array_elements(coalesce(p_zastavky, '[]'::jsonb)) x where z.cislo = x->>'cislo' and z.furmanka_id = p_id;
+  update public.furmanky set trasa_hodiny = p_hodiny where id = p_id;
+  insert into public.furmanky_log (typ, kto, text) select 'trasa', auth.uid(), public.furmanka_nazov(region, datum) || ' – trasa vytvorená, odchod ' || p_odchod from public.furmanky where id = p_id;
+  return jsonb_build_object('ok', true, 'text', 'Trasa vytvorená – furman ju uvidí v module Trasa');
+end $$;
+
+-- zoznam trás pre furmana: dnešné a budúce + nedokončené
+create or replace function public.trasa_zoznam() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when not public.som_furman() then jsonb_build_object('ok', false, 'text', 'Trasa je pre furmana, IT, CEO a zákaznícky servis') else
+  jsonb_build_object('ok', true, 'trasy', coalesce((
+    select jsonb_agg(jsonb_build_object('id', f.id, 'nazov', public.furmanka_nazov(f.region, f.datum), 'datum', f.datum, 'stav', t.stav,
+             'odchod', t.odchod, 'navrat', t.navrat, 'hodiny', t.hodiny,
+             'pocet', (select count(*) from public.trasy_zastavky s where s.furmanka_id = f.id),
+             'hotovo', (select count(*) from public.trasy_zastavky s where s.furmanka_id = f.id and s.stav <> 'caka')) order by f.datum, t.odchod)
+    from public.trasy t join public.furmanky f on f.id = t.furmanka_id
+    where t.stav <> 'ukoncena' or f.datum >= public.dnes_sk() - 1), '[]'::jsonb)) end
+$$;
+
+create or replace function public.trasa_data(p_id bigint) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when not public.som_furman() then jsonb_build_object('ok', false, 'text', 'Nemáte prístup k trase') else
+  jsonb_build_object('ok', true,
+    'trasa', (select jsonb_build_object('id', f.id, 'nazov', public.furmanka_nazov(f.region, f.datum), 'datum', f.datum, 'region', f.region,
+                'stav', t.stav, 'odchod', t.odchod, 'navrat', t.navrat, 'hodiny', t.hodiny, 'zacata', t.zacata, 'ukoncena', t.ukoncena)
+              from public.trasy t join public.furmanky f on f.id = t.furmanka_id where t.furmanka_id = p_id),
+    'zastavky', coalesce((select jsonb_agg(jsonb_build_object('cislo', s.cislo, 'poradie', s.poradie, 'eta', s.eta, 'bez_gps', s.bez_gps,
+        'stav', s.stav, 'cas', s.cas, 'poznamka', s.poznamka, 'foto', s.foto, 'presun_datum', s.presun_datum,
+        'meno', o.meno, 'firma', o.firma, 'telefon', o.telefon,
+        'adresa', concat_ws(', ', nullif(o.ulica, ''), nullif(trim(concat_ws(' ', o.psc, o.mesto)), '')),
+        'platba', coalesce(o.platba, 'DOBIERKA'), 'suma', o.suma, 'faktura', o.faktura,
+        'pozn_obj', nullif(concat_ws(' | ', nullif(o.poznamka, ''), nullif(o.upozornenie, '')), ''),
+        'kusy', (select coalesce(sum(p.mnozstvo), 0) from public.objednavky_polozky p where p.cislo = o.cislo),
+        'balenie', (select b.stav from public.balenie b where b.cislo = o.cislo))
+      order by s.poradie nulls last, s.cislo)
+      from public.trasy_zastavky s join public.objednavky o on o.cislo = s.cislo where s.furmanka_id = p_id), '[]'::jsonb)) end
+$$;
+
+-- zastávka: p_stav 'dorucene' | 'nedorucene' | 'caka' (späť), poznámka, termín pre nedoručenú, fotka (cesta v úložisku)
+create or replace function public.trasa_zastavka(p_id bigint, p_cislo text, p_stav text default null, p_poznamka text default null,
+                                                 p_presun_datum date default null, p_foto text default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_t public.trasy%rowtype;
+begin
+  if not public.som_furman() then return jsonb_build_object('ok', false, 'text', 'Nemáte prístup k trase'); end if;
+  select * into v_t from public.trasy where furmanka_id = p_id;
+  if not found then return jsonb_build_object('ok', false, 'text', 'Trasa neexistuje'); end if;
+  if v_t.stav = 'ukoncena' then return jsonb_build_object('ok', false, 'text', 'Rozvoz je už ukončený'); end if;
+  if p_stav is not null and p_stav not in ('caka','dorucene','nedorucene') then return jsonb_build_object('ok', false, 'text', 'Neznámy stav'); end if;
+  update public.trasy_zastavky set
+      stav = coalesce(p_stav, stav),
+      cas = case when p_stav is null then cas when p_stav = 'caka' then null else now() end,
+      poznamka = case when p_poznamka is null then poznamka else nullif(trim(p_poznamka), '') end,
+      presun_datum = case when p_stav = 'nedorucene' then p_presun_datum when p_stav is not null then null else presun_datum end,
+      foto = coalesce(p_foto, foto)
+    where furmanka_id = p_id and cislo = p_cislo;
+  if not found then return jsonb_build_object('ok', false, 'text', 'Objednávka nie je v tejto trase'); end if;
+  if v_t.stav = 'naplanovana' then update public.trasy set stav = 'na_ceste', zacata = now() where furmanka_id = p_id; end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- ukončenie rozvozu: všetky zastávky vybavené → nedoručené do ďalšej furmanky (alebo na zadaný termín), furmanka do Archívu
+create or replace function public.trasa_ukoncit(p_id bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_f public.furmanky%rowtype; v_s record; v_ciel bigint; v_n int := 0; v_d int := 0;
+begin
+  if not public.som_furman() then return jsonb_build_object('ok', false, 'text', 'Nemáte prístup k trase'); end if;
+  select * into v_f from public.furmanky where id = p_id;
+  if not exists (select 1 from public.trasy where furmanka_id = p_id and stav <> 'ukoncena') then return jsonb_build_object('ok', false, 'text', 'Trasa už je ukončená'); end if;
+  if exists (select 1 from public.trasy_zastavky where furmanka_id = p_id and stav = 'caka') then
+    return jsonb_build_object('ok', false, 'text', 'Ešte nie sú označené všetky zastávky (Doručené / Nedoručené)');
+  end if;
+  update public.furmanky set stav = 'rozvezena', uzavreta = coalesce(uzavreta, now()) where id = p_id;   -- najprv do Archívu, aby sa nedoručené nevrátili sem
+  for v_s in select * from public.trasy_zastavky where furmanka_id = p_id and stav = 'nedorucene' loop
+    v_ciel := null;
+    if v_s.presun_datum is not null then
+      select id into v_ciel from public.furmanky where region = v_f.region and id <> p_id and datum >= v_s.presun_datum and stav <> 'rozvezena' order by datum limit 1;
+    end if;
+    if v_ciel is null then
+      select id into v_ciel from public.furmanky where region = v_f.region and id <> p_id and datum > v_f.datum and stav <> 'rozvezena' order by datum limit 1;
+    end if;
+    if v_ciel is null then v_ciel := public.furmanka_pre_region(v_f.region); end if;
+    update public.zaradenia set furmanka_id = v_ciel, rucne = true, poradie = null, kedy = now(), kto = auth.uid() where cislo = v_s.cislo;
+    v_n := v_n + 1;
+  end loop;
+  select count(*) into v_d from public.trasy_zastavky where furmanka_id = p_id and stav = 'dorucene';
+  update public.trasy set stav = 'ukoncena', ukoncena = now() where furmanka_id = p_id;
+  insert into public.furmanky_log (typ, kto, text) values ('rozvezene', auth.uid(),
+    public.furmanka_nazov(v_f.region, v_f.datum) || ' – rozvoz ukončený: doručené ' || v_d || ', nedoručené ' || v_n || ' (presunuté)');
+  return jsonb_build_object('ok', true, 'text', 'Rozvoz ukončený – doručené ' || v_d || ', nedoručené ' || v_n || ' presunuté do ďalšej furmanky');
+end $$;
+
+revoke all on function public.som_furman(), public.trasa_podklady(bigint), public.trasa_uloz(bigint, text, jsonb, numeric, numeric), public.trasa_zoznam(),
+  public.trasa_data(bigint), public.trasa_zastavka(bigint, text, text, text, date, text), public.trasa_ukoncit(bigint) from public, anon;
+grant execute on function public.som_furman(), public.trasa_podklady(bigint), public.trasa_uloz(bigint, text, jsonb, numeric, numeric), public.trasa_zoznam(),
+  public.trasa_data(bigint), public.trasa_zastavka(bigint, text, text, text, date, text), public.trasa_ukoncit(bigint) to authenticated;
+
+-- fotky zo zastávok (súkromné úložisko)
+insert into storage.buckets (id, name, public) values ('trasa', 'trasa', false) on conflict (id) do nothing;
+drop policy if exists "trasa foto citat" on storage.objects;
+create policy "trasa foto citat" on storage.objects for select to authenticated using (bucket_id = 'trasa' and public.som_furman());
+drop policy if exists "trasa foto nahrat" on storage.objects;
+create policy "trasa foto nahrat" on storage.objects for insert to authenticated with check (bucket_id = 'trasa' and public.som_furman());
+
+update public.moduly set aktivny = true where kod = 'trasa';
+insert into public.pristupy (rola, modul, uprava) values ('it','trasa',true), ('ceo','trasa',true), ('zakaznicky_servis','trasa',true), ('furman','trasa',true)
+  on conflict do nothing;
