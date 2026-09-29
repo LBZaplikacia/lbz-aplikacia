@@ -269,7 +269,8 @@
         (f.id && f.rozvoz && f.stav !== "rozvezena" ? (f.naplanovane ? '<span class="pill ok f-napl">✓ Naplánované ' + esc(casSk(f.naplanovane)) + "</span>" :
           '<button class="btn f-tl-napl" data-f="naplanovane">✅ Naplánované</button>') +
           '<button class="btn f-tl-vrat" data-f="vrat-statusy">↩️ Vrátiť statusy</button>' : "") +
-        // Rozvezené nastaví furman v module Trasa (bez uzavretého rozvozu sa neodhlási z práce)
+        // Rozvezené nastaví furman v module Trasa (bez uzavretého rozvozu sa neodhlási z práce); ručne sa dá archivovať kedykoľvek
+        (f.id && f.stav !== "rozvezena" ? '<button class="btn" data-f="stav" data-stav="rozvezena">🗄️ Archivovať</button>' : "") +
         '<button class="btn" data-f="sumar">🖨️ Sumár výroby</button>' +
       "</span></div>" +
       '<div class="f-prepinace">' +
@@ -654,7 +655,7 @@
       case "stav":
         var s = d.stav, n = F.data.furmanka.nazov;
         var otazka = s === "full" ? "Uzavrieť furmanku " + n + "? Nové objednávky pôjdu na ďalší termín." :
-          s === "otvorena" ? "Znova otvoriť furmanku " + n + "? Automatika do nej môže pridať nové objednávky." : "Označiť " + n + " ako rozvezenú?";
+          s === "otvorena" ? "Znova otvoriť furmanku " + n + "? Automatika do nej môže pridať nové objednávky." : "Archivovať furmanku " + n + "? Presunie sa do Archívu (späť ju vrátite tlačidlom Otvoriť).";
         if (!window.confirm(otazka)) return;
         po(rpc("furmanka_stav", { p_id: F.data.furmanka.id, p_stav: s }), "Hotovo").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
         break;

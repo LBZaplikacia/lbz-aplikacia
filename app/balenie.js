@@ -101,6 +101,7 @@
   var poslednyKod = "", poslednyCas = 0;
   function spracuj(surovy) {
     var text = String(surovy || "").trim(); if (!text) return;
+    if (kameraStav !== "vyp") vypniKameru();   // ako v Skenovaní: po načítaní kódu sa kamera vypne
     var kod = upravKod(text);
     var teraz = Date.now();
     if (kod === poslednyKod && teraz - poslednyCas < 2500) return;   // dvojité načítanie toho istého
@@ -190,12 +191,15 @@
     return '<span class="b-st ' + s.c + '"' + (dovod ? ' title="' + esc(dovod) + '"' : "") + ">" + s.t + "</span>";
   }
   function skenBox(popis) {
-    var kam = kameraStav === "vyp"
-      ? '<button class="btn" type="button" data-b="kamera" data-smer="environment">📸 Kamera</button><button class="btn btn-ikona" type="button" data-b="kamera" data-smer="user" aria-label="Predná kamera">🤳</button>'
-      : '<button class="btn" type="button" data-b="kamera-stop">' + (kameraStav === "spusta" ? "⏳ Spúšťam…" : "🛑 Vypnúť kameru") + "</button>";
     return '<form class="b-sken" id="b-sken-form"><label class="field"><span class="label">' + esc(popis) + '</span>' +
       '<input id="b-kod" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="čítačka alebo ručne"></label>' +
-      '<button class="btn btn-primary" type="submit">OK</button>' + kam + "</form>";
+      '<button class="btn btn-primary" type="submit">OK</button></form>';
+  }
+  // tlačidlá kamery ako v Skenovaní: pripnuté dole, predná vľavo, zadná vpravo; po načítaní kódu sa kamera vypne
+  function listaKamery() {
+    if (kameraStav === "vyp") return '<button class="s-kam s-kam-predna" data-b="kamera" data-smer="user" aria-label="Predná kamera">🤳 Predná</button>' +
+      '<button class="s-kam s-kam-zadna" data-b="kamera" data-smer="environment">📸 Skenovať kamerou</button>';
+    return '<button class="s-kam s-kam-stop" data-b="kamera-stop">' + (kameraStav === "spusta" ? "⏳ Spúšťam kameru…" : "🛑 Vypnúť kameru") + "</button>";
   }
 
   function pohladZoznam() {
@@ -224,7 +228,7 @@
       '<div class="sub">zabalené ' + zab + " z " + obj.length + (odl ? " · odložené " + odl : "") + (B.nacitavam ? " · načítavam…" : "") + "</div></div>" +
       '<span class="head-tl"><button class="btn" data-b="stitky"' + (obj.length ? "" : " disabled") + '>🖨️ Štítky</button><button class="btn btn-ikona" data-b="obnov" aria-label="Obnoviť">↻</button></span></div>';
     if (!d) return head + spravaHtml() + '<div class="empty"><strong>Načítavam…</strong></div>';
-    return head + spravaHtml() + skenBox("Naskenujte štítok objednávky") +
+    return head + spravaHtml() + skenBox("Naskenujte štítok objednávky") + "<!--KAM-->" +
       '<section class="card"><div class="rows b-obj-zoznam">' + (obj.length ? obj.map(function (o, i) {
         var ks = 0, hot = 0; (o.polozky || []).forEach(function (p) { ks += p.ks; hot += Math.min(p.hotovo, p.ks); });
         return '<button class="row b-obj-riadok" data-b-obj="' + esc(o.cislo) + '"><span class="b-obj-poradie num">' + (o.poradie || i + 1) + "</span>" +
@@ -244,13 +248,13 @@
     var posl = B.posledny ? '<div class="b-posledny b-posledny-' + B.posledny.typ + '" role="status">' + esc(B.posledny.text) + "</div>" : "";
     var pol = (o.polozky || []).map(function (p) {
       var hotovo = p.hotovo >= p.ks;
-      var ovl = p.sken ? '<span class="b-pol-pozn muted">skenovať</span>'
+      var ovl = p.sken ? (hotovo ? "" : '<span class="b-pol-tl"><button class="btn b-lupa" data-b-lupa="' + esc(p.kod) + '" title="Balík bez štítku – vybrať podľa expirácie">🔍 bez štítku</button></span>')
         : '<span class="b-pol-tl"><button class="btn btn-ikona" data-b-potvrd="' + esc(p.kod) + '" data-ks="' + Math.max(0, p.hotovo - 1) + '" aria-label="Menej"' + (p.hotovo > 0 ? "" : " disabled") + ">−</button>" +
           '<button class="btn btn-ikona" data-b-potvrd="' + esc(p.kod) + '" data-ks="' + Math.min(p.ks, p.hotovo + 1) + '" aria-label="Viac"' + (hotovo ? " disabled" : "") + ">+</button>" +
           (hotovo ? "" : '<button class="btn r-mini" data-b-potvrd="' + esc(p.kod) + '" data-ks="' + p.ks + '">✓ všetko</button>') + "</span>";
-      return '<div class="b-pol' + (hotovo ? " b-pol-ok" : "") + '"><span class="b-pol-farba" style="background:' + esc(p.farba) + '"></span>' +
+      return '<div class="b-pol' + (hotovo ? " b-pol-ok" : "") + '" style="background:' + esc(p.farba) + ";color:" + textNa(p.farba) + '">' +
         '<span class="b-pol-nazov">' + esc(p.nazov) + "</span>" +
-        '<span class="b-pol-pocet num"><b>' + p.hotovo + "</b> / " + p.ks + (hotovo ? " ✓" : "") + "</span>" + ovl + "</div>";
+        '<span class="b-pol-pocet num">' + (hotovo ? '<span class="b-pol-fajka">✓</span> ' : "") + "<b>" + p.hotovo + "</b> / " + p.ks + "</span>" + ovl + "</div>";
     }).join("");
     var baliky = (o.baliky || []).length ? '<details class="card b-baliky"><summary>Naskenované balíky (' + o.baliky.length + ")</summary><div class=\"rows\">" +
       o.baliky.map(function (b) {
@@ -258,7 +262,7 @@
       }).join("") + "</div></details>" : "";
     return head + spravaHtml() + (info ? '<p class="s-varovanie s-varovanie-info">' + esc(info) + "</p>" : "") +
       (o.stav === "odlozena" && o.dovod ? '<p class="s-varovanie">Odložená: ' + esc(o.dovod) + "</p>" : "") +
-      skenBox("Naskenujte balík") + posl +
+      skenBox("Naskenujte balík") + posl + "<!--KAM-->" +
       '<section class="card b-polozky">' + (pol || '<p class="muted" style="margin:0">Objednávka nemá položky.</p>') + "</section>" + baliky +
       '<div class="b-akcie"><button class="btn b-tl-odl" data-b="odlozit">⏸️ ODLOŽIŤ</button>' +
       '<button class="btn b-tl-hotovo" data-b="hotovo"' + (o.kompletne && o.stav !== "zabalena" ? "" : " disabled") + ">✅ HOTOVO</button></div>" +
@@ -267,6 +271,18 @@
 
   function dialogHtml() {
     if (!B.dialog) return "";
+    if (B.dialog.typ === "lupa") {
+      var D = B.dialog;
+      var zoz = D.baliky == null ? '<p class="muted" style="margin:0">Načítavam…</p>' : !D.baliky.length ? '<p class="muted" style="margin:0">Na sklade ani v Krčmičke nie je žiadny balík tohto produktu.</p>' :
+        '<div class="rows b-lupa-zoz">' + D.baliky.map(function (b) {
+          return '<div class="row"><span><b class="num">' + esc(b.expiracia ? new Date(b.expiracia).toLocaleDateString("sk-SK") : "bez expirácie") + "</b>" +
+            '<span class="muted"> · ' + esc(b.kod) + " · " + (b.stav === "krcmicka" ? "Krčmička" : "sklad") + "</span></span>" +
+            '<button class="btn r-mini" data-b-vyber="' + esc(b.kod) + '">Vydať</button></div>';
+        }).join("") + "</div>";
+      return '<div class="f-dialog-pozadie" data-b="zavri"></div><div class="f-dialog" role="dialog" aria-modal="true" aria-label="Balík bez štítku">' +
+        '<div class="f-lista"><h3>🔍 ' + esc(D.nazov) + '</h3><button class="btn-link" data-b="zavri" aria-label="Zavrieť">✕</button></div>' +
+        '<p class="muted" style="margin:0">Balík bez štítku: vyberte ten, ktorého dátum expirácie je napísaný na balíku (najstaršie hore).</p>' + zoz + "</div>";
+    }
     return '<div class="f-dialog-pozadie" data-b="zavri"></div><div class="f-dialog" role="dialog" aria-modal="true" aria-label="Odložiť objednávku">' +
       '<div class="f-lista"><h3>Odložiť objednávku</h3><button class="btn-link" data-b="zavri" aria-label="Zavrieť">✕</button></div>' +
       '<form class="f-form" id="b-odlozit-form"><label class="field"><span class="label">Dôvod – čo chýba (uvidí zákaznícky servis vo Furmankách)</span>' +
@@ -278,15 +294,20 @@
     if (!koren || !koren.isConnected) return;
     var obsah = document.getElementById("b-obsah");
     if (!obsah) {
-      koren.innerHTML = '<div id="b-obsah"></div><div id="b-kamera" hidden></div>';
+      koren.innerHTML = '<div id="b-hore"></div><div id="b-kamera" hidden></div><div id="b-obsah"></div><div id="b-kam-miesto" class="s-kam-miesto"></div><div id="b-kam-lista" class="s-kam-lista"></div>';
       obsah = document.getElementById("b-obsah");
     }
     var aktivny = document.activeElement && document.activeElement.id === "b-kod";
-    obsah.innerHTML = (B.pohlad === "objednavka" ? pohladObjednavka() : B.pohlad === "furmanka" ? pohladFurmanka() : pohladZoznam()) + dialogHtml();
+    var casti = ((B.pohlad === "objednavka" ? pohladObjednavka() : B.pohlad === "furmanka" ? pohladFurmanka() : pohladZoznam()) + dialogHtml()).split("<!--KAM-->");
+    document.getElementById("b-hore").innerHTML = casti[0];
+    obsah.innerHTML = casti[1] || "";
+    var skener = B.pohlad !== "zoznam";
     var kam = document.getElementById("b-kamera");
-    if (kam) { kam.hidden = kameraStav === "vyp" || B.pohlad === "zoznam"; }
+    if (kam) { kam.hidden = kameraStav === "vyp" || !skener; }
+    var lista = document.getElementById("b-kam-lista"); lista.hidden = !skener; lista.innerHTML = skener ? listaKamery() : "";
+    document.getElementById("b-kam-miesto").hidden = !skener;
     if (aktivny) obal();
-    var dv = document.getElementById("b-dovod"); if (dv && B.dialog === "novy") { B.dialog = "otvoreny"; dv.focus(); }
+    var dv = document.getElementById("b-dovod"); if (dv && B.dialog && B.dialog.fokus) { B.dialog.fokus = false; dv.focus(); }
   }
 
   // ---------- akcie ----------
@@ -304,6 +325,14 @@
     var d = t.dataset;
     if (d.bFurmanka) { B.fId = +d.bFurmanka; B.fData = null; B.pohlad = "furmanka"; B.sprava = null; nacitajFurmanku().then(obal); return; }
     if (d.bObj) { otvorObjednavku(d.bObj); return; }
+    if (d.bLupa) {
+      var pl = ((B.obj && B.obj.polozky) || []).filter(function (x) { return x.kod === d.bLupa; })[0] || {};
+      B.dialog = { typ: "lupa", kod: d.bLupa, nazov: pl.nazov || d.bLupa, baliky: null }; prekresli();
+      DB.from("baliky").select("kod, stav, expiracia").eq("produkt_kod", d.bLupa).in("stav", ["sklad", "krcmicka"]).order("expiracia", { ascending: true }).limit(100)
+        .then(function (r) { if (B.dialog && B.dialog.kod === d.bLupa) { B.dialog.baliky = r.error ? [] : (r.data || []); if (r.error) B.sprava = { typ: "chyba", text: chybaText(r.error) }; prekresli(); } });
+      return;
+    }
+    if (d.bVyber) { B.dialog = null; poslednyKod = ""; skenBalika(d.bVyber); return; }
     if (d.bPotvrd) { po(rpc("balenie_potvrd", { p_cislo: B.obj.cislo, p_kod: d.bPotvrd, p_ks: +d.ks })); return; }
     if (d.bVrat) {
       if (!window.confirm("Zrušiť sken balíka " + d.bVrat + "? Vráti sa na sklad.")) return;
@@ -326,7 +355,7 @@
           if (r && r.ok) { pip(true); B.pohlad = "furmanka"; B.cislo = null; B.obj = null; B.posledny = null; prekresli(); nacitajFurmanku(true); obal(); }
         });
         break;
-      case "odlozit": B.dialog = "novy"; prekresli(); break;
+      case "odlozit": B.dialog = { typ: "odlozit", fokus: true }; prekresli(); break;
       case "znova":
         if (!window.confirm("Začať balenie tejto objednávky odznova? Všetky naskenované balíky sa vrátia na sklad.")) return;
         po(rpc("balenie_stav", { p_cislo: B.obj.cislo, p_stav: "znova" }), function (r) { return "Vrátené balíky: " + (r.vratene || 0) + ". Môžete baliť odznova."; });
