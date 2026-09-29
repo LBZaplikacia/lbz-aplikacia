@@ -452,3 +452,63 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
   :root:not([data-theme="light"]) .pill.warn, :root:not([data-theme="light"]) .pill.bad { background: #4a2420; }
 }
 .rail-dole { display: grid; }
+
+/* ---------- Rozpis práce (v0.12) ---------- */
+.main:has(.r-siroke) { max-width: none; }
+#rozpis-root { display: grid; gap: 16px; min-width: 0; }
+.r-obal { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.r-tab { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; min-width: 860px; }
+.r-tab th, .r-tab td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 6px; vertical-align: top; }
+.r-tab thead th { background: #efe3c8; font-size: 13px; font-weight: 800; text-align: center; padding: 8px 4px; }
+.r-tab thead th.r-dnes { background: var(--gold); color: #2b1d1a; }
+.r-tab thead th.r-mimo { opacity: .45; }
+.r-tab .r-den { text-transform: uppercase; letter-spacing: .05em; }
+.r-tab th.r-poz { width: 118px; text-align: left; font-size: 13px; font-weight: 800; background: var(--surface); vertical-align: middle; }
+.r-tab tr:last-child td, .r-tab tr:last-child th { border-bottom: 0; }
+.r-tab td:last-child, .r-tab th:last-child { border-right: 0; }
+.r-bunka { min-height: 44px; }
+.r-nerobi { background: repeating-linear-gradient(135deg, #2b1d1a0d 0 6px, transparent 6px 12px), #2b1d1a14; }
+.r-cipy { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.r-cip { border: 1px solid rgba(0,0,0,.12); border-radius: 8px; padding: 4px 8px; font: 700 13px/1.15 var(--font-body); display: inline-grid; justify-items: start; gap: 1px; min-height: 32px; text-align: left; cursor: pointer; max-width: 100%; }
+.r-cip small { font-size: 11px; font-weight: 600; opacity: .85; }
+.r-cip.r-ja { outline: 3px solid var(--accent); outline-offset: 1px; }
+.r-cip.r-vynimka { border-style: dashed; border-color: #1b120f; }
+.r-cip:hover { filter: brightness(.95); }
+.r-volne { background: var(--surface); color: var(--muted); border: 2px dashed var(--gold); }
+.r-plus { border: 1px dashed var(--line); background: transparent; color: var(--muted); border-radius: 8px; min-width: 32px; min-height: 32px; font-weight: 800; font-size: 16px; opacity: .55; }
+.r-plus:hover, .r-plus:focus-visible { opacity: 1; border-color: var(--gold); color: var(--accent); }
+.r-nerobi .r-plus { opacity: .35; }
+.r-lista { display: flex; gap: 8px; flex-wrap: wrap; }
+.r-mini { min-height: 40px; padding: 6px 12px; font-size: 14px; }
+.r-legenda { display: flex; flex-wrap: wrap; gap: 6px; }
+.r-leg { display: inline-block; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 700; border: 1px solid rgba(0,0,0,.12); }
+.r-moje-zoznam { display: flex; gap: 8px; flex-wrap: wrap; }
+.r-moja { border: 1px solid var(--line); background: var(--accent-soft); border-radius: 12px; padding: 8px 12px; display: grid; gap: 2px; text-align: left; font-size: 13px; cursor: pointer; }
+.r-moja b { font-size: 15px; }
+.r-pozn textarea { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--bg); font: inherit; color: var(--ink); width: 100%; }
+.r-dni { display: grid; gap: 12px; }
+.r-den-karta { gap: 8px; }
+.r-den-karta h3 { font-size: 16px; }
+.r-dnes-karta { border-color: var(--gold); box-shadow: inset 5px 0 0 var(--gold), var(--shadow); }
+.r-den-riadok { display: grid; grid-template-columns: 92px 1fr; gap: 8px; align-items: center; padding: 4px 0; border-top: 1px solid var(--line); }
+.r-den-riadok:first-of-type { border-top: 0; }
+.r-den-poz { font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.r-kto { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0; font-size: 15px; }
+.r-kto .r-leg { font-size: 15px; padding: 5px 14px; }
+.r-h4 { margin: 4px 0 0; font-size: 14px; }
+.r-riadok { display: flex; gap: 8px; }
+.r-select { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--bg); min-height: 44px; color: var(--ink); font: inherit; }
+.r-mala { margin: 0; font-size: 12px; }
+.f-dialog .field input[type="time"], .f-dialog .field input:not([type]) { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--bg); min-height: 44px; color: var(--ink); font: inherit; }
+.r-ludia { display: grid; gap: 8px; }
+.r-clovek { display: grid; grid-template-columns: 48px 1fr 1.4fr auto auto; gap: 8px; align-items: center; }
+.r-clovek input:not([type="checkbox"]) { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); min-height: 42px; color: var(--ink); font: inherit; min-width: 0; }
+.r-clovek input[type="color"] { padding: 2px; width: 48px; }
+.r-novy { border-top: 1px solid var(--line); padding-top: 10px; }
+.r-hist { align-items: start; }
+.r-hist-kto { font-size: 12px; text-align: right; white-space: nowrap; }
+@media (max-width: 640px) {
+  .r-clovek { grid-template-columns: 44px 1fr auto; }
+  .r-clovek input[name="email"] { grid-column: 1 / -1; }
+  .head-tl { flex-wrap: wrap; }
+}
