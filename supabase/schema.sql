@@ -2541,3 +2541,324 @@ language sql stable security definer set search_path = public as $$
       left join public.geokody g on g.ok and g.adresa = concat_ws(', ', nullif(o.ulica, ''), nullif(trim(concat_ws(' ', o.psc, o.mesto)), ''))
       where s.furmanka_id = p_id), '[]'::jsonb)) end
 $$;
+
+-- =========================================================================
+-- 19) DOCHÁDZKA (29. 9. 2026)
+--     Príchod / odchod z osobného účtu (osoba = rozpis_osoby podľa e-mailu), miesto, GPS pri príchode a odchode.
+--     Prestávka 30 min pri šichte ≥ 6 h, stravné podľa miesta (pravidlá web appky Master_dochadzka).
+--     Mzdy sa nepočítajú. Neprítomnosť (dovolenka, PN/OČR, lekár) = žiadosť zamestnanca, schváli IT/CEO.
+--     Záznamy prenesené zo starých tabuliek (zdroj 'import') sú len na čítanie.
+-- =========================================================================
+alter table public.rozpis_osoby add column if not exists norma_h numeric(4,2) not null default 8;   -- hodín na deň (dovolenka, PN)
+
+create table if not exists public.dochadzka (
+  id              bigint generated always as identity primary key,
+  osoba_id        bigint not null references public.rozpis_osoby(id),
+  datum           date not null,
+  typ             text not null default 'praca' check (typ in ('praca','dovolenka','pn','ocr','lekar')),
+  miesto          text,
+  prichod         timestamptz,
+  odchod          timestamptz,
+  prestavka_min   int not null default 0,
+  odpracovane_min int,
+  stravne         numeric(6,2) not null default 0,
+  poznamka        text,
+  gps_prichod     jsonb,
+  gps_odchod      jsonb,
+  zdroj           text not null default 'app' check (zdroj in ('app','rucne','import','absencia')),
+  absencia_id     bigint,
+  vytvorene       timestamptz not null default now(),
+  upravil         uuid,
+  upravene        timestamptz
+);
+create index if not exists dochadzka_osoba_datum on public.dochadzka (osoba_id, datum);
+create unique index if not exists dochadzka_jedna_otvorena on public.dochadzka (osoba_id) where typ = 'praca' and odchod is null and zdroj <> 'import';
+
+create table if not exists public.dochadzka_absencie (
+  id         bigint generated always as identity primary key,
+  osoba_id   bigint not null references public.rozpis_osoby(id),
+  typ        text not null check (typ in ('dovolenka','pn','ocr','lekar','oprava')),   -- oprava = žiadosť o opravu záznamu dochádzky
+  od_dna     date not null,
+  do_dna     date not null,
+  cas_od     time,
+  cas_do     time,
+  poznamka   text,
+  stav       text not null default 'ziadost' check (stav in ('ziadost','schvalena','zamietnuta')),
+  vytvorena  timestamptz not null default now(),
+  kto        uuid default auth.uid(),
+  rozhodol   uuid,
+  rozhodnute timestamptz,
+  dovod      text
+);
+
+alter table public.dochadzka_absencie add column if not exists miesto text;
+alter table public.dochadzka_absencie add column if not exists dochadzka_id bigint;
+alter table public.dochadzka_absencie drop constraint if exists dochadzka_absencie_typ_check;
+alter table public.dochadzka_absencie add constraint dochadzka_absencie_typ_check check (typ in ('dovolenka','pn','ocr','lekar','oprava'));
+
+create table if not exists public.dochadzka_suhlasy (   -- „Potvrdenie o oboznámení“ so zaznamenaním polohy
+  uid   uuid primary key,
+  cas   timestamptz not null default now(),
+  text  text
+);
+
+alter table public.dochadzka enable row level security;            -- prístup len cez funkcie
+alter table public.dochadzka_absencie enable row level security;
+alter table public.dochadzka_suhlasy enable row level security;
+
+insert into public.moduly (kod, nazov, poradie, aktivny) values ('dochadzka', 'Dochádzka', 30, true)
+on conflict (kod) do update set nazov = excluded.nazov, aktivny = true;
+insert into public.pristupy (rola, modul, uprava) select r, 'dochadzka', true from unnest(array['it','ceo','zamestnanec']) r on conflict do nothing;
+
+create or replace function public.dochadzka_spravca() returns boolean
+language sql stable security definer set search_path = public as $$ select coalesce(public.moja_rola() in ('it','ceo'), false) $$;
+create or replace function public.dochadzka_citatel() returns boolean
+language sql stable security definer set search_path = public as $$ select coalesce(public.moja_rola() in ('it','ceo','uctovnicka'), false) $$;
+
+-- stravné (web appka Master_dochadzka): z čistého času
+create or replace function public.dochadzka_stravne(p_miesto text, p_min int) returns numeric
+language sql immutable as $$
+  select case
+    when upper(coalesce(p_miesto,'')) in ('ZBOJSKÁ','ADMINISTRATÍVA') then case when p_min >= 240 then 5 else 0 end
+    when upper(coalesce(p_miesto,'')) in ('ROZVOZ','OBCHOD') then
+      case when p_min >= 1080 then 20.60 when p_min >= 720 then 13.60 when p_min >= 300 then 9.30 else 0 end
+    else 0 end
+$$;
+
+create or replace function public.dochadzka_riadok(d public.dochadzka) returns jsonb
+language sql stable as $$
+  select jsonb_build_object('id', d.id, 'datum', d.datum, 'typ', d.typ, 'miesto', d.miesto, 'prichod', d.prichod, 'odchod', d.odchod,
+    'prestavka_min', d.prestavka_min, 'odpracovane_min', d.odpracovane_min, 'stravne', d.stravne, 'poznamka', d.poznamka,
+    'zdroj', d.zdroj, 'len_citanie', d.zdroj = 'import',
+    'gps', case when public.dochadzka_spravca() then jsonb_build_object('prichod', d.gps_prichod, 'odchod', d.gps_odchod) end)
+$$;
+
+-- úvodná karta zamestnanca
+create or replace function public.dochadzka_moja() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_o public.rozpis_osoby%rowtype; v_otv public.dochadzka%rowtype; v_m date := date_trunc('month', public.dnes_sk())::date;
+begin
+  select * into v_o from public.rozpis_osoby where id = public.rozpis_moja_osoba();
+  if v_o.id is null then return jsonb_build_object('ok', true, 'osoba', null); end if;
+  select * into v_otv from public.dochadzka where osoba_id = v_o.id and typ = 'praca' and odchod is null and zdroj <> 'import' order by prichod desc limit 1;
+  return jsonb_build_object('ok', true,
+    'osoba', jsonb_build_object('id', v_o.id, 'meno', v_o.meno),
+    'suhlas', exists (select 1 from public.dochadzka_suhlasy where uid = auth.uid()),
+    'otvorena', case when v_otv.id is not null then public.dochadzka_riadok(v_otv) end,
+    'smeny', coalesce((select jsonb_agg(jsonb_build_object('pozicia', m.pozicia, 'nazov', p.nazov, 'cas_od', m.cas_od, 'cas_do', m.cas_do) order by m.cas_od nulls last)
+       from public.rozpis_miesta m join public.rozpis_pozicie p on p.kod = m.pozicia where m.osoba_id = v_o.id and m.datum = public.dnes_sk()), '[]'::jsonb),
+    'zajtra', coalesce((select jsonb_agg(jsonb_build_object('nazov', p.nazov, 'cas_od', m.cas_od, 'cas_do', m.cas_do) order by m.cas_od nulls last)
+       from public.rozpis_miesta m join public.rozpis_pozicie p on p.kod = m.pozicia where m.osoba_id = v_o.id and m.datum = public.dnes_sk() + 1), '[]'::jsonb),
+    'mesiac', (select jsonb_build_object('min', coalesce(sum(odpracovane_min), 0), 'dni', count(distinct datum) filter (where typ = 'praca'),
+        'stravne', coalesce(sum(stravne), 0)) from public.dochadzka where osoba_id = v_o.id and datum >= v_m and datum < (v_m + interval '1 month')::date),
+    'ziadosti', (select count(*) from public.dochadzka_absencie where osoba_id = v_o.id and stav = 'ziadost'));
+end $$;
+
+create or replace function public.dochadzka_suhlas(p_text text) returns jsonb
+language sql security definer set search_path = public as $$
+  insert into public.dochadzka_suhlasy (uid, text) values (auth.uid(), p_text) on conflict (uid) do nothing;
+  select jsonb_build_object('ok', true)
+$$;
+
+create or replace function public.dochadzka_prichod(p_miesto text, p_gps jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_os bigint := public.rozpis_moja_osoba(); v_id bigint;
+begin
+  if v_os is null then return jsonb_build_object('ok', false, 'text', 'Účet nie je priradený k zamestnancovi – kontaktujte vedenie'); end if;
+  if coalesce(trim(p_miesto), '') = '' then return jsonb_build_object('ok', false, 'text', 'Vyberte miesto'); end if;
+  if exists (select 1 from public.dochadzka where osoba_id = v_os and typ = 'praca' and odchod is null and zdroj <> 'import') then
+    return jsonb_build_object('ok', false, 'text', 'Príchod už je zapísaný – najprv zapíšte odchod'); end if;
+  insert into public.dochadzka (osoba_id, datum, typ, miesto, prichod, gps_prichod, zdroj, upravil)
+    values (v_os, public.dnes_sk(), 'praca', upper(trim(p_miesto)), now(), p_gps, 'app', auth.uid()) returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id, 'text', 'Príchod zapísaný ' || to_char(now() at time zone 'Europe/Bratislava', 'HH24:MI'));
+end $$;
+
+create or replace function public.dochadzka_prepocet(p_id bigint) returns void
+language plpgsql security definer set search_path = public as $$
+declare d public.dochadzka%rowtype; v_hr int;
+begin
+  select * into d from public.dochadzka where id = p_id;
+  if d.typ <> 'praca' or d.prichod is null or d.odchod is null then return; end if;
+  v_hr := round(extract(epoch from (d.odchod - d.prichod)) / 60);
+  if v_hr < 0 then v_hr := v_hr + 1440; end if;
+  update public.dochadzka set prestavka_min = case when v_hr >= 360 then 30 else 0 end,
+    odpracovane_min = v_hr - case when v_hr >= 360 then 30 else 0 end,
+    stravne = public.dochadzka_stravne(d.miesto, v_hr - case when v_hr >= 360 then 30 else 0 end)
+  where id = p_id;
+end $$;
+
+create or replace function public.dochadzka_odchod(p_gps jsonb, p_poznamka text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_os bigint := public.rozpis_moja_osoba(); d public.dochadzka%rowtype;
+begin
+  select * into d from public.dochadzka where osoba_id = v_os and typ = 'praca' and odchod is null and zdroj <> 'import' order by prichod desc limit 1;
+  if d.id is null then return jsonb_build_object('ok', false, 'text', 'Nie ste v práci – najprv zapíšte príchod'); end if;
+  -- furman: odchod až po ukončení rozvozu
+  if d.miesto = 'ROZVOZ' and exists (select 1 from public.trasy t join public.furmanky f on f.id = t.furmanka_id
+       where t.stav = 'na_ceste' or (t.stav = 'naplanovana' and f.datum = public.dnes_sk() and t.zacata is not null)) then
+    return jsonb_build_object('ok', false, 'text', 'Najprv ukončite rozvoz v module Trasa (🏁 Ukončiť rozvoz)'); end if;
+  update public.dochadzka set odchod = now(), gps_odchod = p_gps,
+    poznamka = nullif(concat_ws(' | ', nullif(poznamka, ''), nullif(trim(coalesce(p_poznamka, '')), '')), ''), upravene = now()
+  where id = d.id;
+  perform public.dochadzka_prepocet(d.id);
+  select * into d from public.dochadzka where id = d.id;
+  return jsonb_build_object('ok', true, 'riadok', public.dochadzka_riadok(d),
+    'text', 'Odchod zapísaný – odpracované ' || (d.odpracovane_min / 60) || ' h ' || lpad((d.odpracovane_min % 60)::text, 2, '0') || ' min');
+end $$;
+
+-- mesiac jednej osoby (zamestnanec len seba; IT, CEO, účtovníčka kohokoľvek)
+create or replace function public.dochadzka_mesiac(p_osoba bigint, p_mesiac date) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_os bigint := coalesce(p_osoba, public.rozpis_moja_osoba()); v_m date := date_trunc('month', coalesce(p_mesiac, public.dnes_sk()))::date;
+begin
+  if v_os is null then return jsonb_build_object('ok', false, 'text', 'Účet nie je priradený k zamestnancovi'); end if;
+  if v_os <> coalesce(public.rozpis_moja_osoba(), -1) and not public.dochadzka_citatel() then return jsonb_build_object('ok', false, 'text', 'Nemáte prístup'); end if;
+  return jsonb_build_object('ok', true, 'mesiac', v_m,
+    'osoba', (select jsonb_build_object('id', id, 'meno', meno, 'norma_h', norma_h) from public.rozpis_osoby where id = v_os),
+    'riadky', coalesce((select jsonb_agg(public.dochadzka_riadok(d) order by d.datum, d.prichod nulls first) from public.dochadzka d
+        where d.osoba_id = v_os and d.datum >= v_m and d.datum < (v_m + interval '1 month')::date), '[]'::jsonb),
+    'absencie', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'typ', a.typ, 'od', a.od_dna, 'do', a.do_dna, 'cas_od', a.cas_od, 'cas_do', a.cas_do,
+        'stav', a.stav, 'poznamka', a.poznamka, 'dovod', a.dovod) order by a.od_dna desc) from public.dochadzka_absencie a
+        where a.osoba_id = v_os and a.do_dna >= v_m - 31), '[]'::jsonb),
+    'uprava', public.dochadzka_spravca());
+end $$;
+
+-- prehľad pre IT / CEO: kto je v práci, kto má dnes smenu a neprišiel, žiadosti, súčty za mesiac
+create or replace function public.dochadzka_prehlad(p_mesiac date) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_m date := date_trunc('month', coalesce(p_mesiac, public.dnes_sk()))::date;
+begin
+  if not public.dochadzka_citatel() then return jsonb_build_object('ok', false, 'text', 'Nemáte prístup'); end if;
+  return jsonb_build_object('ok', true, 'mesiac', v_m,
+    'v_praci', coalesce((select jsonb_agg(jsonb_build_object('osoba', o.meno, 'id', o.id, 'miesto', d.miesto, 'prichod', d.prichod,
+        'min', round(extract(epoch from (now() - d.prichod)) / 60)) order by d.prichod)
+        from public.dochadzka d join public.rozpis_osoby o on o.id = d.osoba_id where d.typ = 'praca' and d.odchod is null and d.zdroj <> 'import'), '[]'::jsonb),
+    'neprisli', coalesce((select jsonb_agg(jsonb_build_object('osoba', o.meno, 'id', o.id, 'pozicia', p.nazov, 'cas_od', m.cas_od) order by m.cas_od nulls last)
+        from public.rozpis_miesta m join public.rozpis_osoby o on o.id = m.osoba_id join public.rozpis_pozicie p on p.kod = m.pozicia
+        where m.datum = public.dnes_sk() and (m.cas_od is null or m.cas_od <= (now() at time zone 'Europe/Bratislava')::time)
+          and not exists (select 1 from public.dochadzka d where d.osoba_id = o.id and d.datum = public.dnes_sk())), '[]'::jsonb),
+    'ziadosti', coalesce((select jsonb_agg(jsonb_build_object('id', a.id, 'osoba', o.meno, 'typ', a.typ, 'od', a.od_dna, 'do', a.do_dna, 'cas_od', a.cas_od, 'cas_do', a.cas_do,
+        'poznamka', a.poznamka, 'vytvorena', a.vytvorena, 'miesto', a.miesto, 'oprava_zaznamu', a.dochadzka_id is not null) order by a.od_dna) from public.dochadzka_absencie a join public.rozpis_osoby o on o.id = a.osoba_id where a.stav = 'ziadost'), '[]'::jsonb),
+    'ludia', coalesce((select jsonb_agg(x order by x->>'meno') from (
+        select jsonb_build_object('id', o.id, 'meno', o.meno, 'ucet', o.email is not null, 'norma_h', o.norma_h,
+          'min', coalesce(sum(d.odpracovane_min), 0), 'dni', count(distinct d.datum) filter (where d.typ = 'praca'), 'stravne', coalesce(sum(d.stravne), 0)) x
+        from public.rozpis_osoby o left join public.dochadzka d on d.osoba_id = o.id and d.datum >= v_m and d.datum < (v_m + interval '1 month')::date
+        where o.aktivny group by o.id) s), '[]'::jsonb),
+    'uprava', public.dochadzka_spravca());
+end $$;
+
+-- žiadosť o neprítomnosť
+create or replace function public.dochadzka_ziadost(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_os bigint := public.rozpis_moja_osoba(); v_od date := (p->>'od')::date; v_do date := coalesce(nullif(p->>'do','')::date, (p->>'od')::date);
+begin
+  if v_os is null then return jsonb_build_object('ok', false, 'text', 'Účet nie je priradený k zamestnancovi'); end if;
+  if v_od is null or v_do < v_od then return jsonb_build_object('ok', false, 'text', 'Skontrolujte dátumy'); end if;
+  if coalesce(p->>'typ','') not in ('dovolenka','pn','ocr','lekar','oprava') then return jsonb_build_object('ok', false, 'text', 'Vyberte druh'); end if;
+  if p->>'typ' = 'oprava' then
+    v_do := v_od;
+    if nullif(p->>'cas_od','') is null and nullif(p->>'cas_do','') is null then return jsonb_build_object('ok', false, 'text', 'Zadajte správny čas príchodu alebo odchodu'); end if;
+    if nullif(p->>'dochadzka_id','') is not null and not exists (select 1 from public.dochadzka where id = (p->>'dochadzka_id')::bigint and osoba_id = v_os and zdroj <> 'import') then
+      return jsonb_build_object('ok', false, 'text', 'Záznam sa nedá opraviť'); end if;
+  end if;
+  insert into public.dochadzka_absencie (osoba_id, typ, od_dna, do_dna, cas_od, cas_do, poznamka, miesto, dochadzka_id)
+    values (v_os, p->>'typ', v_od, v_do, nullif(p->>'cas_od','')::time, nullif(p->>'cas_do','')::time, nullif(trim(coalesce(p->>'poznamka','')), ''),
+            upper(nullif(trim(coalesce(p->>'miesto','')), '')), nullif(p->>'dochadzka_id','')::bigint);
+  return jsonb_build_object('ok', true, 'text', 'Žiadosť odoslaná – čaká na schválenie');
+end $$;
+
+-- schválenie / zamietnutie (IT, CEO) → schválená sa zapíše do dochádzky (pracovné dni, norma osoby; lekár podľa času)
+create or replace function public.dochadzka_rozhodni(p_id bigint, p_schval boolean, p_dovod text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare a public.dochadzka_absencie%rowtype; v_d date; v_norma int; v_n int := 0; v_min int;
+begin
+  if not public.dochadzka_spravca() then return jsonb_build_object('ok', false, 'text', 'Schvaľuje IT alebo CEO'); end if;
+  select * into a from public.dochadzka_absencie where id = p_id;
+  if a.id is null or a.stav <> 'ziadost' then return jsonb_build_object('ok', false, 'text', 'Žiadosť už je vybavená'); end if;
+  update public.dochadzka_absencie set stav = case when p_schval then 'schvalena' else 'zamietnuta' end, rozhodol = auth.uid(), rozhodnute = now(), dovod = nullif(trim(coalesce(p_dovod,'')), '')
+  where id = p_id;
+  if p_schval and a.typ = 'oprava' then
+    if a.dochadzka_id is not null then
+      update public.dochadzka set
+        prichod = coalesce((a.od_dna + a.cas_od) at time zone 'Europe/Bratislava', prichod),
+        odchod = case when a.cas_do is not null then (a.od_dna + a.cas_do) at time zone 'Europe/Bratislava' + case when a.cas_od is not null and a.cas_do < a.cas_od then interval '1 day' else interval '0' end else odchod end,
+        miesto = coalesce(a.miesto, miesto), upravil = auth.uid(), upravene = now(),
+        poznamka = nullif(concat_ws(' | ', nullif(poznamka, ''), 'opravené na žiadosť'), '')
+      where id = a.dochadzka_id;
+      perform public.dochadzka_prepocet(a.dochadzka_id);
+    else
+      insert into public.dochadzka (osoba_id, datum, typ, miesto, prichod, odchod, poznamka, zdroj, upravil, upravene)
+        values (a.osoba_id, a.od_dna, 'praca', coalesce(a.miesto, 'ZBOJSKÁ'), (a.od_dna + a.cas_od) at time zone 'Europe/Bratislava',
+          case when a.cas_do is not null then (a.od_dna + a.cas_do) at time zone 'Europe/Bratislava' end, coalesce(a.poznamka, 'doplnené na žiadosť'), 'rucne', auth.uid(), now())
+        returning id into v_n;
+      perform public.dochadzka_prepocet(v_n);
+    end if;
+    return jsonb_build_object('ok', true, 'text', 'Oprava schválená a zapísaná');
+  end if;
+  if p_schval then
+    select round(norma_h * 60) into v_norma from public.rozpis_osoby where id = a.osoba_id;
+    v_d := a.od_dna;
+    while v_d <= a.do_dna loop
+      if extract(isodow from v_d) < 6 or a.typ = 'lekar' then
+        v_min := case when a.typ = 'lekar' and a.cas_od is not null and a.cas_do is not null
+                      then round(extract(epoch from (a.cas_do - a.cas_od)) / 60) else v_norma end;
+        insert into public.dochadzka (osoba_id, datum, typ, prichod, odchod, odpracovane_min, zdroj, absencia_id, poznamka, upravil)
+          values (a.osoba_id, v_d, a.typ,
+            case when a.cas_od is not null then (v_d + a.cas_od) at time zone 'Europe/Bratislava' end,
+            case when a.cas_do is not null then (v_d + a.cas_do) at time zone 'Europe/Bratislava' end,
+            v_min, 'absencia', a.id, a.poznamka, auth.uid());
+        v_n := v_n + 1;
+      end if;
+      v_d := v_d + 1;
+    end loop;
+  end if;
+  return jsonb_build_object('ok', true, 'text', case when p_schval then 'Schválené – zapísané dni: ' || v_n else 'Zamietnuté' end);
+end $$;
+
+-- ručná úprava (IT, CEO): p {id?, osoba_id, datum, typ, miesto, prichod 'HH:MM', odchod 'HH:MM', poznamka, zmazat}
+create or replace function public.dochadzka_uprav(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_id bigint := nullif(p->>'id','')::bigint; d public.dochadzka%rowtype; v_dat date; v_pr timestamptz; v_od timestamptz;
+begin
+  if not public.dochadzka_spravca() then return jsonb_build_object('ok', false, 'text', 'Upravuje IT alebo CEO'); end if;
+  if v_id is not null then
+    select * into d from public.dochadzka where id = v_id;
+    if d.id is null then return jsonb_build_object('ok', false, 'text', 'Záznam sa nenašiel'); end if;
+    if d.zdroj = 'import' then return jsonb_build_object('ok', false, 'text', 'Prenesené záznamy zo starej dochádzky sa neupravujú'); end if;
+    if coalesce((p->>'zmazat')::boolean, false) then delete from public.dochadzka where id = v_id; return jsonb_build_object('ok', true, 'text', 'Záznam zmazaný'); end if;
+  end if;
+  v_dat := coalesce(nullif(p->>'datum','')::date, d.datum);
+  v_pr := case when nullif(p->>'prichod','') is not null then (v_dat + (p->>'prichod')::time) at time zone 'Europe/Bratislava' else d.prichod end;
+  v_od := case when nullif(p->>'odchod','') is not null then (v_dat + (p->>'odchod')::time) at time zone 'Europe/Bratislava' else null end;
+  if v_od is not null and v_pr is not null and v_od < v_pr then v_od := v_od + interval '1 day'; end if;
+  if v_id is null then
+    insert into public.dochadzka (osoba_id, datum, typ, miesto, prichod, odchod, poznamka, zdroj, upravil, upravene)
+      values ((p->>'osoba_id')::bigint, v_dat, coalesce(nullif(p->>'typ',''), 'praca'), upper(nullif(trim(coalesce(p->>'miesto','')), '')), v_pr, v_od,
+              nullif(trim(coalesce(p->>'poznamka','')), ''), 'rucne', auth.uid(), now()) returning id into v_id;
+  else
+    update public.dochadzka set datum = v_dat, typ = coalesce(nullif(p->>'typ',''), typ), miesto = upper(coalesce(nullif(trim(coalesce(p->>'miesto','')), ''), miesto)),
+      prichod = v_pr, odchod = v_od, poznamka = nullif(trim(coalesce(p->>'poznamka', poznamka, '')), ''), upravil = auth.uid(), upravene = now()
+    where id = v_id;
+  end if;
+  perform public.dochadzka_prepocet(v_id);
+  return jsonb_build_object('ok', true, 'text', 'Uložené');
+end $$;
+
+revoke all on function public.dochadzka_spravca(), public.dochadzka_citatel(), public.dochadzka_moja(), public.dochadzka_suhlas(text),
+  public.dochadzka_prichod(text, jsonb), public.dochadzka_prepocet(bigint), public.dochadzka_odchod(jsonb, text), public.dochadzka_mesiac(bigint, date),
+  public.dochadzka_prehlad(date), public.dochadzka_ziadost(jsonb), public.dochadzka_rozhodni(bigint, boolean, text), public.dochadzka_uprav(jsonb) from public, anon;
+grant execute on function public.dochadzka_moja(), public.dochadzka_suhlas(text), public.dochadzka_prichod(text, jsonb), public.dochadzka_odchod(jsonb, text),
+  public.dochadzka_mesiac(bigint, date), public.dochadzka_prehlad(date), public.dochadzka_ziadost(jsonb), public.dochadzka_rozhodni(bigint, boolean, text),
+  public.dochadzka_uprav(jsonb) to authenticated;
+
+-- denná norma zamestnanca (hodín na deň – dovolenka, PN, OČR) – mení IT alebo CEO
+create or replace function public.dochadzka_norma(p_osoba bigint, p_h numeric) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.dochadzka_spravca() then return jsonb_build_object('ok', false, 'text', 'Mení IT alebo CEO'); end if;
+  if p_h is null or p_h <= 0 or p_h > 24 then return jsonb_build_object('ok', false, 'text', 'Zadajte počet hodín (napr. 8 alebo 10,5)'); end if;
+  update public.rozpis_osoby set norma_h = p_h where id = p_osoba;
+  return jsonb_build_object('ok', true, 'text', 'Denná norma uložená: ' || replace(trim(to_char(p_h, 'FM990.99')), '.', ',') || ' h');
+end $$;
+revoke all on function public.dochadzka_norma(bigint, numeric) from public, anon;
+grant execute on function public.dochadzka_norma(bigint, numeric) to authenticated;
