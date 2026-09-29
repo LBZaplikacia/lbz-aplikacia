@@ -271,8 +271,9 @@ async function usporiadaj(zastavky: any[]): Promise<{ poradie: any[]; neplatne: 
   for (const z of platne) {
     const p = norm(z.poznamka).toUpperCase();
     const c = p.match(/CAS:\s*(\d+)/), por = p.match(/PORADIE:\s*(\d+)/);
-    z.cakanie = c ? +c[1] : (z.dobierka ? 10 : 5);
-    z.poradie = por ? +por[1] : (p.includes("PRIORITA") ? 1 : 999);
+    // vykládka a poradie z appky (Furmanky), inak kľúčové slová v poznámke, inak podľa skriptu
+    z.cakanie = z.vykladka != null && z.vykladka !== "" ? +z.vykladka : c ? +c[1] : (z.dobierka ? 10 : 5);
+    z.poradie = z.poradie_pevne != null ? +z.poradie_pevne : por ? +por[1] : ((z.priorita || p.includes("PRIORITA")) ? 1 : 999);
   }
   const rucne = platne.filter((z) => z.poradie < 999).sort((a, b) => a.poradie - b.poradie);
   const auto = platne.filter((z) => z.poradie >= 999);
@@ -334,7 +335,7 @@ async function skontrolujKapacitu() {
   for (const f of furm) {
     const z = (f.zastavky || []).filter((x: any) => x.adresa && x.adresa !== "-");
     if (!z.length) continue;
-    const hash = z.map((x: any) => x.adresa + "|" + x.dobierka + "|" + (x.poznamka || "")).join("#");
+    const hash = z.map((x: any) => x.adresa + "|" + x.dobierka + "|" + (x.poznamka || "") + "|" + (x.priorita ? 1 : 0) + "|" + (x.vykladka ?? "") + "|" + (x.poradie_pevne ?? "")).join("#");
     const h = String(await crypto.subtle.digest("SHA-1", new TextEncoder().encode(hash)).then((b) => Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, "0")).join("")));
     if (h === f.hash) continue;                        // nič sa nezmenilo → netreba volať Google
     try {
