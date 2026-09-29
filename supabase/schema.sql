@@ -2428,3 +2428,90 @@ create policy "trasa foto nahrat" on storage.objects for insert to authenticated
 update public.moduly set aktivny = true where kod = 'trasa';
 insert into public.pristupy (rola, modul, uprava) values ('it','trasa',true), ('ceo','trasa',true), ('zakaznicky_servis','trasa',true), ('furman','trasa',true)
   on conflict do nothing;
+
+
+-- =========================================================================
+-- 17) PORADIE, PRIORITA A VYKLÁDKA PRI OBJEDNÁVKE (29. 9. 2026)
+--     Zákaznícky servis vo Furmankách: ✔ Priorita (ide prvá, ostatné sa optimalizujú), Vykládka v minútach
+--     (prázdne = podľa skriptu: 5 min, dobierka 10 min), ↕️ Upraviť poradie ťahaním (pevné poradie celej furmanky).
+--     Nahrádza kľúčové slová PORADIE: n / PRIORITA / CAS: n v poznámke (tie ostávajú platné ako záloha).
+-- =========================================================================
+alter table public.zaradenia add column if not exists priorita boolean not null default false;
+alter table public.zaradenia add column if not exists vykladka_min int check (vykladka_min between 0 and 240);
+alter table public.zaradenia add column if not exists poradie_pevne boolean not null default false;
+
+-- p: {cislo, priorita?, vykladka_min? (null = podľa skriptu)}
+create or replace function public.zaradenie_trasa(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Nemáte oprávnenie'); end if;
+  update public.zaradenia set
+      priorita = case when p ? 'priorita' then coalesce((p->>'priorita')::boolean, false) else priorita end,
+      vykladka_min = case when p ? 'vykladka_min' then nullif(p->>'vykladka_min', '')::int else vykladka_min end,
+      kedy = now(), kto = auth.uid()
+    where cislo = p->>'cislo';
+  if not found then return jsonb_build_object('ok', false, 'text', 'Objednávka nie je vo furmanke'); end if;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- pevné poradie celej furmanky (ťahaním); prázdny zoznam = zrušiť pevné poradie (optimalizuje Google)
+create or replace function public.furmanka_poradie_pevne(p_id bigint, p_cisla text[]) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Nemáte oprávnenie'); end if;
+  if coalesce(array_length(p_cisla, 1), 0) = 0 then
+    update public.zaradenia set poradie_pevne = false where furmanka_id = p_id;
+    return jsonb_build_object('ok', true, 'text', 'Poradie sa bude optimalizovať automaticky');
+  end if;
+  update public.zaradenia z set poradie = x.i, poradie_pevne = true
+    from unnest(p_cisla) with ordinality x(c, i) where z.cislo = x.c and z.furmanka_id = p_id;
+  update public.zaradenia set poradie_pevne = false where furmanka_id = p_id and not (cislo = any(p_cisla));
+  return jsonb_build_object('ok', true, 'text', 'Poradie uložené – trasa pôjde presne v tomto poradí');
+end $$;
+
+revoke all on function public.zaradenie_trasa(jsonb), public.furmanka_poradie_pevne(bigint, text[]) from public, anon;
+grant execute on function public.zaradenie_trasa(jsonb), public.furmanka_poradie_pevne(bigint, text[]) to authenticated;
+
+create or replace function public.objednavka_json(p_cislo text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('cislo', o.cislo, 'zdroj', o.zdroj, 'status', o.status, 'meno', o.meno, 'firma', o.firma, 'telefon', o.telefon,
+    'email', o.email, 'ulica', o.ulica, 'psc', o.psc, 'mesto', o.mesto, 'doprava', o.doprava, 'platba', o.platba, 'platba_nazov', o.platba_nazov,
+    'suma', o.suma, 'faktura', o.faktura, 'poznamka', o.poznamka, 'upozornenie', o.upozornenie, 'region', o.region,
+    'vytvorena', o.vytvorena, 'zmenena', o.zmenena, 'rucne_polia', o.rucne_polia, 'ziva', public.ziva_objednavka(o.status),
+    'furmanka_id', z.furmanka_id, 'rucne', coalesce(z.rucne, false), 'poradie', z.poradie,
+    'priorita', coalesce(z.priorita, false), 'vykladka_min', z.vykladka_min, 'poradie_pevne', coalesce(z.poradie_pevne, false),
+    'balenie', (select jsonb_build_object('stav', b.stav, 'dovod', b.dovod) from public.balenie b where b.cislo = o.cislo),
+    'polozky', coalesce((select jsonb_object_agg(p.kod, p.mnozstvo) from public.objednavky_polozky p where p.cislo = o.cislo and p.mnozstvo <> 0), '{}'::jsonb),
+    'nazvy', coalesce((select jsonb_object_agg(p.kod, p.nazov) from public.objednavky_polozky p where p.cislo = o.cislo and p.mnozstvo <> 0), '{}'::jsonb))
+  from public.objednavky o left join public.zaradenia z on z.cislo = o.cislo
+  where o.cislo = p_cislo
+$$;
+
+-- podklady pre trasu a kontrolu kapacity: aj priorita, vykládka a pevné poradie
+create or replace function public.trasa_podklady(p_id bigint) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when not public.som_furmankar() then jsonb_build_object('ok', false, 'text', 'Trasu vytvára IT, CEO alebo zákaznícky servis') else
+  jsonb_build_object('ok', true, 'datum', f.datum, 'nazov', public.furmanka_nazov(f.region, f.datum),
+    'stav_trasy', (select stav from public.trasy where furmanka_id = f.id),
+    'zastavky', coalesce((select jsonb_agg(jsonb_build_object('cislo', o.cislo,
+        'adresa', concat_ws(', ', nullif(o.ulica, ''), nullif(trim(concat_ws(' ', o.psc, o.mesto)), '')),
+        'dobierka', coalesce(o.platba, 'DOBIERKA') not in ('ZAPLATENÉ', 'NA FAKTÚRU'),
+        'poznamka', o.poznamka, 'priorita', z.priorita, 'vykladka', z.vykladka_min,
+        'poradie_pevne', case when z.poradie_pevne then z.poradie end) order by z.poradie nulls last, o.vytvorena)
+      from public.zaradenia z join public.objednavky o on o.cislo = z.cislo where z.furmanka_id = f.id), '[]'::jsonb)) end
+  from public.furmanky f where f.id = p_id
+$$;
+
+create or replace function public.furmanky_na_kontrolu() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', f.id, 'nazov', public.furmanka_nazov(f.region, f.datum), 'hash', f.trasa_hash, 'hodiny', f.trasa_hodiny, 'zastavky',
+    (select coalesce(jsonb_agg(jsonb_build_object(
+        'cislo', o.cislo,
+        'adresa', concat_ws(', ', nullif(o.ulica, ''), nullif(trim(concat_ws(' ', o.psc, o.mesto)), '')),
+        'dobierka', coalesce(o.platba, 'DOBIERKA') not in ('ZAPLATENÉ', 'NA FAKTÚRU'),
+        'poznamka', o.poznamka, 'priorita', z.priorita, 'vykladka', z.vykladka_min,
+        'poradie_pevne', case when z.poradie_pevne then z.poradie end) order by z.poradie nulls last, o.vytvorena), '[]'::jsonb)
+     from public.zaradenia z join public.objednavky o on o.cislo = z.cislo where z.furmanka_id = f.id)) order by f.datum), '[]'::jsonb)
+  from public.furmanky f join public.furmanky_regiony r on r.region = f.region and r.rozvoz
+  where f.stav = 'otvorena' and f.datum > public.dnes_sk()
+$$;
