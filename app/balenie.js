@@ -8,6 +8,10 @@
 
   var DB = null, ROLA = null, koren = null;
   var B = { pohlad: "zoznam", zoznam: null, fId: null, fData: null, cislo: null, obj: null, sprava: null, posledny: null, nacitavam: false, dialog: null, karta: null, prace: 0 };
+  (function () {   // návrat tam, kde bol (objednávka sa otvorí, až keď sa načíta furmanka)
+    var p = window.lbzPamat && lbzPamat.nacitaj("balenie");
+    if (p && p.fId != null) { B.fId = p.fId; B.pohlad = "furmanka"; if (p.pohlad === "objednavka" && p.cislo) { B.cislo = p.cislo; B.obnovObj = true; } }
+  })();
   var MAPA_SK = { "+": "1", "ľ": "2", "š": "3", "č": "4", "ť": "5", "ž": "6", "ý": "7", "á": "8", "í": "9", "é": "0" };
   var STAV = {
     nezabalena: { t: "nezabalená", c: "" }, rozpracovana: { t: "rozpracovaná", c: "b-st-rozp" },
@@ -66,7 +70,8 @@
       if (!d || d.ok === false) B.sprava = { typ: "chyba", text: (d && d.text) || "Nenačítané" };
       else {
         B.fData = d;
-        if (B.cislo) { var o = objVoFurmanke(B.cislo); if (o) B.obj = o; }
+        if (B.cislo) { var o = objVoFurmanke(B.cislo); if (o) { B.obj = o; if (B.obnovObj) B.pohlad = "objednavka"; } }
+        B.obnovObj = false;
       }
       prekresli();
     }).catch(function (e) { B.nacitavam = false; if (!tiho) B.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
@@ -293,6 +298,7 @@
 
   function prekresli() {
     if (!koren || !koren.isConnected) return;
+    if (window.lbzPamat) lbzPamat.uloz("balenie", { pohlad: B.pohlad, fId: B.fId, cislo: B.cislo });
     var obsah = document.getElementById("b-obsah");
     if (!obsah) {
       koren.innerHTML = '<div id="b-hore"></div><div id="b-kamera" hidden></div><div id="b-obsah"></div><div id="b-kam-miesto" class="s-kam-miesto"></div><div id="b-kam-lista" class="s-kam-lista"></div>';

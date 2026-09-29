@@ -737,3 +737,5 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 
 .t-gmapa-obal { position: relative; }
 .t-gmapa-nav { position: absolute; right: 10px; bottom: 34px; min-height: 42px; padding: 6px 14px; background: var(--accent); color: #fff; border-color: var(--accent); text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.t-navlista-mala { margin-top: 4px; }
+.t-navlista-mala .t-nav { min-height: 40px; padding: 6px 12px; font-size: 14px; background: var(--surface); color: var(--blue); border-color: var(--blue); }

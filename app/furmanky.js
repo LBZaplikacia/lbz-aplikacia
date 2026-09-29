@@ -22,6 +22,7 @@
     sprava: null,             // { typ: ok|chyba|info, text }
     dialog: null              // { typ, ... }
   };
+  (function () { var p = window.lbzPamat && lbzPamat.nacitaj("furmanky"); if (p && p.id != null) F.id = p.id; })();
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -189,6 +190,7 @@
     if (!koren) return;
     var html = F.id == null ? pohladZoznam() : F.id === "archiv" ? pohladArchiv() : pohladFurmanka();
     koren.innerHTML = html + (F.dialog ? dialogHtml() : "");
+    if (window.lbzPamat) lbzPamat.uloz("furmanky", { id: F.id });
     koren.classList.toggle("f-siroke", F.id != null && zobrazenie() === "tabulka");
     var fok = koren.querySelector("[data-f-fokus]"); if (fok) fok.focus();
     var zoz = koren.querySelector("#f-poradie-zoz"); if (zoz) zapniTahanie(zoz);
@@ -824,7 +826,7 @@
       el.addEventListener("keydown", klaves);
       prekresli();
       nacitajZoznam();
-      if (F.id != null) nacitajFurmanku(true);
+      if (F.id === "archiv") nacitajArchiv(); else if (F.id != null) nacitajFurmanku(true);
     },
     karta: function () {
       var dnes = new Date(), h7 = new Date(); h7.setDate(h7.getDate() + 7);

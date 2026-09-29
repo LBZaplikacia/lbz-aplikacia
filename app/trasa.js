@@ -8,6 +8,7 @@
 
   var DB = null, ROLA = null, koren = null;
   var T = { id: null, zoznam: null, data: null, sprava: null, nacitavam: false, dialog: null, fotky: {}, prace: 0 };
+  (function () { var p = window.lbzPamat && lbzPamat.nacitaj("trasa"); if (p && p.id != null) { T.id = p.id; T.rezim = p.rezim || "jazda"; T.akt = p.akt || null; } })();
   var START = "Sedlo Zbojská, 976 56 Pohronská Polhora";
   var NA_MIESTE_M = 50;   // do koľkých metrov od zastávky sa ukáže „na mieste“ (Zaplatiť / Doručené)
 
@@ -76,14 +77,14 @@
       var kus = body.slice(i, i + N), posl = i + N >= body.length;
       var zac = i === 0 ? (odStartu ? START : "") : bod(body[i - 1]);
       var body2 = kus.map(bod); if (posl && body2.length < N) body2.push(START);
-      out.push({ od: i + 1, po: Math.min(i + N, body.length), url: "https://www.google.com/maps/dir/" + [zac].concat(body2).map(function (a) { return encodeURIComponent(a).replace(/%20/g, "+").replace(/%2C/g, ","); }).join("/") });
+      out.push({ od: kus[0].poradie || i + 1, po: kus[kus.length - 1].poradie || Math.min(i + N, body.length), url: "https://www.google.com/maps/dir/" + [zac].concat(body2).map(function (a) { return encodeURIComponent(a).replace(/%20/g, "+").replace(/%2C/g, ","); }).join("/") });
     }
     return out;
   }
-  function navigacia(zast) {
+  function navigacia(zast, mala) {
     var caka = zast.filter(function (z) { return z.stav === "caka"; });
     var odk = navOdkazy(caka, false); if (!odk.length) return "";
-    return '<div class="t-navlista">' + odk.map(function (x) {
+    return '<div class="t-navlista' + (mala ? " t-navlista-mala" : "") + '">' + odk.map(function (x) {
       return '<a class="btn t-nav" href="' + x.url + '" target="_blank" rel="noopener">🧭 Navigovať ' + (odk.length > 1 ? "zastávky " + x.od + "–" + x.po : "celú trasu") + "</a>";
     }).join("") + "</div>";
   }
@@ -195,7 +196,7 @@
     var prep = '<div class="f-seg t-rezim" role="group"><button data-t-rezim="jazda" aria-pressed="' + (rez === "jazda") + '">🚚 Jazda</button>' +
       '<button data-t-rezim="zoznam" aria-pressed="' + (rez === "zoznam") + '">📋 Zoznam (' + hotovo + "/" + z.length + ")</button></div>";
     var prog = '<div class="b-prog" aria-label="Vybavené ' + hotovo + " z " + z.length + '"><span style="width:' + (z.length ? Math.round(100 * hotovo / z.length) : 0) + '%"></span></div>';
-    if (rez === "jazda") return head + spravaHtml() + prog + prep + jazdaHtml(t);
+    if (rez === "jazda") return head + spravaHtml() + prog + prep + jazdaHtml(t) + (t.stav !== "ukoncena" ? navigacia(z, true) : "");
     return head + spravaHtml() + prog + prep +
       (t.stav !== "ukoncena" ? navigacia(z) : "") +
       '<p class="muted t-dalsia">Ťuknite na zastávku, ktorou chcete pokračovať.</p>' +
@@ -242,6 +243,7 @@
     if (!koren || !koren.isConnected) return;
     var y = window.scrollY;
     koren.innerHTML = (T.id == null ? pohladZoznam() : pohladTrasa()) + dialogHtml();
+    if (window.lbzPamat) lbzPamat.uloz("trasa", { id: T.id, rezim: T.rezim, akt: T.akt });
     window.scrollTo(0, y);
     var miesto = document.getElementById("t-gmapa-miesto"); if (miesto) mapaUkaz(miesto);
     var ta = document.getElementById("t-pozn"); if (ta && T.dialog && T.dialog.fokus) { T.dialog.fokus = false; ta.focus(); }

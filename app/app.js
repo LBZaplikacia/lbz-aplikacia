@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.15.10 BETA";
+  var VERZIA = "0.15.12 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -76,7 +76,7 @@
   var TRA = window.LBZ_TRASA || null;
 
   var stav = {
-    pouzivatel: null, email: null, rola: null, modul: "prehlad",
+    pouzivatel: null, email: null, rola: null, modul: (window.lbzPamat && lbzPamat.nacitaj("modul")) || "prehlad",
     dbModuly: null,          // moduly z databázy (ostrý režim)
     login: "prihlasenie",    // prihlasenie | zabudnute | nove_heslo
     sprava: null,            // { typ: ok|chyba, text }
@@ -228,7 +228,9 @@
 
   function renderApp() {
     var moduly = mojeModuly();
-    if (!moduly.some(function (m) { return m.kod === stav.modul; })) stav.modul = "prehlad";
+    // neznámy modul → Prehľad (v ostrom režime až keď sú načítané moduly z databázy, inak by sa pri štarte stratilo, kde bol)
+    if ((!OSTRY || stav.dbModuly) && !moduly.some(function (m) { return m.kod === stav.modul; })) stav.modul = "prehlad";
+    if ((!OSTRY || stav.dbModuly) && window.lbzPamat) lbzPamat.uloz("modul", stav.modul);
     // v lište len hotové moduly; pripravované sú na Prehľade
     var hotove = moduly.filter(function (m) { return m.aktivny && m.kod !== "nastavenia"; });
     var polozka = function (m, trieda) {
@@ -395,6 +397,7 @@
     if (t.dataset.mod) { stav.modul = t.dataset.mod; stav.sprava = null; stav.spravaPouz = null; if (t.dataset.mod === "nastavenia") stav.pouzivatelia = null; render(); window.scrollTo(0, 0); return; }
     if (t.id === "btn-odhlasit" || t.id === "btn-odhlasit-m") {
       if (OSTRY) db.auth.signOut({ scope: "local" }); // odhlási len toto zariadenie, ostatné ostanú prihlásené
+      if (window.lbzPamat) lbzPamat.zmaz();
       stav.rola = null; stav.pouzivatel = null; stav.modul = "prehlad"; stav.dbModuly = null; stav.login = "prihlasenie"; stav.sprava = null;
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(null, null);
       if (FURM) FURM.nastavDb(null, null);
