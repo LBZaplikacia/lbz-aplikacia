@@ -1993,3 +1993,250 @@ select cron.schedule('furmanky-upgates', '0,30 4,5,9,10,12,13 * * *', $cron$
     body := '{"akcia":"sync"}'::jsonb,
     timeout_milliseconds := 150000)
 $cron$);
+
+
+-- =========================================================================
+-- 15) BALENIE (29. 9. 2026)
+--     BALIŤ pri furmanke → sken štítku objednávky → sken balíkov (výdaj zo skladu s číslom objednávky = šarža)
+--     → položky mimo Zoznamu produktov sa potvrdia počtom → HOTOVO alebo ODLOŽIŤ s dôvodom (vidí zákaznícky servis vo Furmankách).
+--     Baliť môžu naraz viaceré zariadenia (všetko je v databáze). Prístup: IT, CEO, zákaznícky servis, prevádzka.
+-- =========================================================================
+create table if not exists public.balenie (
+  cislo      text primary key references public.objednavky(cislo) on delete cascade,
+  stav       text not null default 'rozpracovana' check (stav in ('rozpracovana','zabalena','odlozena')),
+  dovod      text,
+  potvrdene  jsonb not null default '{}'::jsonb,   -- ručne potvrdené položky mimo Zoznamu produktov {kód: ks}
+  zacal      timestamptz not null default now(),
+  hotovo     timestamptz,
+  kto        uuid default auth.uid(),
+  upravena   timestamptz not null default now()
+);
+alter table public.balenie enable row level security;   -- prístup len cez funkcie nižšie
+create index if not exists baliky_objednavka on public.baliky (objednavka) where objednavka is not null;
+
+create or replace function public.som_balic() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce(public.moja_rola() in ('it','ceo','zakaznicky_servis','prevadzka'), false)
+$$;
+
+-- jedna objednávka pre balenie: položky (farba a poradie podľa šablóny furmaniek), čo je hotové, naskenované balíky
+create or replace function public.balenie_obj(p_cislo text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  with b as (select * from public.balenie where cislo = p_cislo),
+  pol as (
+    select upper(op.kod) kod, coalesce(p.nazov, s.nazov, op.nazov, op.kod) nazov, coalesce(p.farba, s.farba, '#ffffff') farba,
+           coalesce(s.riadok, 999) poradie, sum(op.mnozstvo)::int ks, (p.kod is not null) sken,
+           case when p.kod is not null then (select count(*)::int from public.baliky x where x.objednavka = p_cislo and x.stav = 'vydany' and upper(x.produkt_kod) = upper(op.kod))
+                else coalesce(((select potvrdene from b) ->> upper(op.kod))::int, 0) end hotovo
+    from public.objednavky_polozky op
+    left join public.produkty p on upper(p.kod) = upper(op.kod)
+    left join lateral (select * from public.furmanky_sablona s where upper(s.kod) = upper(op.kod) order by s.riadok limit 1) s on true
+    where op.cislo = p_cislo and op.mnozstvo > 0
+    group by upper(op.kod), p.kod, p.nazov, s.nazov, op.nazov, op.kod, p.farba, s.farba, s.riadok)
+  select jsonb_build_object('cislo', o.cislo, 'meno', o.meno, 'firma', o.firma, 'telefon', o.telefon, 'mesto', o.mesto, 'ulica', o.ulica,
+    'poznamka', o.poznamka, 'upozornenie', o.upozornenie, 'platba', o.platba, 'suma', o.suma, 'poradie', z.poradie, 'furmanka_id', z.furmanka_id,
+    'stav', coalesce((select stav from b), 'nezabalena'), 'dovod', (select dovod from b), 'hotovo_cas', (select hotovo from b),
+    'polozky', coalesce((select jsonb_agg(jsonb_build_object('kod', kod, 'nazov', nazov, 'farba', farba, 'ks', ks, 'sken', sken, 'hotovo', hotovo)
+                         order by poradie, nazov) from pol), '[]'::jsonb),
+    'kompletne', not exists (select 1 from pol where hotovo < ks),
+    'baliky', coalesce((select jsonb_agg(jsonb_build_object('kod', x.kod, 'produkt', x.produkt_kod) order by x.vydany desc)
+                        from public.baliky x where x.objednavka = p_cislo and x.stav = 'vydany'), '[]'::jsonb))
+  from public.objednavky o left join public.zaradenia z on z.cislo = o.cislo
+  where o.cislo = p_cislo
+$$;
+
+-- furmanky na balenie: najbližších 7 dní (rozvozy), počty zabalených/odložených
+create or replace function public.balenie_zoznam() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when not public.som_balic() then jsonb_build_object('ok', false, 'text', 'Balenie je len pre IT, CEO, zákaznícky servis a prevádzku') else
+  jsonb_build_object('ok', true, 'furmanky', coalesce((
+    select jsonb_agg(jsonb_build_object('id', f.id, 'nazov', public.furmanka_nazov(f.region, f.datum), 'datum', f.datum, 'stav', f.stav,
+             'pocet', c.pocet, 'zabalene', c.zabalene, 'odlozene', c.odlozene, 'rozpracovane', c.rozpracovane) order by f.datum, r.poradie)
+    from public.furmanky f join public.furmanky_regiony r on r.region = f.region and r.rozvoz
+    cross join lateral (select count(*)::int pocet, count(*) filter (where b.stav = 'zabalena')::int zabalene,
+                               count(*) filter (where b.stav = 'odlozena')::int odlozene, count(*) filter (where b.stav = 'rozpracovana')::int rozpracovane
+                        from public.zaradenia z left join public.balenie b on b.cislo = z.cislo where z.furmanka_id = f.id) c
+    where f.datum between public.dnes_sk() and public.dnes_sk() + 7 and f.stav <> 'rozvezena'), '[]'::jsonb)) end
+$$;
+
+create or replace function public.balenie_furmanka(p_id bigint) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when not public.som_balic() then jsonb_build_object('ok', false, 'text', 'Nemáte prístup k baleniu') else
+  jsonb_build_object('ok', true,
+    'furmanka', (select jsonb_build_object('id', f.id, 'nazov', public.furmanka_nazov(f.region, f.datum), 'datum', f.datum, 'stav', f.stav)
+                 from public.furmanky f where f.id = p_id),
+    'objednavky', coalesce((select jsonb_agg(public.balenie_obj(z.cislo) order by z.poradie nulls last, o.vytvorena nulls last, z.cislo)
+                            from public.zaradenia z join public.objednavky o on o.cislo = z.cislo where z.furmanka_id = p_id), '[]'::jsonb),
+    'stitky', coalesce((select jsonb_agg(public.objednavka_json(z.cislo) order by z.poradie nulls last, o.vytvorena nulls last, z.cislo)
+                        from public.zaradenia z join public.objednavky o on o.cislo = z.cislo where z.furmanka_id = p_id), '[]'::jsonb)) end
+$$;
+
+-- objednávka podľa čísla (zo štítku) – aj keď je v inej furmanke
+create or replace function public.balenie_objednavka(p_cislo text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when not public.som_balic() then jsonb_build_object('ok', false, 'text', 'Nemáte prístup k baleniu')
+    when not exists (select 1 from public.objednavky where upper(cislo) = upper(trim(p_cislo))) then jsonb_build_object('ok', false, 'text', 'Objednávka ' || coalesce(p_cislo, '') || ' neexistuje')
+    else jsonb_build_object('ok', true, 'objednavka', public.balenie_obj((select cislo from public.objednavky where upper(cislo) = upper(trim(p_cislo)) limit 1)),
+      'furmanka', (select public.furmanka_nazov(f.region, f.datum) from public.zaradenia z join public.furmanky f on f.id = z.furmanka_id
+                   where upper(z.cislo) = upper(trim(p_cislo)))) end
+$$;
+
+-- sken balíka do objednávky = výdaj zo skladu s číslom objednávky a názvom furmanky
+create or replace function public.balenie_sken(p_scan_id text, p_cislo text, p_kod text, p_zariadenie text default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_kod text := public.uprav_kod(p_kod);
+  v_kmen text;
+  v_ks int; v_hotovo int; v_furmanka text; v_r jsonb;
+begin
+  if not public.som_balic() then return jsonb_build_object('ok', false, 'text', 'Nemáte prístup k baleniu'); end if;
+  if exists (select 1 from public.pohyby where scan_id = p_scan_id) then
+    return public.sken(p_scan_id, p_kod, 'Výdaj') || jsonb_build_object('objednavka', public.balenie_obj(p_cislo));
+  end if;
+  v_kmen := case when position('-' in v_kod) > 0 then regexp_replace(v_kod, '-[^-]*$', '') else v_kod end;
+  select coalesce(sum(mnozstvo), 0)::int into v_ks from public.objednavky_polozky where cislo = p_cislo and upper(kod) = v_kmen;
+  if v_ks <= 0 then
+    return jsonb_build_object('ok', false, 'text', coalesce((select nazov from public.produkty where kod = v_kmen), v_kmen) || ' nie je v tejto objednávke', 'kod', v_kod);
+  end if;
+  select count(*)::int into v_hotovo from public.baliky where objednavka = p_cislo and stav = 'vydany' and upper(produkt_kod) = v_kmen and kod <> v_kod;
+  if v_hotovo >= v_ks then
+    return jsonb_build_object('ok', false, 'text', 'Už je naskenovaných ' || v_hotovo || ' z ' || v_ks || ' – tento balík navyše nevydávam', 'kod', v_kod);
+  end if;
+  select public.furmanka_nazov(f.region, f.datum) into v_furmanka from public.zaradenia z join public.furmanky f on f.id = z.furmanka_id where z.cislo = p_cislo;
+  v_r := public.sken(p_scan_id, v_kod, 'Výdaj', p_zariadenie, p_cislo, v_furmanka);
+  if (v_r->>'ok')::boolean then
+    insert into public.balenie (cislo) values (p_cislo) on conflict (cislo) do update set upravena = now();
+  end if;
+  return v_r || jsonb_build_object('objednavka', public.balenie_obj(p_cislo));
+end $$;
+
+-- zrušiť omylom naskenovaný balík → vráti sa tam, odkiaľ bol vydaný (sklad / Krčmička)
+create or replace function public.balenie_vrat_balik(p_cislo text, p_kod text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_b public.baliky%rowtype; v_zo text;
+begin
+  if not public.som_balic() then return jsonb_build_object('ok', false, 'text', 'Nemáte prístup k baleniu'); end if;
+  select * into v_b from public.baliky where kod = public.uprav_kod(p_kod) and objednavka = p_cislo and stav = 'vydany' for update;
+  if not found then return jsonb_build_object('ok', false, 'text', 'Balík nie je v tejto objednávke'); end if;
+  select zo_stavu into v_zo from public.pohyby where balik_kod = v_b.kod and akcia = 'vydaj' and ok and zo_stavu in ('sklad','krcmicka') order by cas desc limit 1;
+  update public.baliky set stav = coalesce(v_zo, 'sklad'), vydany = null, objednavka = null, rozvoz = null, upraveny = now() where kod = v_b.kod;
+  insert into public.pohyby (balik_kod, produkt_kod, akcia, zo_stavu, na_stav, vysledok, objednavka, rozvoz, poznamka)
+    values (v_b.kod, v_b.produkt_kod, 'uprava', 'vydany', coalesce(v_zo, 'sklad'), 'Vrátené z balenia', p_cislo, v_b.rozvoz, 'zrušený sken pri balení');
+  update public.balenie set stav = case when stav = 'zabalena' then 'rozpracovana' else stav end, hotovo = null, upravena = now() where cislo = p_cislo;
+  return jsonb_build_object('ok', true, 'text', 'Balík ' || v_b.kod || ' vrátený na ' || case coalesce(v_zo, 'sklad') when 'krcmicka' then 'Krčmičku' else 'sklad' end,
+                            'objednavka', public.balenie_obj(p_cislo));
+end $$;
+
+-- položka mimo Zoznamu produktov (darčeky, vzorky…) – potvrdenie počtom
+create or replace function public.balenie_potvrd(p_cislo text, p_kod text, p_ks int) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_ks int;
+begin
+  if not public.som_balic() then return jsonb_build_object('ok', false, 'text', 'Nemáte prístup k baleniu'); end if;
+  if exists (select 1 from public.produkty where upper(kod) = upper(p_kod)) then
+    return jsonb_build_object('ok', false, 'text', 'Tento produkt je v Zozname produktov – naskenujte balík');
+  end if;
+  select coalesce(sum(mnozstvo), 0)::int into v_ks from public.objednavky_polozky where cislo = p_cislo and upper(kod) = upper(p_kod);
+  insert into public.balenie (cislo, potvrdene) values (p_cislo, jsonb_build_object(upper(p_kod), greatest(0, least(coalesce(p_ks, 0), v_ks))))
+    on conflict (cislo) do update set potvrdene = balenie.potvrdene || jsonb_build_object(upper(p_kod), greatest(0, least(coalesce(p_ks, 0), v_ks))), upravena = now();
+  update public.balenie set stav = 'rozpracovana', hotovo = null where cislo = p_cislo and stav = 'zabalena' and not (public.balenie_obj(p_cislo)->>'kompletne')::boolean;
+  return jsonb_build_object('ok', true, 'objednavka', public.balenie_obj(p_cislo));
+end $$;
+
+-- HOTOVO (len keď je všetko) / ODLOŽIŤ (s dôvodom → Furmanky) / ZNOVA (vráti všetky balíky a začne odznova)
+create or replace function public.balenie_stav(p_cislo text, p_stav text, p_dovod text default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_o jsonb := public.balenie_obj(p_cislo); v_b record; v_n int := 0;
+begin
+  if not public.som_balic() then return jsonb_build_object('ok', false, 'text', 'Nemáte prístup k baleniu'); end if;
+  if v_o is null then return jsonb_build_object('ok', false, 'text', 'Objednávka neexistuje'); end if;
+  if p_stav = 'zabalena' then
+    if not (v_o->>'kompletne')::boolean then return jsonb_build_object('ok', false, 'text', 'Ešte nie je všetko – dobaľte alebo dajte ODLOŽIŤ s dôvodom'); end if;
+    insert into public.balenie (cislo, stav, hotovo) values (p_cislo, 'zabalena', now())
+      on conflict (cislo) do update set stav = 'zabalena', dovod = null, hotovo = now(), kto = auth.uid(), upravena = now();
+  elsif p_stav = 'odlozena' then
+    if coalesce(trim(p_dovod), '') = '' then return jsonb_build_object('ok', false, 'text', 'Napíšte dôvod (čo chýba)'); end if;
+    insert into public.balenie (cislo, stav, dovod) values (p_cislo, 'odlozena', trim(p_dovod))
+      on conflict (cislo) do update set stav = 'odlozena', dovod = trim(p_dovod), hotovo = null, kto = auth.uid(), upravena = now();
+    insert into public.furmanky_log (typ, kto, ok, text)
+      values ('balenie', auth.uid(), false, 'Odložená pri balení: obj. ' || p_cislo || ' (' || coalesce(v_o->>'meno', v_o->>'firma', '') || ') – ' || trim(p_dovod));
+  elsif p_stav = 'znova' then
+    for v_b in select kod from public.baliky where objednavka = p_cislo and stav = 'vydany' loop
+      perform public.balenie_vrat_balik(p_cislo, v_b.kod); v_n := v_n + 1;
+    end loop;
+    delete from public.balenie where cislo = p_cislo;
+  else
+    return jsonb_build_object('ok', false, 'text', 'Neznámy stav');
+  end if;
+  return jsonb_build_object('ok', true, 'vratene', v_n, 'objednavka', public.balenie_obj(p_cislo));
+end $$;
+
+revoke all on function public.som_balic(), public.balenie_obj(text), public.balenie_zoznam(), public.balenie_furmanka(bigint), public.balenie_objednavka(text),
+  public.balenie_sken(text, text, text, text), public.balenie_vrat_balik(text, text), public.balenie_potvrd(text, text, int), public.balenie_stav(text, text, text) from public, anon;
+grant execute on function public.som_balic(), public.balenie_zoznam(), public.balenie_furmanka(bigint), public.balenie_objednavka(text),
+  public.balenie_sken(text, text, text, text), public.balenie_vrat_balik(text, text), public.balenie_potvrd(text, text, int), public.balenie_stav(text, text, text) to authenticated;
+
+-- Furmanky: stav balenia pri objednávke a počet odložených pri furmanke
+create or replace function public.objednavka_json(p_cislo text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('cislo', o.cislo, 'zdroj', o.zdroj, 'status', o.status, 'meno', o.meno, 'firma', o.firma, 'telefon', o.telefon,
+    'email', o.email, 'ulica', o.ulica, 'psc', o.psc, 'mesto', o.mesto, 'doprava', o.doprava, 'platba', o.platba, 'platba_nazov', o.platba_nazov,
+    'suma', o.suma, 'faktura', o.faktura, 'poznamka', o.poznamka, 'upozornenie', o.upozornenie, 'region', o.region,
+    'vytvorena', o.vytvorena, 'zmenena', o.zmenena, 'rucne_polia', o.rucne_polia, 'ziva', public.ziva_objednavka(o.status),
+    'furmanka_id', z.furmanka_id, 'rucne', coalesce(z.rucne, false), 'poradie', z.poradie,
+    'balenie', (select jsonb_build_object('stav', b.stav, 'dovod', b.dovod) from public.balenie b where b.cislo = o.cislo),
+    'polozky', coalesce((select jsonb_object_agg(p.kod, p.mnozstvo) from public.objednavky_polozky p where p.cislo = o.cislo and p.mnozstvo <> 0), '{}'::jsonb),
+    'nazvy', coalesce((select jsonb_object_agg(p.kod, p.nazov) from public.objednavky_polozky p where p.cislo = o.cislo and p.mnozstvo <> 0), '{}'::jsonb))
+  from public.objednavky o left join public.zaradenia z on z.cislo = o.cislo
+  where o.cislo = p_cislo
+$$;
+
+create or replace function public.furmanky_zoznam() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Furmanky vidí len IT, CEO a zákaznícky servis'); end if;
+  return jsonb_build_object('ok', true, 'beh', public.furmanky_posledny_beh(), 'furmanky', coalesce((
+    select jsonb_agg(jsonb_build_object('id', f.id, 'region', f.region, 'datum', f.datum, 'nazov', public.furmanka_nazov(f.region, f.datum),
+             'stav', f.stav, 'v_kalendari', f.v_kalendari, 'dovod', f.dovod, 'uzavreta', f.uzavreta, 'rozvoz', r.rozvoz,
+             'trasa_hodiny', f.trasa_hodiny, 'naplanovane', f.naplanovane, 'pocet', coalesce(z.pocet, 0), 'suma', coalesce(z.suma, 0),
+             'zabalene', coalesce(z.zabalene, 0), 'odlozene', coalesce(z.odlozene, 0))
+           order by (f.datum is null), f.datum, r.poradie)
+    from public.furmanky f
+    join public.furmanky_regiony r on r.region = f.region
+    left join lateral (select count(*) pocet, sum(o.suma) suma, count(*) filter (where b.stav = 'zabalena') zabalene,
+                              count(*) filter (where b.stav = 'odlozena') odlozene
+                       from public.zaradenia z join public.objednavky o on o.cislo = z.cislo left join public.balenie b on b.cislo = z.cislo
+                       where z.furmanka_id = f.id) z on true
+    where f.stav <> 'rozvezena'
+      and ((f.datum is null and coalesce(z.pocet, 0) > 0) or (f.datum is not null and (f.v_kalendari or coalesce(z.pocet, 0) > 0)))
+  ), '[]'::jsonb),
+  'odobrate', (select count(*) from public.zaradenia where rucne and furmanka_id is null),
+  'archiv', (select count(*) from public.furmanky where stav = 'rozvezena'));
+end $$;
+
+-- Sklad → Na rozvozy: odrátať, čo je už zabalené (balíky vydané do objednávok furmanky)
+create or replace function public.sklad_na_rozvozy() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when not public.som_interny() then jsonb_build_object('ok', false) else
+  jsonb_build_object('ok', true,
+    'furmankyCas', (select to_char(max(l.cas) at time zone 'Europe/Bratislava', 'FMDD.FMMM. HH24:MI') from public.furmanky_log l where l.typ in ('auto','rucne') and l.ok),
+    'rozvozy', coalesce((select jsonb_agg(public.furmanka_nazov(f.region, f.datum) order by f.datum, r.poradie)
+       from public.furmanky f join public.furmanky_regiony r on r.region = f.region and r.rozvoz
+       where f.datum between public.dnes_sk() and public.dnes_sk() + 7 and f.stav <> 'rozvezena'), '[]'::jsonb),
+    'rozvozyData', coalesce((select jsonb_object_agg(x.nazov, x.pol) from (
+       select public.furmanka_nazov(f.region, f.datum) nazov, coalesce((
+         select jsonb_agg(jsonb_build_object('kod', p.kod, 'nazov', p.nazov, 'farba', p.farba, 'stav', '(' || (s.ks - bz.n) || ')') order by p.nazov)
+         from (select upper(op.kod) kod, sum(op.mnozstvo)::int ks from public.zaradenia z join public.objednavky_polozky op on op.cislo = z.cislo
+               where z.furmanka_id = f.id group by upper(op.kod)) s
+         join public.produkty p on upper(p.kod) = s.kod
+         cross join lateral (select count(*)::int n from public.baliky b join public.zaradenia z2 on z2.cislo = b.objednavka
+                             where z2.furmanka_id = f.id and b.stav = 'vydany' and upper(b.produkt_kod) = s.kod) bz
+         where s.ks - bz.n > 0), '[]'::jsonb) pol
+       from public.furmanky f join public.furmanky_regiony r on r.region = f.region and r.rozvoz
+       where f.datum between public.dnes_sk() and public.dnes_sk() + 7 and f.stav <> 'rozvezena') x), '{}'::jsonb))
+  end
+$$;
+
+update public.moduly set aktivny = true where kod = 'balenie';
+insert into public.pristupy (rola, modul, uprava) values ('it','balenie',true), ('ceo','balenie',true), ('zakaznicky_servis','balenie',true), ('prevadzka','balenie',true)
+  on conflict do nothing;
