@@ -362,20 +362,27 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 @media print {
   #tlac-oblast.f-tlac-sumar tr.f-t-sucet td { font-weight: 800; }
   #tlac-oblast.f-tlac-sumar td.t-c { font-size: 12pt; width: 28mm; }
-  #tlac-oblast.f-tlac-stitky .f-stitky { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; align-items: start; }
-  #tlac-oblast.f-tlac-stitky table.f-stitok { width: 100%; border-collapse: collapse; break-inside: avoid; font-size: 9pt; }
-  #tlac-oblast.f-tlac-stitky table.f-stitok th, #tlac-oblast.f-tlac-stitky table.f-stitok td { border: 1px solid #000; padding: 1mm 1.5mm; text-align: center; background: transparent; font-size: 9pt; }
-  #tlac-oblast.f-tlac-stitky table.f-stitok th { width: 45%; font-weight: 700; background: #f2f2f2 !important; }
-  #tlac-oblast.f-tlac-stitky table.f-stitok th.f-s-pol { text-align: left; font-weight: 600; background: transparent !important; }
-  #tlac-oblast.f-tlac-stitky table.f-stitok tr[style] th.f-s-pol, #tlac-oblast.f-tlac-stitky table.f-stitok tr[style] td { background: inherit !important; }
-  #tlac-oblast.f-tlac-stitky .f-s-meno { font-weight: 800; font-size: 11pt; }
-  #tlac-oblast.f-tlac-stitky tr.f-s-qr th { background: #fff !important; padding: 1mm; }
-  #tlac-oblast.f-tlac-stitky tr.f-s-qr svg { width: 30mm; height: 30mm; display: block; margin: 0 auto; }
-  #tlac-oblast.f-tlac-stitky tr.f-s-hl th, #tlac-oblast.f-tlac-stitky tr.f-s-hl td { background: #ccc !important; font-weight: 800; }
-  #tlac-oblast.f-tlac-stitky td.f-s-ok { background: #d9ead3 !important; color: #1b5e20; font-weight: 800; }
-  #tlac-oblast.f-tlac-stitky td.f-s-db { background: #f4cccc !important; color: #b3261e; font-weight: 800; }
-  #tlac-oblast.f-tlac-stitky td.f-s-fa { background: #cfe2f3 !important; color: #2C5167; font-weight: 800; }
-  #tlac-oblast.f-tlac-stitky td.f-s-suma { color: #b3261e; font-weight: 800; }
+  #tlac-oblast.f-tlac-stitky .f-stitky { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm 3mm; align-items: start; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok { width: 100%; border-collapse: collapse; break-inside: avoid; table-layout: fixed; font: 8.5pt/1.25 Arial, sans-serif; color: #000; }
+  #tlac-oblast.f-tlac-stitky col.f-s-c1 { width: 72%; } #tlac-oblast.f-tlac-stitky col.f-s-c2 { width: 28%; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok th, #tlac-oblast.f-tlac-stitky table.f-stitok td { border: 1px solid #000; padding: .8mm 1.2mm; text-align: center; vertical-align: middle; font-weight: 400; background: #fff; font-size: 8.5pt; overflow-wrap: anywhere; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok th { background: #fff !important; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok td.v { background: #fff2cc !important; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok .b { font-weight: 700 !important; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok tr.f-s-meno th, #tlac-oblast.f-tlac-stitky table.f-stitok tr.f-s-meno td { height: 11mm; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok tr.f-s-qr th { padding: 1mm; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok tr.f-s-qr svg { width: 25mm; height: 25mm; display: block; margin: 0 auto; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok td.f-s-fakt { color: #e00000; font-weight: 700; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok tr.f-s-stav th { background: #efefef !important; font-weight: 700; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok tr.f-s-pozn th { background: #d9d9d9 !important; font-weight: 700; height: 13mm; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok tr.f-s-hl th, #tlac-oblast.f-tlac-stitky table.f-stitok tr.f-s-hl td { background: #cccccc !important; font-weight: 700; font-size: 7.5pt; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok th.f-s-pol { text-align: left; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok tr[style] th, #tlac-oblast.f-tlac-stitky table.f-stitok tr[style] td { background: inherit !important; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok tr.f-s-sum th { background: #efefef !important; font-weight: 700; font-size: 7.5pt; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok td.f-s-ok { background: #d9ead3 !important; color: #1e8e3e; font-weight: 700; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok td.f-s-db { background: #f4cccc !important; color: #e00000; font-weight: 700; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok td.f-s-fa { background: #cfe2f3 !important; color: #2C5167; font-weight: 700; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok td.f-s-suma { color: #e00000; font-weight: 700; font-size: 7.5pt; }
 }
 .f-hladaj-riadok { display: flex; gap: 8px; }
 .f-hladaj-riadok .f-hladat { flex: 1; min-height: 48px; }

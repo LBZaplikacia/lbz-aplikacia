@@ -288,7 +288,7 @@
       }).join("") + "</tr>";
     }).join("");
     var hlavy = '<tr class="f-stlpce"><th class="f-n">Názov</th><th class="f-k">Spolu ks</th><th class="f-d">Dávky</th>' +
-      obj.map(function (o) { return '<th class="f-o"><button class="btn-link" data-f-obj="' + esc(o.cislo) + '">Upraviť</button></th>'; }).join("") + "</tr>";
+      obj.map(function (o) { return '<th class="f-o"><button class="btn-link" data-f-obj="' + esc(o.cislo) + '">Upraviť</button> · <button class="btn-link" data-f-presun-obj="' + esc(o.cislo) + '">Presunúť</button></th>'; }).join("") + "</tr>";
     var telo = riadky.map(function (x) {
       var r = x.r, farba = r.farba ? ' style="background:' + esc(r.farba) + ';color:#1d1412"' : "";
       var jeProdukt = r.typ === "produkt";
@@ -327,7 +327,7 @@
           return '<div class="row"' + (p.farba ? ' style="background:' + esc(p.farba) + ';color:#1d1412"' : "") + "><span>" + esc(p.nazov) + "</span>" +
             '<input class="f-ks" inputmode="decimal" aria-label="Počet ' + esc(p.nazov) + '" data-f-bunka="' + esc(o.cislo) + '" data-kod="' + esc(p.kod) + '" value="' + esc(p.ks) + '"></div>';
         }).join("") + "</div>" +
-        '<button class="btn" data-f-obj="' + esc(o.cislo) + '">Upraviť objednávku</button></section>';
+        '<div class="f-tl"><button class="btn" data-f-presun-obj="' + esc(o.cislo) + '">Presunúť</button><button class="btn" data-f-obj="' + esc(o.cislo) + '">Upraviť objednávku</button></div></section>';
     }).join("") + "</div>";
   }
 
@@ -397,7 +397,10 @@
   }
   function dialogPresun(d) {
     var z = (F.zoznam || []).filter(function (f) { return !F.data || f.id !== F.data.furmanka.id; });
-    return "<h3>Presunúť " + esc(d.cislo) + "</h3><div class=\"rows\">" + z.map(function (f) {
+    var o = objednavka(d.cislo) || {};
+    return "<h3>Presunúť " + esc(d.cislo) + "</h3>" +
+      '<p class="muted f-mini">' + esc([o.meno || o.firma, [o.ulica, [o.psc, o.mesto].filter(Boolean).join(" ")].filter(Boolean).join(", "), o.doprava].filter(Boolean).join(" · ")) + "</p>" +
+      "<div class=\"rows\">" + z.map(function (f) {
       return '<div class="row"><span>' + esc(f.nazov) + " " + stavPill(f.stav) + '</span><button class="btn" data-f-presun="' + f.id + '">Sem</button></div>';
     }).join("") + '</div><div class="f-tl"><button class="btn" data-f="zavri-dialog">Zrušiť</button></div>';
   }
@@ -541,19 +544,21 @@
         var r = poKode[k]; return { nazov: (r && r.nazov) || (o.nazvy && o.nazvy[k]) || k, farba: (r && r.farba) || "#fff", poradie: r ? r.riadok : 999, ks: o.polozky[k] };
       }).sort(function (a, b) { return a.poradie - b.poradie; });
       var platba = o.platba || "DOBIERKA";
-      return '<table class="f-stitok"><tbody>' +
-        "<tr><th>Meno / Firma</th><td class=\"f-s-meno\">" + esc(o.meno || o.firma || "-") + "</td></tr>" +
-        "<tr><th>Telefón</th><td>" + esc(o.telefon || "-") + "</td></tr>" +
-        '<tr class="f-s-qr"><th>' + window.LBZ_QR.svg(qrText(o, f), 118) + "</th><td>" + esc([o.ulica, [o.psc, o.mesto].filter(Boolean).join(" ")].filter(Boolean).join(", ") || "-") + "</td></tr>" +
-        "<tr><th>Č. objednávky</th><td>" + esc(o.cislo || "-") + "</td></tr>" +
-        "<tr><th>Č. faktúry</th><td>" + esc(o.faktura || "-") + "</td></tr>" +
-        '<tr><th>STAV PLATBY</th><td class="f-s-' + (platba === "ZAPLATENÉ" ? "ok" : platba === "NA FAKTÚRU" ? "fa" : "db") + '">' + esc(platba) + "</td></tr>" +
-        "<tr><th>Poznámka</th><td>" + esc([o.poznamka, o.upozornenie].filter(Boolean).join(" | ") || "-") + "</td></tr>" +
+      var sumaTxt = Number(o.suma || 0).toLocaleString("sk-SK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "€";
+      // rozloženie ako „Rozvozové lístky“ zo Správy objednávok: vľavo popis (široký stĺpec), vpravo hodnota na žltom podklade
+      return '<table class="f-stitok"><colgroup><col class="f-s-c1"><col class="f-s-c2"></colgroup><tbody>' +
+        '<tr class="f-s-meno"><th>Meno / Firma</th><td class="v b">' + esc(o.meno || o.firma || "-") + "</td></tr>" +
+        '<tr><th>Telefón</th><td class="v b">' + esc(o.telefon || "-") + "</td></tr>" +
+        '<tr class="f-s-qr"><th>' + window.LBZ_QR.svg(qrText(o, f), 118) + '</th><td class="v b">' + esc([o.ulica, [o.psc, o.mesto].filter(Boolean).join(" ")].filter(Boolean).join(", ") || "-") + "</td></tr>" +
+        '<tr><th>Č. objednávky</th><td class="v">' + esc(o.cislo || "-") + "</td></tr>" +
+        '<tr><th>Č. faktúry</th><td class="v f-s-fakt">' + esc(o.faktura || "-") + "</td></tr>" +
+        '<tr class="f-s-stav"><th>STAV PLATBY</th><td class="f-s-' + (platba === "ZAPLATENÉ" ? "ok" : platba === "NA FAKTÚRU" ? "fa" : "db") + '">' + esc(platba) + "</td></tr>" +
+        '<tr class="f-s-pozn"><th>Poznámka</th><td class="v">' + esc([o.poznamka, o.upozornenie].filter(Boolean).join(" | ") || "-") + "</td></tr>" +
         '<tr class="f-s-hl"><th>POLOŽKA</th><td>POČET</td></tr>' +
         (pol.length ? pol.map(function (p) {
-          return '<tr style="background:' + esc(p.farba) + '"><th class="f-s-pol">' + esc(p.nazov) + "</th><td>" + esc(cislo(p.ks)) + " ks</td></tr>";
-        }).join("") : '<tr><th class="f-s-pol">INDIVIDUAL OBJ/VZORKY</th><td>-</td></tr>') +
-        '<tr class="f-s-hl"><th>CELKOVÁ SUMA</th><td class="f-s-suma">' + esc(eur(o.suma || 0)) + "</td></tr>" +
+          return '<tr style="background:' + esc(p.farba) + '"><th class="f-s-pol">' + esc(p.nazov) + '</th><td class="b">' + esc(cislo(p.ks)) + " ks</td></tr>";
+        }).join("") : '<tr><th class="f-s-pol">INDIVIDUAL OBJ/VZORKY</th><td class="b">-</td></tr>') +
+        '<tr class="f-s-sum"><th>CELKOVÁ SUMA</th><td class="f-s-suma">' + esc(sumaTxt) + "</td></tr>" +
         "</tbody></table>";
     };
     tlacHtml('<div class="f-stitky">' + obj.map(stitok).join("") + "</div>", "f-tlac-stitky");
@@ -561,10 +566,11 @@
 
   // ---------- udalosti ----------
   function klik(e) {
-    var t = e.target.closest("[data-f],[data-f-otvor],[data-f-obj],[data-f-zobraz],[data-f-pridaj],[data-f-presun]");
+    var t = e.target.closest("[data-f],[data-f-otvor],[data-f-obj],[data-f-zobraz],[data-f-pridaj],[data-f-presun],[data-f-presun-obj]");
     if (!t || !koren.contains(t)) return;
     if (t.tagName === "INPUT") return;
     var d = t.dataset;
+    if (d.fPresunObj) { F.dialog = { typ: "presun", cislo: d.fPresunObj }; prekresli(); return; }
     if (d.fOtvor) { otvor(d.fOtvor === "odobrate" ? "odobrate" : Number(d.fOtvor)); return; }
     if (d.fObj && !e.target.closest("a")) { F.dialog = { typ: "obj", cislo: d.fObj }; prekresli(); return; }
     if (d.fZobraz) { F.zobrazenie = d.fZobraz; prekresli(); return; }
@@ -658,6 +664,7 @@
       DB = klient || null; ROLA = klient ? rola : null;
       if (!DB) { F.zoznam = null; F.data = null; F.id = null; F.sablona = null; }
     },
+    tlacStitky: function () { if (F.data) tlacStitky(); },   // použije modul Balenie
     mozem: function () { return !!DB && (ROLA === "it" || ROLA === "ceo" || ROLA === "zakaznicky_servis"); },
     mount: function (el) {
       koren = el;
