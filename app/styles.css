@@ -731,3 +731,4 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 .lbz-dlg-tl .lbz-dlg-zle { background: var(--bad); color: #fff; border-color: var(--bad); }
 @keyframes lbzDlgFade { from { opacity: 0; } }
 @keyframes lbzDlgIn { from { opacity: 0; transform: translate(-50%, -46%) scale(.97); } }
+.t-hotovo-suhrn { margin: 0; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }

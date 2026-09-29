@@ -145,9 +145,12 @@
   function jazdaHtml(t) {
     var z = zastavky(), a = aktualna();
     var hotovo = z.filter(function (x) { return x.stav !== "caka"; }).length;
+    if (a && a.stav !== "caka" && !dalsiaCaka(null)) a = null;   // posledná zastávka vybavená → rovno koniec rozvozu
     if (!a) {
+      var nDor = z.filter(function (x) { return x.stav === "dorucene"; }).length, nNie = z.filter(function (x) { return x.stav === "nedorucene"; }).length;
       return '<section class="card t-hotovo"><div class="t-velke">🎉</div><h3>Všetky zastávky sú vybavené</h3>' +
-        (t.stav === "ukoncena" ? '<p class="muted">Rozvoz ukončený ' + esc(cas(t.ukoncena)) + ".</p>" : '<button class="btn btn-primary t-koniec" data-t="ukoncit">🏁 Ukončiť rozvoz</button>') + "</section>";
+        '<p class="t-hotovo-suhrn"><span class="b-st b-st-ok">✓ doručené ' + nDor + "</span>" + (nNie ? ' <span class="b-st b-st-odl">✗ nedoručené ' + nNie + "</span>" : "") + "</p>" +
+        (t.stav === "ukoncena" ? '<p class="muted">Rozvoz ukončený ' + esc(cas(t.ukoncena)) + ".</p>" : '<button class="btn btn-primary t-velke-tl t-koniec" data-t="ukoncit">🏁 UKONČIŤ ROZVOZ</button>') + "</section>";
     }
     var poradie = z.indexOf(a) + 1, dob = dobierka(a), vzd = vzdialenost(a), naMieste = T.naMieste === a.cislo || (vzd != null && vzd < NA_MIESTE_M);
     var vybav = a.stav !== "caka";
