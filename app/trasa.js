@@ -155,7 +155,8 @@
       '<div class="t-akt-hore"><span class="t-z-cislo num">' + poradie + '</span><span class="muted">zastávka ' + poradie + " z " + z.length + (a.eta ? ' · príchod <b class="num">' + esc(cas(a.eta)) + "</b>" : "") + "</span>" +
         (vzd != null ? '<span class="t-vzd num">' + (vzd < 1000 ? Math.round(vzd) + " m" : (vzd / 1000).toFixed(1).replace(".", ",") + " km") + "</span>" : "") + "</div>" +
       '<h2 class="t-akt-meno">' + esc(a.meno || a.firma || "-") + "</h2>" +
-      '<div class="t-akt-adresa">📍 ' + esc(a.adresa || "-") + "</div>" +
+      (a.adresa || (a.lat != null && a.lng != null) ? '<a class="t-akt-adresa t-akt-adresa-nav" href="' + navUrl(a) + '" target="_blank" rel="noopener">📍 ' + esc(a.adresa || "-") + ' <span class="t-akt-adresa-tip">🧭 navigovať</span></a>'
+        : '<div class="t-akt-adresa">📍 -</div>') +
       '<div class="t-akt-platba ' + (dob ? "t-dob" : a.platba === "NA FAKTÚRU" ? "t-fa" : "t-ok") + '">' + (dob ? "💶 DOBIERKA " + esc(eur(a.suma)) : a.platba === "NA FAKTÚRU" ? "🧾 NA FAKTÚRU" : "✅ ZAPLATENÉ") +
         '<span> · ' + esc(a.kusy) + " ks</span></div>" +
       (a.pozn_obj ? '<p class="s-varovanie t-akt-pozn">⚠️ ' + esc(a.pozn_obj) + "</p>" : "") +
@@ -169,7 +170,8 @@
         '<div class="t-akt-tl">' + (dob ? '<button class="btn t-velke-tl t-tl-plat" data-t-akcia="platba" data-c="' + esc(a.cislo) + '">💳 ZAPLATIŤ ' + esc(eur(a.suma)) + "</button>" : "") +
         '<button class="btn t-velke-tl t-tl-ok" data-t-akcia="dorucene" data-c="' + esc(a.cislo) + '">✅ DORUČENÉ</button>' +
         '<button class="btn t-velke-tl t-tl-nie" data-t-akcia="nedorucene" data-c="' + esc(a.cislo) + '">❌ NEDORUČENÉ</button>' +
-        (a.telefon ? '<a class="btn t-tl-tel2" href="' + tel(a.telefon) + '">📞 Zavolať</a>' : "") + "</div>"
+        '<div class="t-akt-male2"><a class="btn t-tl-tel2" href="' + navUrl(a) + '" target="_blank" rel="noopener">🧭 Navigovať znova</a>' +
+        (a.telefon ? '<a class="btn t-tl-tel2" href="' + tel(a.telefon) + '">📞 Zavolať</a>' : "") + "</div></div>"
         : '<div class="t-akt-tl"><button class="btn t-velke-tl btn-primary" data-t="dalsia">➡️ ĎALŠIA ZASTÁVKA</button></div>') +
       (t.stav === "ukoncena" ? "" : '<div class="t-akt-male"><button class="btn" data-t-akcia="poznamka" data-c="' + esc(a.cislo) + '">📝 Poznámka</button>' +
         '<label class="btn t-foto-tl">📷 Fotka<input type="file" accept="image/*" capture="environment" data-t-foto="' + esc(a.cislo) + '" hidden></label>' +

@@ -679,6 +679,10 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 .t-vzd { margin-left: auto; font-weight: 800; background: var(--surface-2); border-radius: 999px; padding: 3px 10px; }
 .t-akt-meno { margin: 0; font-size: 26px; line-height: 1.15; }
 .t-akt-adresa { font-size: 17px; }
+.t-akt-adresa-nav { color: inherit; text-decoration: underline; text-decoration-color: var(--gold); text-underline-offset: 3px; }
+.t-akt-adresa-tip { font-size: 13px; font-weight: 700; color: var(--blue); white-space: nowrap; }
+.t-akt-male2 { display: flex; gap: 8px; flex-wrap: wrap; }
+.t-akt-male2 .btn { flex: 1 1 140px; }
 .t-akt-platba { font: 800 20px var(--font-display); }
 .t-akt-platba span { font: 500 15px var(--font-body); color: var(--muted); }
 .t-akt-platba.t-dob { color: var(--bad); }
