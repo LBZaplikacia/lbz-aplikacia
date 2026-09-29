@@ -330,7 +330,8 @@
   }
   function vykresliGoogle() {
     var el = document.getElementById("g-tlacidlo");
-    if (!el || !gNonce || !window.google || !google.accounts) return;
+    if (!el || el.getAttribute("data-g") || !gNonce || !window.google || !google.accounts) return;
+    el.setAttribute("data-g", "1"); // každé tlačidlo vykresliť len raz
     el.innerHTML = "";
     google.accounts.id.renderButton(el, { type: "standard", theme: "outline", size: "large", text: "signin_with", shape: "rectangular", locale: "sk", logo_alignment: "center", width: Math.min(360, el.clientWidth || 320) });
   }
