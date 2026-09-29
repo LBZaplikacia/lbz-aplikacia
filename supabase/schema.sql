@@ -1938,6 +1938,43 @@ revoke all on function public.rozpis_rola(), public.rozpis_moja_osoba(), public.
 grant execute on function public.rozpis_data(date, date), public.rozpis_zmena(jsonb), public.rozpis_osoba_uloz(jsonb),
   public.rozpis_poznamka_uloz(date, text), public.rozpis_historia(int) to authenticated;
 
+-- =========================================================================
+-- 14) SKLAD „Na rozvozy“ z furmaniek v appke (namiesto starej tabuľky – tá odpovedala aj 45 s) + vrátenie statusov – 29. 9. 2026
+-- =========================================================================
+-- furmanky na najbližších 7 dní: koľko balíkov ktorého produktu (len produkty zo skladu)
+create or replace function public.sklad_na_rozvozy() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when not public.som_interny() then jsonb_build_object('ok', false) else
+  jsonb_build_object('ok', true,
+    'furmankyCas', (select to_char(max(l.cas) at time zone 'Europe/Bratislava', 'FMDD.FMMM. HH24:MI') from public.furmanky_log l where l.typ in ('auto','rucne') and l.ok),
+    'rozvozy', coalesce((select jsonb_agg(public.furmanka_nazov(f.region, f.datum) order by f.datum, r.poradie)
+       from public.furmanky f join public.furmanky_regiony r on r.region = f.region and r.rozvoz
+       where f.datum between public.dnes_sk() and public.dnes_sk() + 7 and f.stav <> 'rozvezena'), '[]'::jsonb),
+    'rozvozyData', coalesce((select jsonb_object_agg(x.nazov, x.pol) from (
+       select public.furmanka_nazov(f.region, f.datum) nazov, coalesce((
+         select jsonb_agg(jsonb_build_object('kod', p.kod, 'nazov', p.nazov, 'farba', p.farba, 'stav', '(' || s.ks || ')') order by p.nazov)
+         from (select upper(op.kod) kod, sum(op.mnozstvo)::int ks from public.zaradenia z join public.objednavky_polozky op on op.cislo = z.cislo
+               where z.furmanka_id = f.id group by upper(op.kod)) s
+         join public.produkty p on upper(p.kod) = s.kod where s.ks > 0), '[]'::jsonb) pol
+       from public.furmanky f join public.furmanky_regiony r on r.region = f.region and r.rozvoz
+       where f.datum between public.dnes_sk() and public.dnes_sk() + 7 and f.stav <> 'rozvezena') x), '{}'::jsonb))
+  end
+$$;
+revoke all on function public.sklad_na_rozvozy() from public, anon;
+grant execute on function public.sklad_na_rozvozy() to authenticated;
+
+-- vrátiť statusy: zruší „Naplánované“ (po ostrom štarte vráti aj pôvodné statusy objednávok v Upgates)
+create or replace function public.furmanka_vrat_statusy(p_id bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Nemáte oprávnenie'); end if;
+  update public.furmanky set naplanovane = null, naplanoval = null where id = p_id;
+  insert into public.furmanky_log (typ, kto, text) select 'vratene', auth.uid(), public.furmanka_nazov(region, datum) || ' – statusy vrátené (Naplánované zrušené)' from public.furmanky where id = p_id;
+  return jsonb_build_object('ok', true);
+end $$;
+revoke all on function public.furmanka_vrat_statusy(bigint) from public, anon;
+grant execute on function public.furmanka_vrat_statusy(bigint) to authenticated;
+
 -- ---------- plánované sťahovanie 6:00, 11:30, 14:00 (spustiť AŽ po nasadení Edge Function „upgates-sync“) ----------
 -- Plánovač volá funkciu v UTC časoch pre letný aj zimný čas; funkcia sama pustí len ten, ktorý v Bratislave padne na 6:00/11:30/14:00.
 create extension if not exists pg_cron;
