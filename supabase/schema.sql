@@ -1,5 +1,5 @@
 -- LBZ aplikácia – databáza (Supabase / PostgreSQL)
--- Verzia 0.3 – 29. 9. 2026: roly, profily, sklad (produkty, balíky, pohyby, skenovanie), prenos zo starého skladu
+-- Verzia 0.4 – 29. 9. 2026: roly, profily, sklad, prenos zo starého skladu, používatelia (pozvánky s rolou)
 -- Spúšťa sa v Supabase: SQL Editor → vložiť celý súbor → Run. Dá sa spustiť opakovane.
 -- Nové tabuľky sa appke NEsprístupňujú automaticky – prístupy sú nižšie vypísané ručne (GRANT + RLS).
 
@@ -459,3 +459,97 @@ end $$;
 
 revoke all on function public.import_zo_stareho(jsonb, jsonb) from public, anon;
 grant execute on function public.import_zo_stareho(jsonb, jsonb) to authenticated;
+
+-- =========================================================================
+-- 6) POUŽÍVATELIA – vopred pridané e-maily s rolou (pozvánky)
+-- IT/CEO pridá e-mail a rolu; keď sa človek prvýkrát prihlási (Google alebo e-mail),
+-- dostane automaticky túto rolu a meno. Spravuje sa v appke: Nastavenia → Používatelia.
+-- =========================================================================
+create table if not exists public.pozvanky (
+  email      text primary key check (email = lower(trim(email))),
+  meno       text,
+  rola       text not null references public.roly(kod),
+  aktivny    boolean not null default true,
+  vytvorena  timestamptz not null default now(),
+  kto        uuid default auth.uid()
+);
+
+-- nový účet → rola a meno z pozvánky
+create or replace function public.novy_profil() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_p public.pozvanky%rowtype;
+begin
+  select * into v_p from public.pozvanky where email = lower(trim(new.email));
+  insert into public.profily (id, email, meno, rola, aktivny)
+  values (new.id, lower(new.email),
+          coalesce(v_p.meno, new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', new.email),
+          coalesce(v_p.rola, 'zakaznik'), coalesce(v_p.aktivny, true))
+  on conflict (id) do nothing;
+  return new;
+end $$;
+
+-- zmena pozvánky → prenesie sa aj do existujúceho účtu
+create or replace function public.pozvanka_do_profilu() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  update public.profily set rola = new.rola, aktivny = new.aktivny, meno = coalesce(new.meno, meno)
+    where lower(email) = new.email;
+  return new;
+end $$;
+drop trigger if exists pozvanka_zmena on public.pozvanky;
+create trigger pozvanka_zmena after insert or update on public.pozvanky
+  for each row execute function public.pozvanka_do_profilu();
+
+-- zoznam pre obrazovku Používatelia (len IT a CEO)
+create or replace function public.pouzivatelia()
+returns table (email text, meno text, rola text, aktivny boolean, ucet boolean, posledne_prihlasenie timestamptz)
+language sql stable security definer set search_path = public as $$
+  select coalesce(z.email, lower(p.email)), coalesce(p.meno, z.meno), coalesce(p.rola, z.rola), coalesce(p.aktivny, z.aktivny),
+         p.id is not null, u.last_sign_in_at
+  from public.pozvanky z
+  full join public.profily p on lower(p.email) = z.email
+  left join auth.users u on u.id = p.id
+  where public.som_spravca()
+  order by 3, 2
+$$;
+
+-- pridať / upraviť používateľa (len IT a CEO); seba nemožno vypnúť ani odobrať správcu
+create or replace function public.nastav_pouzivatela(p_email text, p_meno text, p_rola text, p_aktivny boolean default true)
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_email text := lower(trim(p_email)); v_moj text;
+begin
+  if not public.som_spravca() then return jsonb_build_object('ok', false, 'text', 'Len IT a CEO môžu spravovať používateľov'); end if;
+  if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then return jsonb_build_object('ok', false, 'text', 'Neplatný e-mail'); end if;
+  if not exists (select 1 from public.roly where kod = p_rola) then return jsonb_build_object('ok', false, 'text', 'Neznáma rola'); end if;
+  select lower(email) into v_moj from public.profily where id = auth.uid();
+  if v_email = v_moj and (p_rola not in ('it','ceo') or not p_aktivny) then
+    return jsonb_build_object('ok', false, 'text', 'Vlastný účet si nemôžete vypnúť ani odobrať správcu');
+  end if;
+  insert into public.pozvanky (email, meno, rola, aktivny) values (v_email, nullif(trim(p_meno), ''), p_rola, coalesce(p_aktivny, true))
+    on conflict (email) do update set meno = coalesce(excluded.meno, pozvanky.meno), rola = excluded.rola, aktivny = excluded.aktivny;
+  return jsonb_build_object('ok', true, 'text', 'Uložené');
+end $$;
+
+alter table public.pozvanky enable row level security;
+grant select on public.pozvanky to authenticated;
+drop policy if exists "pozvanky spravca" on public.pozvanky;
+create policy "pozvanky spravca" on public.pozvanky for select to authenticated using (public.som_spravca());
+
+revoke all on function public.pouzivatelia(), public.nastav_pouzivatela(text,text,text,boolean) from public, anon;
+grant execute on function public.pouzivatelia(), public.nastav_pouzivatela(text,text,text,boolean) to authenticated;
+
+-- Dnešné skeny zo všetkých zariadení (pre Skenovanie) – s menom, kto skenoval
+create or replace function public.dnesne_skeny(p_limit int default 300)
+returns table (scan_id text, balik_kod text, produkt_kod text, akcia text, vysledok text, ok boolean, cas timestamptz, zariadenie text, meno text)
+language sql stable security definer set search_path = public as $$
+  select h.scan_id, h.balik_kod, h.produkt_kod, h.akcia, h.vysledok, h.ok, h.cas, h.zariadenie, p.meno
+  from public.pohyby h left join public.profily p on p.id = h.kto
+  where public.som_interny()
+    and h.cas >= (date_trunc('day', now() at time zone 'Europe/Bratislava') at time zone 'Europe/Bratislava')
+    and h.akcia in ('prijem','krcmicka','vydaj','rucny_vydaj','uprava','zmazanie')
+  order by h.cas desc
+  limit least(coalesce(p_limit, 300), 1000)
+$$;
+revoke all on function public.dnesne_skeny(int) from public, anon;
+grant execute on function public.dnesne_skeny(int) to authenticated;
