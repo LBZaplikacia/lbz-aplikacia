@@ -259,8 +259,9 @@
   }
   function listaKamery() {
     if (kameraStav === "vyp") {
-      return '<button class="s-kam s-kam-zadna" data-s-akcia="kamera-zadna">📸 Skenovať kamerou</button>' +
-        '<button class="s-kam s-kam-predna" data-s-akcia="kamera-predna" aria-label="Predná kamera">🤳 Predná</button>';
+      // predná vľavo, zadná (hlavná) vpravo – pod palcom pravej ruky
+      return '<button class="s-kam s-kam-predna" data-s-akcia="kamera-predna" aria-label="Predná kamera">🤳 Predná</button>' +
+        '<button class="s-kam s-kam-zadna" data-s-akcia="kamera-zadna">📸 Skenovať kamerou</button>';
     }
     return '<button class="s-kam s-kam-stop" data-s-akcia="kamera-stop">' + (kameraStav === "spusta" ? "⏳ Spúšťam kameru…" : "🛑 Vypnúť kameru") + "</button>";
   }
@@ -347,7 +348,7 @@
     var sp = S.sprava;
     var panel = sp
       ? '<div class="s-sprava s-' + sp.typ + '" role="status">' + esc(sp.text) + (sp.kod ? '<span class="s-kod">' + esc(sp.kod) + "</span>" : "") + "</div>"
-      : '<div class="s-sprava s-info" role="status">Režim <strong>' + esc(S.rezim) + "</strong> – skenujte čítačkou alebo kamerou</div>";
+      : '<div class="s-sprava s-info" role="status"><span>Režim <strong>' + esc(S.rezim) + "</strong> – skenujte čítačkou alebo kamerou</span></div>";
     var dnesne = S.skeny.filter(function (s) { return dnes(s.cas); }).slice().reverse();
     var ok = dnesne.filter(function (s) { return s.stav === "ok"; }).length;
     return panel +

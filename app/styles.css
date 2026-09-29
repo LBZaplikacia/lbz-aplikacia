@@ -1,34 +1,36 @@
 :root {
-  --bg: #f5f7f9;
+  /* Hlavné farby značky: zlatá #CBA75B a hnedá #583934. Modrá #2C5167 je len doplnková. */
+  --bg: #faf7f1;
   --surface: #ffffff;
-  --surface-2: #e8eef2;
-  --ink: #1f2a30;
-  --muted: #5c6a72;
-  --line: #d7e0e6;
-  --accent: #2C5167;
+  --surface-2: #f3ebdc;
+  --ink: #2b1d1a;
+  --muted: #6b5a55;
+  --line: #e6dcc9;
+  --accent: #583934;
   --accent-ink: #ffffff;
-  --accent-soft: #e2ebf0;
+  --accent-soft: #f5ecd9;
   --ok: #2f7d4f;
-  --warn: #583934;
-  --warn-soft: #f3e9d4;
+  --warn: #8a4b12;
+  --warn-soft: #fbe9d0;
   --bad: #b3261e;
   --radius: 10px;
   --font-display: "Montserrat", "Segoe UI", Arial, sans-serif;
   --gold: #CBA75B;
+  --blue: #2C5167;
   --font-body: "Montserrat", "Segoe UI", Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #10171b; --surface: #182228; --surface-2: #213038; --ink: #e8eef1; --muted: #a2b1b9;
-    --line: #2c3b44; --accent: #8fb6cc; --accent-ink: #0e1a20; --accent-soft: #223845;
-    --ok: #7fcf9c; --warn: #CBA75B; --warn-soft: #3a3020; --bad: #f08a80;
+    --bg: #17110f; --surface: #221916; --surface-2: #2e2320; --ink: #f3ebe3; --muted: #bba99f;
+    --line: #3d2f2b; --accent: #CBA75B; --accent-ink: #1b120f; --accent-soft: #3a2d1f;
+    --ok: #7fcf9c; --warn: #e0a868; --warn-soft: #3a2a1c; --bad: #f08a80;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #10171b; --surface: #182228; --surface-2: #213038; --ink: #e8eef1; --muted: #a2b1b9;
-  --line: #2c3b44; --accent: #8fb6cc; --accent-ink: #0e1a20; --accent-soft: #223845;
-  --ok: #7fcf9c; --warn: #CBA75B; --warn-soft: #3a3020; --bad: #f08a80;
+  --bg: #17110f; --surface: #221916; --surface-2: #2e2320; --ink: #f3ebe3; --muted: #bba99f;
+  --line: #3d2f2b; --accent: #CBA75B; --accent-ink: #1b120f; --accent-soft: #3a2d1f;
+  --ok: #7fcf9c; --warn: #e0a868; --warn-soft: #3a2a1c; --bad: #f08a80;
   color-scheme: dark;
 }
 
@@ -84,7 +86,7 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
 .nav { display: grid; gap: 2px; align-content: start; overflow-y: auto; min-height: 0; }
 .nav button { text-align: left; border: 0; background: transparent; border-radius: 8px; padding: 10px 12px; display: flex; justify-content: space-between; gap: 8px; }
 .nav button:hover { background: var(--surface-2); }
-.nav button[aria-current="page"] { background: var(--accent-soft); color: var(--ink); font-weight: 700; }
+.nav button[aria-current="page"] { background: var(--accent-soft); color: var(--ink); font-weight: 700; box-shadow: inset 4px 0 0 var(--gold); }
 .soon { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 7px; align-self: center; }
 .who { font-size: 14px; display: grid; gap: 8px; }
 .main { padding: 24px 16px 96px; max-width: 1100px; width: 100%; display: grid; gap: 20px; align-content: start; }
@@ -128,7 +130,7 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
 .s-taby button { border: 0; background: transparent; border-radius: 8px; padding: 10px; font-weight: 700; color: var(--muted); min-height: 44px; }
 .s-taby button[aria-selected="true"] { background: var(--surface); color: var(--ink); }
 .s-rezimy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.s-rezim { border: 2px solid var(--gold); background: var(--surface); color: #583934; border-radius: 12px; min-height: 76px; padding: 10px 6px;
+.s-rezim { border: 2px solid var(--gold); background: var(--surface); color: var(--accent); border-radius: 12px; min-height: 76px; padding: 10px 6px;
   display: grid; place-items: center; gap: 2px; font: 700 16px var(--font-display); transition: transform .15s, box-shadow .15s; }
 .s-ikona { font-size: 24px; line-height: 1; }
 .s-rezim[aria-pressed="true"] { color: #fff; transform: scale(1.04); box-shadow: 0 4px 10px rgba(0,0,0,.3); }
@@ -141,7 +143,7 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
 .s-kam-lista { position: fixed; left: 0; right: 0; bottom: 20px; z-index: 20; display: flex; justify-content: center; gap: 10px; padding: 0 16px; pointer-events: none; }
 .s-kam { pointer-events: auto; border-radius: 14px; min-height: 60px; padding: 14px 18px; font: 700 17px var(--font-display); box-shadow: 0 8px 20px rgba(0,0,0,.3); cursor: pointer; }
 .s-kam-zadna { flex: 1 1 auto; max-width: 340px; background: #583934; color: #CBA75B; border: 1px solid #CBA75B; }
-.s-kam-predna { flex: 0 0 auto; background: var(--surface); color: #583934; border: 2px solid #CBA75B; font-size: 15px; }
+.s-kam-predna { flex: 0 0 auto; background: var(--surface); color: var(--accent); border: 2px solid #CBA75B; font-size: 15px; }
 .s-kam-stop { flex: 1 1 auto; max-width: 500px; background: #000; color: #CBA75B; border: 2px solid #CBA75B; }
 @media (min-width: 761px) { .s-kam-lista { left: 240px; } }
 @media (max-width: 760px) { .s-kam-lista { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); } }
@@ -170,7 +172,7 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
 .s-dlazdica strong { font: 700 26px/1.1 var(--font-display); }
 .s-filtre { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
 .s-filtre .chip { flex: none; min-height: 40px; }
-.s-filtre .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.s-filtre .chip[aria-pressed="true"] { background: var(--gold); color: #2b1d1a; border-color: var(--gold); }
 .s-tabulka { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .s-thead, .s-prow { display: grid; grid-template-columns: 1fr 64px 56px; gap: 8px; align-items: center; padding: 10px 12px; }
 .s-thead.s-4, .s-prow.s-4 { grid-template-columns: 1fr 56px 48px 84px; }
@@ -209,7 +211,7 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
   #tlac-oblast .t-datum { margin: 0 0 4mm; font-size: 9pt; }
   #tlac-oblast table { width: 100%; border-collapse: collapse; }
   #tlac-oblast th, #tlac-oblast td { border: 1px solid #999; padding: 1.5mm 2mm; }
-  #tlac-oblast th { background: #cfe2f3 !important; font-size: 10pt; }
+  #tlac-oblast th { background: #f1e4c6 !important; font-size: 10pt; }
   #tlac-oblast th:first-child { text-align: left; }
   #tlac-oblast td.t-c { text-align: center; font-weight: 700; font-size: 14pt; width: 22mm; }
   #tlac-oblast td.t-zle { color: #c00; }

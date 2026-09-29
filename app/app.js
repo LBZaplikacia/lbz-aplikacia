@@ -143,7 +143,7 @@
         '<aside class="side"><div class="brand"><img class="brand-mark" src="icons/logo.svg" alt="">' +
           '<div><h1 style="font-size:18px">Legendárne buchty</h1><p>' + esc(ROLY[stav.rola].nazov) + "</p></div></div>" +
           '<nav class="nav" aria-label="Moduly">' + nav + "</nav>" +
-          '<div class="who"><span>' + esc(stav.pouzivatel) + '</span><span class="muted" style="font-size:12px">verzia 0.3</span><button class="btn" id="btn-odhlasit">Odhlásiť</button></div>' +
+          '<div class="who"><span>' + esc(stav.pouzivatel) + '</span><span class="muted" style="font-size:12px">verzia 0.4</span><button class="btn" id="btn-odhlasit">Odhlásiť</button></div>' +
         "</aside>" +
         '<main class="main">' +
           '<div class="mtop"><div class="brand"><img class="brand-mark" src="icons/logo.svg" alt=""><strong>' + esc(ROLY[stav.rola].nazov) + '</strong></div>' +

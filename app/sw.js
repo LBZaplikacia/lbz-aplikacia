@@ -1,6 +1,6 @@
 // Service worker: appka sa otvorí aj pri slabom signáli (uložené základné súbory).
 // Pri každej novej verzii appky zvýš číslo VERZIA – zariadenia si ju stiahnu samé.
-const VERZIA = "0.3";
+const VERZIA = "0.4";
 const CACHE = "lbz-v" + VERZIA;
 const SUBORY = ["./", "index.html", "styles.css", "app.js", "sklad.js", "config.js", "manifest.webmanifest", "icons/logo.svg"];
 self.addEventListener("install", e => {
