@@ -732,3 +732,7 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 @keyframes lbzDlgFade { from { opacity: 0; } }
 @keyframes lbzDlgIn { from { opacity: 0; transform: translate(-50%, -46%) scale(.97); } }
 .t-hotovo-suhrn { margin: 0; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.f-sprava:has(.f-zle-adresy) { flex-wrap: wrap; }
+.f-zle-adresy { flex: 1 1 100%; margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; color: var(--ink); }
+.f-zle-adresy li { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--bad); border-radius: 8px; padding: 8px 10px; }
+.f-zle-adresy .btn { min-height: 36px; padding: 4px 10px; margin-top: 6px; }

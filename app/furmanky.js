@@ -101,7 +101,7 @@
     DB.functions.invoke("upgates-sync", { body: { akcia: "trasa", id: id, odchod: odchod } }).then(function (res) {
       F.trasaPocita = false;
       var d = res.data;
-      var hotovo = function (j) { F.sprava = { typ: j && j.ok ? "ok" : "chyba", text: (j && j.text) || "Trasa sa nevytvorila" }; nacitajTrasu(id); nacitajFurmanku(true); };
+      var hotovo = function (j) { F.sprava = { typ: j && j.ok ? "ok" : "chyba", text: (j && j.text) || "Trasa sa nevytvorila", zle: (j && j.zle) || null }; nacitajTrasu(id); nacitajFurmanku(true); };
       if (res.error && !d) { var ctx = res.error.context; if (ctx && ctx.json) return ctx.json().then(hotovo, function () { hotovo({ text: chybaText(res.error) }); }); return hotovo({ text: chybaText(res.error) }); }
       hotovo(d);
     }).catch(function (e) { F.trasaPocita = false; F.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
@@ -227,7 +227,12 @@
   }
   function spravaHtml() {
     if (!F.sprava) return "";
-    return '<p class="f-sprava f-' + F.sprava.typ + '" role="status">' + esc(F.sprava.text) + ' <button class="btn-link" data-f="zavri-spravu" aria-label="Zavrieť">✕</button></p>';
+    var zle = F.sprava.zle && F.sprava.zle.length ? '<ul class="f-zle-adresy">' + F.sprava.zle.map(function (z) {
+      var o = objednavka(z.cislo) || {};
+      return '<li><b>' + esc(o.meno || o.firma || z.cislo) + '</b> <span class="muted">' + esc(z.cislo) + '</span><br>📍 ' + esc(z.adresa || "chýba adresa") +
+        ' <button class="btn" data-f-obj="' + esc(z.cislo) + '">✏️ Opraviť adresu</button></li>';
+    }).join("") + "</ul>" : "";
+    return '<div class="f-sprava f-' + F.sprava.typ + '" role="status">' + esc(F.sprava.text) + ' <button class="btn-link" data-f="zavri-spravu" aria-label="Zavrieť">✕</button>' + zle + "</div>";
   }
   function testHtml() {
     return '<p class="s-test" title="Appka z Upgates len číta – nevypína články, nepíše [NEPOSIELAT] ani statusy a neposiela e-maily. Ostrá práca zatiaľ v Správe objednávok.">🧪 Test – z Upgates len číta, ostrá práca v Správe objednávok</p>';
