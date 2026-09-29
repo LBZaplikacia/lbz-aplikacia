@@ -255,13 +255,19 @@ async function geokoduj(adresy: string[]) {
   return cache;
 }
 async function trasa(zastavky: any[]) {
+  const u = await usporiadaj(zastavky);
+  return u.poradie.length ? trvanieHodin(u.poradie) : 0;
+}
+// poradie zastávok (najprv PORADIE: n / PRIORITA, potom optimalizácia Google) + jazda a čakanie pri každej
+async function usporiadaj(zastavky: any[]): Promise<{ poradie: any[]; neplatne: any[] }> {
   const key = Deno.env.get("GOOGLE_MAPS_KEY") || "";
   const gps = await geokoduj([START, ...zastavky.map((z) => z.adresa)]);
   const start = gps[START];
   if (!start || !start.ok) throw new Error("Google nenašiel štart");
   const body = (z: any) => ({ location: { latLng: { latitude: z.lat, longitude: z.lng } } });
   const platne = zastavky.map((z) => ({ ...z, gps: gps[z.adresa] })).filter((z) => z.gps && z.gps.ok).slice(0, 23);
-  if (!platne.length) return 0;
+  const neplatne = zastavky.filter((z) => !platne.some((p) => p.cislo === z.cislo && p.adresa === z.adresa));
+  if (!platne.length) return { poradie: [], neplatne };
   for (const z of platne) {
     const p = norm(z.poznamka).toUpperCase();
     const c = p.match(/CAS:\s*(\d+)/), por = p.match(/PORADIE:\s*(\d+)/);
@@ -297,7 +303,19 @@ async function trasa(zastavky: any[]) {
     const legs = (r2 && r2.legs) || [];
     idx.forEach((oi, i) => { const z = auto[oi]; if (!z) return; z.jazda = sek(legs[i] && legs[i].duration); z.spat = i === idx.length - 1 ? sek(legs[legs.length - 1] && legs[legs.length - 1].duration) : 0; poradie.push(z); });
   }
-  return trvanieHodin(poradie);
+  return { poradie, neplatne };
+}
+// časy príchodov od odchodu (minúty) – rovnaké prestávky ako trvanieHodin (2× 15 min alebo 30 min v strede)
+export function casyTrasy(z: { jazda: number; cakanie: number; spat?: number }[]) {
+  let min = 0;
+  const i1 = 2, i2 = z.length - 2, spolu = i1 >= i2, stred = Math.floor(z.length / 2);
+  const prichod: number[] = [];
+  z.forEach((s, i) => {
+    if (spolu) { if (i === stred && z.length >= 3) min += 30; } else if (i === i1 || i === i2) min += 15;
+    min += s.jazda; prichod.push(Math.round(min)); min += s.cakanie;
+  });
+  min += z.length ? (z[z.length - 1].spat || 15) : 15;
+  return { prichod, navrat: Math.round(min) };
 }
 export function trvanieHodin(z: { jazda: number; cakanie: number; spat?: number }[]) {
   let min = 0;
@@ -367,7 +385,7 @@ Deno.serve(async (req) => {
   let body: any = {};
   try { body = await req.json(); } catch (_) { body = {}; }
   const akcia = body.akcia || "sync";
-  let kto: string | null = null, typ = "rucne";
+  let kto: string | null = null, typ = "rucne", jwt = "";
 
   // --- kto volá ---
   const cron = req.headers.get("x-lbz-cron");
@@ -375,7 +393,7 @@ Deno.serve(async (req) => {
     if (!(await rpc("furmanky_cron_ok", { p_token: cron }))) return odpoved({ ok: false, text: "Neplatný token" }, 401);
     typ = "auto";
   } else {
-    const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
     if (!jwt) return odpoved({ ok: false, text: "Treba sa prihlásiť" }, 401);
     const u = await fetch(SB_URL + "/auth/v1/user", { headers: { apikey: ANON, Authorization: "Bearer " + jwt } });
     if (!u.ok) return odpoved({ ok: false, text: "Prihlásenie vypršalo – prihláste sa znova" }, 401);
@@ -384,6 +402,30 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // --- trasa pre furmana: zákaznícky servis zadá čas odchodu → poradie a časy príchodov → uloží sa, furman ju uvidí ---
+    if (akcia === "trasa") {
+      if (!jwt) return odpoved({ ok: false, text: "Treba sa prihlásiť" }, 401);
+      if (!Deno.env.get("GOOGLE_MAPS_KEY")) return odpoved({ ok: false, text: "Chýba kľúč Google Máp" });
+      const id = Number(body.id), odchod = String(body.odchod || "").trim();
+      if (!id || !/^\d{1,2}:\d{2}$/.test(odchod)) return odpoved({ ok: false, text: "Zadajte čas odchodu (napr. 7:30)" });
+      const pod = await rpc("trasa_podklady", { p_id: id }, jwt);
+      if (!pod || pod.ok === false) return odpoved({ ok: false, text: (pod && pod.text) || "Furmanka sa nenašla" });
+      if (pod.stav_trasy === "na_ceste" || pod.stav_trasy === "ukoncena") return odpoved({ ok: false, text: "Furman už je na ceste – trasu nemožno prepočítať" });
+      const z = (pod.zastavky || []).filter((x: any) => x.adresa && x.adresa !== "-");
+      const bezAdresy = (pod.zastavky || []).filter((x: any) => !x.adresa || x.adresa === "-");
+      if (!z.length) return odpoved({ ok: false, text: "Vo furmanke nie sú objednávky s adresou" });
+      const u = await usporiadaj(z);
+      const c = casyTrasy(u.poradie);
+      const hod = Math.round(c.navrat / 60 * 100) / 100;
+      const out = u.poradie.map((x: any, i: number) => ({ cislo: x.cislo, poradie: i + 1, prichod_min: c.prichod[i], jazda_min: Math.round(x.jazda * 10) / 10, cakanie_min: x.cakanie }));
+      [...u.neplatne, ...bezAdresy].forEach((x: any, i: number) => out.push({ cislo: x.cislo, poradie: u.poradie.length + i + 1, prichod_min: null, jazda_min: null, cakanie_min: null, bez_gps: true } as any));
+      const res = await rpc("trasa_uloz", { p_id: id, p_odchod: odchod, p_zastavky: out, p_navrat_min: c.navrat, p_hodiny: hod }, jwt);
+      if (!res || res.ok === false) return odpoved({ ok: false, text: (res && res.text) || "Trasa sa neuložila" });
+      const zle = u.neplatne.length + bezAdresy.length;
+      return odpoved({ ok: true, hodiny: hod, text: "Trasa vytvorená: " + u.poradie.length + " zastávok, " + hod.toString().replace(".", ",") + " h" +
+        (zle ? " · " + zle + " bez nájdenej adresy (sú na konci – skontrolujte adresu)" : "") });
+    }
+
     // --- jedna objednávka (pridať podľa čísla / obnoviť z Upgates) ---
     if (akcia === "objednavka") {
       const cislo = String(body.cislo || "").trim();
