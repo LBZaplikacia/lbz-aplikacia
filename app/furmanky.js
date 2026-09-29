@@ -11,7 +11,8 @@
   var DB = null, ROLA = null;
   var koren = null;
   var F = {
-    zoznam: null, beh: null, odobrate: 0,
+    zoznam: null, beh: null, odobrate: 0, archivN: 0,
+    archiv: null, archivText: "", zArchivu: false,
     id: null,                 // otvorená furmanka (id, "odobrate" alebo null = zoznam)
     data: null,               // { furmanka, objednavky }
     sablona: null,
@@ -52,7 +53,7 @@
     return rpc("furmanky_zoznam").then(function (r) {
       F.nacitavam = false;
       if (!r || r.ok === false) { F.sprava = { typ: "chyba", text: (r && r.text) || "Furmanky sa nenačítali" }; F.zoznam = F.zoznam || []; }
-      else { F.zoznam = r.furmanky || []; F.beh = r.beh || null; F.odobrate = r.odobrate || 0; }
+      else { F.zoznam = r.furmanky || []; F.beh = r.beh || null; F.odobrate = r.odobrate || 0; F.archivN = r.archiv || 0; }
       prekresli();
     }).catch(function (e) { F.nacitavam = false; F.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
   }
@@ -152,7 +153,7 @@
   // ---------- zobrazenie ----------
   function prekresli() {
     if (!koren) return;
-    var html = F.id == null ? pohladZoznam() : pohladFurmanka();
+    var html = F.id == null ? pohladZoznam() : F.id === "archiv" ? pohladArchiv() : pohladFurmanka();
     koren.innerHTML = html + (F.dialog ? dialogHtml() : "");
     koren.classList.toggle("f-siroke", F.id != null && zobrazenie() === "tabulka");
     var fok = koren.querySelector("[data-f-fokus]"); if (fok) fok.focus();
@@ -193,8 +194,32 @@
         (!z.length ? '<div class="empty"><strong>Zatiaľ žiadne furmanky</strong><span class="muted">Stlačte „Aktualizovať z Upgates“.</span></div>' :
           '<h3 class="f-nadpis">Rozvozy</h3><div class="f-karty">' + (rozvozy.map(karta).join("") || '<p class="muted">Žiadne termíny.</p>') + "</div>" +
           '<h3 class="f-nadpis">Ostatné</h3><div class="f-karty">' + ostatne.map(karta).join("") +
+            (F.archivN ? '<button class="card f-karta" data-f="archiv"><span class="f-karta-hore"><strong>Archív</strong></span><span class="muted"><span class="num">' + F.archivN + "</span> rozvezených furmaniek</span></button>" : "") +
             (F.odobrate ? '<button class="card f-karta" data-f-otvor="odobrate"><span class="f-karta-hore"><strong>Odobraté</strong></span><span class="muted"><span class="num">' + F.odobrate + "</span> obj. vyradených ručne</span></button>" : "") +
           "</div>"));
+  }
+
+  function nacitajArchiv() {
+    F.nacitavam = true; prekresli();
+    return rpc("furmanky_archiv", { p_text: F.archivText || null }).then(function (r) {
+      F.nacitavam = false;
+      if (!r || r.ok === false) F.sprava = { typ: "chyba", text: (r && r.text) || "Archív sa nenačítal" };
+      else F.archiv = r.furmanky || [];
+      prekresli();
+    }).catch(function (e) { F.nacitavam = false; F.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
+  }
+  function pohladArchiv() {
+    var z = F.archiv;
+    return '<div class="head"><div><div class="label"><button class="btn-link" data-f="spat">← Furmanky</button></div><h2>Archív rozvozov</h2></div></div>' +
+      '<form id="f-archiv-form" class="f-hladaj-riadok"><input class="f-hladat" data-f-archiv-text placeholder="Číslo objednávky, meno, telefón, región alebo dátum" value="' + esc(F.archivText) + '">' +
+      '<button class="btn btn-primary" type="submit">Hľadať</button></form>' + spravaHtml() +
+      (z == null ? '<div class="empty"><strong>Načítavam…</strong></div>' : !z.length ? '<div class="empty"><strong>Nič sa nenašlo</strong></div>' :
+        '<div class="f-karty">' + z.map(function (f) {
+          return '<button class="card f-karta" data-f-otvor="' + f.id + '"><span class="f-karta-hore"><strong>' + esc(f.region) + "</strong>" + stavPill(f.stav) + "</span>" +
+            '<span class="f-datum">' + esc(datumSk(f.datum)) + "</span>" +
+            '<span class="muted"><span class="num">' + f.pocet + "</span> obj. · " + esc(eur(f.suma)) + "</span>" +
+            (f.najdene ? '<span class="f-mini">' + f.najdene.map(esc).join("<br>") + "</span>" : "") + "</button>";
+        }).join("") + "</div>");
   }
 
   function pohladFurmanka() {
@@ -212,9 +237,10 @@
         (f.id ? '<button class="btn" data-f="pridat">+ Objednávka</button>' : "") +
         (f.id ? (f.stav === "otvorena" ? '<button class="btn" data-f="stav" data-stav="full">Uzavrieť (FULL)</button>' :
           '<button class="btn" data-f="stav" data-stav="otvorena">Otvoriť</button>') : "") +
+        (f.id && f.rozvoz && f.stav !== "rozvezena" ? (f.naplanovane ? '<span class="pill ok f-napl">✓ Naplánované ' + esc(casSk(f.naplanovane)) + "</span>" :
+          '<button class="btn" data-f="naplanovane">Naplánované</button>') : "") +
         (f.id && f.stav === "full" ? '<button class="btn" data-f="stav" data-stav="rozvezena">Rozvezené</button>' : "") +
         '<button class="btn" data-f="sumar">🖨️ Sumár výroby</button>' +
-        '<button class="btn" data-f="stitky">🖨️ Štítky</button>' +
       "</span></div>" +
       '<div class="f-prepinace">' +
         '<label class="f-check"><input type="checkbox" data-f-skryt' + (F.skryt ? " checked" : "") + "> Skryť prázdne riadky</label>" +
@@ -476,22 +502,24 @@
     window.addEventListener("afterprint", hotovo);
     setTimeout(function () { window.print(); setTimeout(hotovo, 1500); }, 80);
   }
+  // Sumár výroby – rovnaké rozloženie ako PDF zo Správy objednávok (Názov | Spolu ks | Spolu dávok, prázdne riadky skryté)
   function tlacSumar() {
     var obj = F.data.objednavky || [];
     var sab = F.sablona || [];
     var v = vypocitaj(sab, obj);
     var ine = inePolozky(sab, obj);
     var riadky = sab.filter(function (r) { return r.riadok >= 10 && r.riadok < 145 && (Number(v[r.riadok].ks) || Number(v[r.riadok].davky)); });
-    var d = new Date();
-    var html = "<h1>SUMÁR VÝROBY: " + esc(F.data.furmanka.nazov) + '</h1><p class="t-datum">Legendárne buchty · ' + esc(d.toLocaleDateString("sk-SK") + " " + d.toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" })) + " · " + obj.length + " objednávok</p>" +
-      '<table class="f-t-sumar"><thead><tr><th>Názov</th><th class="t-c">Spolu ks</th><th class="t-c">Spolu dávok</th></tr></thead><tbody>' +
+    var c2 = function (n) { return n == null || n === "" ? "" : Number(n).toLocaleString("sk-SK", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    var html = '<table class="f-t-sumar"><thead><tr><th colspan="3" class="f-t-nazov">' + esc(F.data.furmanka.nazov) + (F.data.furmanka.stav !== "otvorena" ? " [FULL]" : "") + "</th></tr>" +
+      '<tr class="f-t-hl"><th>Názov</th><th class="t-c">Spolu ks</th><th class="t-c">Spolu dávok</th></tr></thead><tbody>' +
       riadky.map(function (r) {
-        var h = v[r.riadok];
-        return '<tr class="' + (r.typ === "sucet" ? "f-t-sucet" : "") + '" style="background:' + esc(r.farba || "#fff") + '"><td>' + esc(r.nazov) + '</td><td class="t-c">' + cislo(h.ks) + '</td><td class="t-c">' + (h.davky == null ? "" : cislo(h.davky, 2)) + "</td></tr>";
+        var h = v[r.riadok], cls = "";
+        if (r.typ === "sucet") cls = r.farba === "#ff0000" ? "f-t-cerveny" : /^POLOTOVAR/.test(r.nazov) ? "f-t-polotovar" : "f-t-medzi";
+        return '<tr class="' + cls + '" style="background:' + esc(r.farba || "#fff") + '"><td>' + esc(r.nazov) + '</td><td class="t-c">' + c2(h.ks) + '</td><td class="t-c">' + (h.davky == null ? "" : c2(h.davky)) + "</td></tr>";
       }).join("") +
       ine.map(function (r) {
         var ks = obj.reduce(function (a, o) { return a + (Number((o.polozky || {})[r.kod]) || 0); }, 0);
-        return '<tr><td>' + esc(r.nazov) + " (" + esc(r.kod) + ')</td><td class="t-c">' + cislo(ks) + '</td><td class="t-c"></td></tr>';
+        return '<tr><td>' + esc(r.nazov) + " (" + esc(r.kod) + ')</td><td class="t-c">' + c2(ks) + '</td><td class="t-c"></td></tr>';
       }).join("") + "</tbody></table>";
     tlacHtml(html, "f-tlac-sumar");
   }
@@ -553,7 +581,14 @@
       case "obnov": nacitajZoznam(); break;
       case "obnov-f": nacitajFurmanku(); nacitajZoznam(); break;
       case "stiahni": stiahni(); break;
-      case "spat": F.id = null; F.data = null; F.sprava = null; F.dialog = null; prekresli(); nacitajZoznam(); break;
+      case "spat":
+        if (F.zArchivu && F.id !== "archiv") { F.id = "archiv"; F.data = null; F.dialog = null; prekresli(); break; }
+        F.id = null; F.data = null; F.sprava = null; F.dialog = null; F.zArchivu = false; prekresli(); nacitajZoznam(); break;
+      case "archiv": F.id = "archiv"; F.zArchivu = true; F.sprava = null; F.archiv = null; prekresli(); nacitajArchiv(); break;
+      case "naplanovane":
+        if (!window.confirm("Potvrdiť, že furmanka " + F.data.furmanka.nazov + " je skontrolovaná a naplánovaná?\n\nPo ostrom štarte sa tým objednávky v Upgates označia ako Naplánované. Počas testu sa len zapíše v appke.")) return;
+        po(rpc("furmanka_naplanovana", { p_id: F.data.furmanka.id }), "Označené ako naplánované").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
+        break;
       case "sumar": tlacSumar(); break;
       case "stitky": tlacStitky(); break;
       case "pridat": F.dialog = { typ: "pridat" }; prekresli(); break;
@@ -608,6 +643,7 @@
   }
   function odoslanie(e) {
     if (e.target.id === "f-obj-form") { e.preventDefault(); ulozObjednavku(e.target); }
+    if (e.target.id === "f-archiv-form") { e.preventDefault(); F.archivText = e.target.querySelector("[data-f-archiv-text]").value.trim(); nacitajArchiv(); return; }
     if (e.target.id === "f-hladaj-form") { e.preventDefault(); var v = e.target.querySelector("[data-f-hladaj-obj]").value.trim(); if (v) hladajObjednavku(v); }
   }
   function klaves(e) {
