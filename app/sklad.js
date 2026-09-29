@@ -40,6 +40,7 @@
     pohlad: "skener",                         // skener | stav | sprava | furmanky | furmanka
     upravaInfo: null,                         // Správa: nájdený balík / výsledok
     pohyby: null,                             // Správa: posledné pohyby
+    vsetkySkeny: null,                        // dnešné skeny zo všetkých zariadení (databáza)
     furmanka: null,
     filter: "vsetko",
     hladat: "",
@@ -189,6 +190,7 @@
         if (chyby) { S.sprava = { typ: "chyba", text: chyby === 1 ? "1 sken sa nezapísal – pozri zoznam" : chyby + " skeny sa nezapísali – pozri zoznam" }; pip("chyba"); }
         posielam = false; prekresli();
         if (S.skeny.some(function (s) { return s.stav === "caka"; })) posliFrontu();
+        else if (SUPA) nacitajDnesne();
       })
       .catch(function (err) {
         posielam = false; pokus++;
@@ -309,6 +311,40 @@
     api({ akcia: "KATALOG" }).then(function (res) {
       if (res && res.ok && res.katalog) { S.katalog = res.katalog; LS.set("lbz2_katalog", S.katalog); prekresli(); }
     }).catch(function () {});
+  }
+
+  // ---------- dnešné skeny zo všetkých zariadení ----------
+  var AKCIA_REZIM = { prijem: "Príjem", krcmicka: "Krčmička", vydaj: "Výdaj" };
+  var nacitavamDnesne = false;
+  function nacitajDnesne() {
+    if (!SUPA || !DB || nacitavamDnesne) return;
+    nacitavamDnesne = true;
+    rpc("dnesne_skeny", { p_limit: 300 }).then(function (rows) {
+      nacitavamDnesne = false;
+      S.vsetkySkeny = rows || [];
+      if (S.pohlad === "skener") prekresli();
+    }).catch(function () { nacitavamDnesne = false; });
+  }
+  // kým je otvorené Skenovanie, obnovujeme zoznam každých 20 s (skeny z iných zariadení)
+  setInterval(function () {
+    if (SUPA && DB && koren && S.pohlad === "skener" && document.visibilityState === "visible") nacitajDnesne();
+  }, 20000);
+
+  function zoznamDnes() {
+    var mistne = S.skeny.filter(function (s) { return dnes(s.cas); });
+    if (!SUPA || !S.vsetkySkeny) return mistne.slice().reverse();
+    var vDb = {};
+    var zDb = S.vsetkySkeny.map(function (h) {
+      if (h.scan_id) vDb[h.scan_id] = true;
+      return {
+        scanId: h.scan_id, kod: h.balik_kod || "", kmen: h.produkt_kod || "", cas: new Date(h.cas).getTime(),
+        rezim: AKCIA_REZIM[h.akcia] || "", akcia: h.akcia, stav: h.ok ? "ok" : "chyba", text: h.vysledok,
+        kto: h.meno || "", zariadenie: h.zariadenie || "", moje: h.zariadenie === zariadenie
+      };
+    });
+    // skeny z tohto zariadenia, ktoré ešte nie sú v databáze (čakajú na odoslanie)
+    var cakajuce = mistne.filter(function (s) { return !vDb[s.scanId] && s.stav !== "ok"; });
+    return cakajuce.concat(zDb).sort(function (a, b) { return b.cas - a.cas; });
   }
 
   // ---------- správa skladu (len IT a CEO) ----------
@@ -528,16 +564,17 @@
     var panel = sp
       ? '<div class="s-sprava s-' + sp.typ + '" role="status">' + esc(sp.text) + (sp.kod ? '<span class="s-kod">' + esc(sp.kod) + "</span>" : "") + "</div>"
       : '<div class="s-sprava s-info" role="status"><span>Režim <strong>' + esc(S.rezim) + "</strong> – skenujte čítačkou alebo kamerou</span></div>";
-    var dnesne = S.skeny.filter(function (s) { return dnes(s.cas); }).slice().reverse();
+    var dnesne = zoznamDnes();
     var ok = dnesne.filter(function (s) { return s.stav === "ok"; }).length;
+    var vsetky = SUPA && S.vsetkySkeny;
     return panel +
       '<div class="s-ovladanie">' +
         '<form class="s-rucne" data-s-form="rucne"><input id="s-rucny" autocomplete="off" autocapitalize="characters" placeholder="Kód ručne, napr. P00017-2-15" aria-label="Kód balíka ručne">' +
         '<button class="btn btn-primary" type="submit">Zapísať</button></form>' +
       "</div>" +
-      '<section class="card"><h3>Dnešné skeny v tomto zariadení <span class="pill ok num">' + ok + " zapísaných</span></h3>" +
+      '<section class="card"><h3>' + (vsetky ? "Dnešné skeny – všetky zariadenia" : "Dnešné skeny v tomto zariadení") + ' <span class="pill ok num">' + ok + " zapísaných</span></h3>" +
         (dnesne.length ? '<div class="s-zoznam">' + dnesne.slice(0, 80).map(riadokSkenu).join("") + "</div>" : '<p class="muted" style="margin:0">Zatiaľ nič.</p>') +
-        (dnesne.some(function (s) { return s.stav === "chyba"; }) ? '<button class="btn" data-s-akcia="zmaz-chyby" style="margin-top:10px">Skryť nezapísané</button>' : "") +
+        (dnesne.some(function (s) { return s.stav === "chyba" && !s.akcia; }) ? '<button class="btn" data-s-akcia="zmaz-chyby" style="margin-top:10px">Skryť nezapísané</button>' : "") +
       "</section>";
   }
 
@@ -545,10 +582,12 @@
     var farba = (S.katalog[s.kmen] && S.katalog[s.kmen].f) || "#ffffff";
     var stavT = s.stav === "caka" ? "⏳ odosiela sa" : s.stav === "ok" ? "✅ " + (s.text || "zapísané") : "❌ " + (s.text || "chyba");
     var pocet = s.pocet ? ' · sklad <span class="num">' + s.pocet.hlavny + "</span> · 🏪 <span class=\"num\">" + s.pocet.krcmicka + "</span>" : "";
+    var ikona = s.rezim ? ikonaRezimu(s.rezim) : (NAZVY_AKCII[s.akcia] || "").split(" ")[0];
+    var kto = s.akcia ? " · " + (s.moje ? "toto zariadenie" : (s.kto || "") + (s.zariadenie ? " (" + s.zariadenie + ")" : "")) : "";
     return '<div class="s-riadok s-' + s.stav + '" style="--pf:' + esc(farba) + '">' +
       '<span class="s-cas num">' + cas(s.cas) + "</span>" +
-      '<span class="s-telo"><strong>' + ikonaRezimu(s.rezim) + " " + esc(nazovProduktu(s.kmen)) + "</strong>" +
-      '<span class="muted">' + esc(s.kod) + pocet + "</span></span>" +
+      '<span class="s-telo"><strong>' + ikona + " " + esc(nazovProduktu(s.kmen)) + "</strong>" +
+      '<span class="muted">' + esc(s.kod) + pocet + esc(kto) + "</span></span>" +
       '<span class="s-stav">' + esc(stavT) + "</span></div>";
   }
 
@@ -743,6 +782,7 @@
       S.pohlad = d.sPohlad; S.sprava = null; prekresli();
       if (S.pohlad === "stav") nacitajStav(false);
       if (S.pohlad === "sprava") nacitajPohyby();
+      if (S.pohlad === "skener") nacitajDnesne();
       return;
     }
     if (d.sFilter) { S.filter = d.sFilter; Array.prototype.forEach.call(koren.querySelectorAll("[data-s-filter]"), function (b) { b.setAttribute("aria-pressed", b.dataset.sFilter === S.filter); }); filtrujRiadky(); return; }
@@ -771,8 +811,8 @@
     nastavDb: function (klient, rola) {
       var novy = klient && klient !== DB;
       DB = klient || null; ROLA = klient ? rola : null;
-      if (!DB) { S.pohyby = null; S.upravaInfo = null; if (S.pohlad === "sprava") S.pohlad = "skener"; return; }
-      if (novy) { nacitajKatalog(); setTimeout(posliFrontu, 300); }
+      if (!DB) { S.pohyby = null; S.upravaInfo = null; S.vsetkySkeny = null; if (S.pohlad === "sprava") S.pohlad = "skener"; return; }
+      if (novy) { nacitajKatalog(); setTimeout(posliFrontu, 300); nacitajDnesne(); }
     },
     // modul: "sklad" alebo "furmanky"
     mount: function (el, modul) {
@@ -786,6 +826,7 @@
       if (modul === "furmanky" || S.pohlad === "stav") nacitajStav(false);
       if (!Object.keys(S.katalog).length) nacitajKatalog();
       if (S.pohlad === "sprava") nacitajPohyby();
+      if (S.pohlad === "skener") nacitajDnesne();
       posliFrontu();
     },
     // malé karty na úvodnú obrazovku

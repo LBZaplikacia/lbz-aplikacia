@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.6 BETA";
+  var VERZIA = "0.7 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -79,9 +79,65 @@
     return stav.sprava ? '<p class="login-sprava ' + (stav.sprava.typ === "ok" ? "ok" : "chyba") + '" role="status">' + esc(stav.sprava.text) + "</p>" : "";
   }
   function interny() { return ["it", "ceo", "prevadzka", "furman", "zakaznicky_servis"].indexOf(stav.rola) > -1; }
+  function spravca() { return stav.rola === "it" || stav.rola === "ceo"; }
+
+  // ---------- Používatelia (IT a CEO) ----------
+  // E-mail + rola sa uloží vopred; pri prvom prihlásení (Google alebo e-mail) dostane človek túto rolu sám.
+  function nacitajPouzivatelov() {
+    if (!OSTRY || !spravca() || stav.nacitavamPouz) return;
+    stav.nacitavamPouz = true;
+    db.rpc("pouzivatelia").then(function (r) {
+      stav.nacitavamPouz = false;
+      stav.pouzivatelia = r.error ? [] : (r.data || []);
+      if (stav.modul === "nastavenia") render();
+    });
+  }
+  function moznostiRol(vybrana) {
+    return Object.keys(ROLY).map(function (k) {
+      return '<option value="' + k + '"' + (k === vybrana ? " selected" : "") + ">" + esc(ROLY[k].nazov) + "</option>";
+    }).join("");
+  }
+  function kartaPouzivatelia() {
+    if (!stav.pouzivatelia) { nacitajPouzivatelov(); }
+    var zoznam = stav.pouzivatelia || [];
+    var ps = stav.spravaPouz ? '<p class="login-sprava ' + (stav.spravaPouz.typ === "ok" ? "ok" : "chyba") + '" role="status">' + esc(stav.spravaPouz.text) + "</p>" : "";
+    return '<section class="card pouz-karta"><h3>Používatelia <span class="pill ok num">' + zoznam.length + "</span></h3>" +
+      '<p class="muted" style="margin:0;font-size:14px">Pridajte e-mail a rolu. Človek sa potom prihlási cez Google (alebo e-mailom) a rolu dostane automaticky.</p>' +
+      '<form id="f-pouzivatel" class="pouz-form">' +
+        '<input id="in-p-meno" placeholder="Priezvisko Meno" autocomplete="off">' +
+        '<input id="in-p-email" type="email" placeholder="e-mail" autocomplete="off" required>' +
+        '<select id="in-p-rola">' + moznostiRol("prevadzka") + "</select>" +
+        '<button class="btn btn-primary" type="submit">Pridať</button></form>' + ps +
+      (stav.pouzivatelia === null || stav.pouzivatelia === undefined ? '<p class="muted" style="margin:0">Načítavam…</p>' :
+        '<div class="pouz-zoznam">' + zoznam.map(function (u) {
+          return '<div class="pouz-riadok' + (u.aktivny ? "" : " pouz-vyp") + '">' +
+            '<span class="pouz-meno"><strong>' + esc(u.meno || u.email) + '</strong><span class="muted">' + esc(u.email) + " · " +
+              (u.posledne_prihlasenie ? "prihlásený " + new Date(u.posledne_prihlasenie).toLocaleDateString("sk-SK") : u.ucet ? "účet založený" : "ešte sa neprihlásil") + "</span></span>" +
+            '<select data-pouz-rola="' + esc(u.email) + '" aria-label="Rola">' + moznostiRol(u.rola) + "</select>" +
+            '<label class="pouz-akt"><input type="checkbox" data-pouz-akt="' + esc(u.email) + '"' + (u.aktivny ? " checked" : "") + "> aktívny</label></div>";
+        }).join("") + "</div>") + "</section>";
+  }
+  function ulozPouzivatela(email, meno, rola, aktivny) {
+    return db.rpc("nastav_pouzivatela", { p_email: email, p_meno: meno || null, p_rola: rola, p_aktivny: aktivny }).then(function (r) {
+      var res = r.data || {};
+      stav.spravaPouz = { typ: res.ok ? "ok" : "chyba", text: res.ok ? email + " – uložené" : (res.text || "Neuložené") };
+      stav.pouzivatelia = null; render();
+      return res.ok;
+    });
+  }
+  root.addEventListener("change", function (e) {
+    var t = e.target, d = t.dataset;
+    if (!d || !(d.pouzRola || d.pouzAkt)) return;
+    var email = d.pouzRola || d.pouzAkt;
+    var u = (stav.pouzivatelia || []).filter(function (x) { return x.email === email; })[0]; if (!u) return;
+    ulozPouzivatela(email, null, d.pouzRola ? t.value : u.rola, d.pouzAkt ? t.checked : u.aktivny);
+  });
+
   function skladZapnuty() { return !!(SKLAD && SKLAD.zapnute()); }
 
   // ---------- prihlásenie ----------
+  var GOOGLE_IKONA = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.3 6.9-17.7z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.1 1.4-4.9 2.3-8.2 2.3-6.2 0-11.5-4.2-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
+
   function renderLogin() {
     var hlavicka = '<div class="brand"><img class="brand-mark" src="icons/logo.svg" alt="">' +
       '<div><h1>Legendárne buchty <span class="beta">BETA</span></h1><p>Aplikácia pre tím a zákazníkov – testovacia verzia</p></div></div>';
@@ -119,6 +175,8 @@
         '<button class="btn btn-primary" type="submit">Uložiť heslo</button></form>';
     } else {
       obsah = '<form class="panel" id="f-prihlasenie">' +
+        (cfg.googleLogin ? '<button class="btn btn-google" type="button" data-login="google">' + GOOGLE_IKONA + "Prihlásiť sa cez Google</button>" +
+          '<div class="divider">alebo e-mailom</div>' : "") +
         '<label class="field"><span class="label">E-mail</span><input id="in-email" type="email" autocomplete="username" placeholder="meno@legendarnebuchty.sk" required></label>' +
         '<label class="field"><span class="label">Heslo</span><input id="in-heslo" type="password" autocomplete="current-password" required></label>' +
         spravaHtml() +
@@ -224,6 +282,7 @@
           '<label class="field"><span class="label">Nové heslo ešte raz</span><input id="in-heslo2" type="password" autocomplete="new-password" minlength="6" required></label>' +
           spravaHtml() +
           '<button class="btn btn-primary" type="submit">Uložiť nové heslo</button></form>' : "") +
+        (OSTRY && spravca() ? kartaPouzivatelia() : "") +
         '<button class="btn" id="btn-odhlasit-m" style="max-width:520px">Odhlásiť sa</button>';
     }
     if (skladZapnuty() && (stav.modul === "sklad" || stav.modul === "furmanky")) {
@@ -246,8 +305,15 @@
     var t = e.target.closest("button");
     if (!t) return;
     if (t.dataset.demo) { stav.rola = t.dataset.demo; stav.pouzivatel = "Ukážka – " + ROLY[t.dataset.demo].nazov; stav.modul = "prehlad"; render(); return; }
+    if (t.dataset.login === "google") {
+      // Google vráti používateľa späť na túto adresu; reláciu z adresy prevezme knižnica sama
+      t.disabled = true;
+      db.auth.signInWithOAuth({ provider: "google", options: { redirectTo: location.origin + location.pathname, queryParams: { prompt: "select_account" } } })
+        .then(function (res) { if (res.error) { stav.sprava = { typ: "chyba", text: "Prihlásenie cez Google teraz nejde. Skúste e-mail a heslo." }; render(); } });
+      return;
+    }
     if (t.dataset.login) { stav.login = t.dataset.login; stav.sprava = null; render(); return; }
-    if (t.dataset.mod) { stav.modul = t.dataset.mod; stav.sprava = null; render(); window.scrollTo(0, 0); return; }
+    if (t.dataset.mod) { stav.modul = t.dataset.mod; stav.sprava = null; stav.spravaPouz = null; if (t.dataset.mod === "nastavenia") stav.pouzivatelia = null; render(); window.scrollTo(0, 0); return; }
     if (t.id === "btn-odhlasit" || t.id === "btn-odhlasit-m") {
       if (OSTRY) db.auth.signOut();
       stav.rola = null; stav.pouzivatel = null; stav.modul = "prehlad"; stav.dbModuly = null; stav.login = "prihlasenie"; stav.sprava = null;
@@ -258,6 +324,11 @@
 
   root.addEventListener("submit", function (e) {
     var f = e.target;
+    if (f.id === "f-pouzivatel") {
+      e.preventDefault();
+      ulozPouzivatela(document.getElementById("in-p-email").value, document.getElementById("in-p-meno").value, document.getElementById("in-p-rola").value, true);
+      return;
+    }
     if (["f-prihlasenie", "f-zabudnute", "f-nove-heslo", "f-zmena-hesla"].indexOf(f.id) === -1) return; // ostatné formuláre si obsluhujú moduly
     e.preventDefault();
     var tlacidlo = f.querySelector('button[type="submit"]'); if (tlacidlo) tlacidlo.disabled = true;
@@ -305,6 +376,11 @@
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(interny() ? db : null, stav.rola);
       render();
     }).catch(function () { stav.nacitavam = false; stav.sprava = { typ: "chyba", text: "Bez spojenia so serverom." }; render(); });
+  }
+
+  if (OSTRY && /error_description=/.test(location.hash + location.search)) {
+    stav.sprava = { typ: "chyba", text: "Prihlásenie cez Google sa nepodarilo. Skúste znova alebo e-mail a heslo." };
+    try { history.replaceState(null, "", location.pathname); } catch (e) {}
   }
 
   if (OSTRY) {
