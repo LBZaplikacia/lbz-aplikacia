@@ -138,12 +138,19 @@
   }
   function poznamkyHtml(mesiac) {
     var m = iso(mesiac), n = ((R.data && R.data.poznamky) || []).filter(function (x) { return String(x.mesiac).slice(0, 10) === m; })[0];
-    if (rola() === "sprava") {
-      return '<form class="card r-pozn" id="r-pozn-form" data-mesiac="' + m + '"><h3>Poznámky – ' + MESIACE[mesiac.getMonth()] + "</h3>" +
-        '<textarea rows="3" id="r-pozn-text" placeholder="Pokyny k rozpisu pre všetkých (zaúčanie, výnimky…)">' + esc(n && n.text) + "</textarea>" +
-        '<button class="btn" type="submit">Uložiť poznámku</button></form>';
+    var sprava = rola() === "sprava", text = n && n.text, mes = MESIACE[mesiac.getMonth()];
+    if (sprava && R.poznEdit === m) {
+      return '<form class="r-pozn r-pozn-edit" id="r-pozn-form" data-mesiac="' + m + '"><span class="r-pozn-nad">📌 Poznámka – ' + esc(mes) + "</span>" +
+        '<textarea rows="3" id="r-pozn-text" placeholder="Pokyny k rozpisu pre všetkých (zaúčanie, výnimky…)" data-r-fokus>' + esc(text) + "</textarea>" +
+        '<span class="r-pozn-tl"><button class="btn btn-primary r-mini" type="submit">Uložiť</button><button class="btn r-mini" type="button" data-r="pozn-zrusit">Zrušiť</button></span></form>';
     }
-    return n && n.text ? '<section class="card r-pozn"><h3>Poznámky – ' + MESIACE[mesiac.getMonth()] + '</h3><p style="margin:0;white-space:pre-line">' + esc(n.text) + "</p></section>" : "";
+    if (text) {
+      return '<div class="r-pozn"><span class="r-pozn-nad">📌 Poznámka – ' + esc(mes) + "</span>" +
+        '<div class="r-pozn-t">' + esc(text) + "</div>" +
+        (sprava ? '<span class="r-pozn-tl"><button class="btn-link" data-r="pozn-upravit" data-m="' + m + '">Upraviť</button>' +
+          '<button class="btn-link r-pozn-zmaz" data-r="pozn-zmazat" data-m="' + m + '">Odstrániť</button></span>' : "") + "</div>";
+    }
+    return sprava ? '<div class="r-lista"><button class="btn r-mini" data-r="pozn-upravit" data-m="' + m + '">📌 Pridať poznámku k mesiacu</button></div>' : "";
   }
   function legenda() {
     var o = aktivneOsoby(); if (!o.length) return "";
@@ -176,7 +183,7 @@
       telo = '<div class="r-dni">' + dniZoznam(od, dok) + "</div>";
     }
     var upoz = rola() === "osobny" && !R.data.ja ? '<p class="s-varovanie">Váš účet ešte nie je spojený s menom v rozpise – vedenie ho spojí v „Ľudia a farby“ (podľa e-mailu).</p>' : "";
-    return head + spravaHtml() + upoz + mojeSmeny() + telo + legenda() + spravaTl + poznamkyHtml(r.mesiac);
+    return head + spravaHtml() + poznamkyHtml(r.mesiac) + upoz + mojeSmeny() + telo + legenda() + spravaTl;
   }
 
   function pohladLudia() {
@@ -276,6 +283,12 @@
     var d = t.dataset;
     if (d.r === "zavri") { R.dialog = null; prekresli(); return; }
     if (d.r === "zavri-spravu") { R.sprava = null; prekresli(); return; }
+    if (d.r === "pozn-upravit") { R.poznEdit = d.m; prekresli(); var ta = document.getElementById("r-pozn-text"); if (ta) ta.focus(); return; }
+    if (d.r === "pozn-zrusit") { R.poznEdit = null; prekresli(); return; }
+    if (d.r === "pozn-zmazat") {
+      if (!window.confirm("Odstrániť poznámku k tomuto mesiacu?")) return;
+      ulozPoznamku(d.m, ""); return;
+    }
     if (d.r === "dnes") { R.od = dnes(); nacitaj(); return; }
     if (d.r === "spat" || d.r === "dalej") {
       var smer = d.r === "spat" ? -1 : 1;
@@ -301,13 +314,18 @@
         od: f.elements.od ? f.elements.od.value : "", do: f.elements.do ? f.elements.do.value : "" });
     }
   }
+  function ulozPoznamku(mesiac, text) {
+    rpc("rozpis_poznamka_uloz", { p_mesiac: mesiac, p_text: text }).then(function (r) {
+      if (r && r.ok) { R.poznEdit = null; R.sprava = { typ: "ok", text: text.trim() ? "Poznámka uložená" : "Poznámka odstránená" }; }
+      else R.sprava = { typ: "chyba", text: (r && r.text) || "Neuložené" };
+      nacitaj();
+    }).catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+  }
   function odoslanie(e) {
     var f = e.target;
     if (f.id === "r-pozn-form") {
       e.preventDefault();
-      rpc("rozpis_poznamka_uloz", { p_mesiac: f.dataset.mesiac, p_text: document.getElementById("r-pozn-text").value }).then(function (r) {
-        R.sprava = r && r.ok ? { typ: "ok", text: "Poznámka uložená" } : { typ: "chyba", text: (r && r.text) || "Neuložené" }; nacitaj();
-      }).catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+      ulozPoznamku(f.dataset.mesiac, document.getElementById("r-pozn-text").value);
       return;
     }
     if (f.hasAttribute("data-r-osoba")) {

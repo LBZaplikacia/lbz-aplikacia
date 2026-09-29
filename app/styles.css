@@ -485,7 +485,13 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 .r-moje-zoznam { display: flex; gap: 8px; flex-wrap: wrap; }
 .r-moja { border: 1px solid var(--line); background: var(--accent-soft); border-radius: 12px; padding: 8px 12px; display: grid; gap: 2px; text-align: left; font-size: 13px; cursor: pointer; }
 .r-moja b { font-size: 15px; }
-.r-pozn textarea { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--bg); font: inherit; color: var(--ink); width: 100%; }
+.r-pozn { display: grid; gap: 4px; border-left: 3px solid var(--accent, #cba75b); background: var(--accent-soft); border-radius: 0 10px 10px 0; padding: 6px 10px; font-size: 13px; line-height: 1.4; margin: 0; }
+.r-pozn-nad { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #777); }
+.r-pozn-t { white-space: pre-line; }
+.r-pozn-tl { display: flex; gap: 14px; flex-wrap: wrap; }
+.r-pozn-tl .btn-link { font-size: 12px; padding: 0; min-height: 0; }
+.r-pozn-zmaz { color: var(--bad, #b3261e); }
+.r-pozn textarea { border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: var(--bg); font: inherit; font-size: 13px; color: var(--ink); width: 100%; }
 .r-dni { display: grid; gap: 12px; }
 .r-den-karta { gap: 8px; }
 .r-den-karta h3 { font-size: 16px; }
