@@ -7,7 +7,7 @@
 // • Zdieľa zámok (LockService) so starým skenerom → zápisy sa nebijú.
 // • Volá sa z doPost, keď požiadavka obsahuje "v2": true.
 //
-// Akcie:  PING | KATALOG | STAV | SKENY | FURMANKY_OBNOV
+// Akcie:  PING | KATALOG | STAV | SKENY | FURMANKY_OBNOV | BALIKY (prenos skladu do novej appky)
 // Obnova furmaniek každých 15 min: spúšťač sa vytvorí sám pri prvom STAV (alebo ručne v2ZapniAutomatickeFurmanky)
 // ==========================================================================
 
@@ -24,6 +24,7 @@ function lbzV2(params) {
     else if (akcia === "STAV") { v2ZabezpecSpustac_(); out = v2Stav_(params.cerstvy === true); }
     else if (akcia === "SKENY") out = v2Skeny_(params.skeny || []);
     else if (akcia === "FURMANKY_OBNOV") out = v2ObnovFurmanky_();
+    else if (akcia === "BALIKY") out = v2Baliky_();
     else out = { ok: false, chyba: "Neznáma akcia: " + akcia };
   } catch (err) {
     out = { ok: false, chyba: String((err && err.message) || err) };
@@ -262,6 +263,23 @@ function v2PrepocitajAktualny_(ss, riadky, kmene) {
     if (zmena && hodnoty.length) akt.getRange(r + 1, 6, 1, hodnoty.length).setValues([hodnoty]).setFontColors([farby]);
   }
   return pocty;
+}
+
+// --------------------------------------------------------------------------
+// BALIKY – všetky balíky Na sklade / v Krčmičke (len čítanie) na prenos do novej appky
+// --------------------------------------------------------------------------
+function v2Baliky_() {
+  var sh = SpreadsheetApp.openById(ID_HLAVNEJ_TABULKY).getSheetByName("Sklad");
+  var posl = sh.getLastRow();
+  var data = posl > 1 ? sh.getRange(2, 1, posl - 1, 6).getValues() : [];
+  var iso = function (d) { return d instanceof Date && !isNaN(d) ? d.toISOString() : ""; };
+  var baliky = [];
+  data.forEach(function (r) {
+    var kod = v2Kod_(r[0]); var st = String(r[5]).trim();
+    if (!kod || (st !== "Na sklade" && st !== "Krčmička")) return;
+    baliky.push({ kod: kod, kmen: v2Kod_(r[1]), stav: st === "Krčmička" ? "krcmicka" : "sklad", prijaty: iso(r[2]), expiracia: iso(r[3]) });
+  });
+  return { ok: true, pocet: baliky.length, baliky: baliky, cas: v2Cas_(new Date(), "HH:mm:ss") };
 }
 
 // --------------------------------------------------------------------------
