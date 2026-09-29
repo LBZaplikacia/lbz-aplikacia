@@ -416,15 +416,18 @@ Deno.serve(async (req) => {
       const bezAdresy = (pod.zastavky || []).filter((x: any) => !x.adresa || x.adresa === "-");
       if (!z.length) return odpoved({ ok: false, text: "Vo furmanke nie sú objednávky s adresou" });
       const u = await usporiadaj(z);
+      // adresu, ktorú Google nenašiel (alebo chýba), musí ZS opraviť – trasa sa bez nej nevytvorí
+      const zleAdresy = [...u.neplatne, ...bezAdresy].map((x: any) => ({ cislo: x.cislo, adresa: x.adresa || "" }));
+      if (zleAdresy.length) {
+        return odpoved({ ok: false, zle: zleAdresy, text: "Trasa sa nevytvorila – Google nenašiel " + zleAdresy.length +
+          (zleAdresy.length === 1 ? " adresu" : zleAdresy.length < 5 ? " adresy" : " adries") + ". Skontrolujte a opravte ich (Upraviť objednávku), potom dajte Vytvoriť trasu znova." });
+      }
       const c = casyTrasy(u.poradie);
       const hod = Math.round(c.navrat / 60 * 100) / 100;
       const out = u.poradie.map((x: any, i: number) => ({ cislo: x.cislo, poradie: i + 1, prichod_min: c.prichod[i], jazda_min: Math.round(x.jazda * 10) / 10, cakanie_min: x.cakanie }));
-      [...u.neplatne, ...bezAdresy].forEach((x: any, i: number) => out.push({ cislo: x.cislo, poradie: u.poradie.length + i + 1, prichod_min: null, jazda_min: null, cakanie_min: null, bez_gps: true } as any));
       const res = await rpc("trasa_uloz", { p_id: id, p_odchod: odchod, p_zastavky: out, p_navrat_min: c.navrat, p_hodiny: hod }, jwt);
       if (!res || res.ok === false) return odpoved({ ok: false, text: (res && res.text) || "Trasa sa neuložila" });
-      const zle = u.neplatne.length + bezAdresy.length;
-      return odpoved({ ok: true, hodiny: hod, text: "Trasa vytvorená: " + u.poradie.length + " zastávok, " + hod.toString().replace(".", ",") + " h" +
-        (zle ? " · " + zle + " bez nájdenej adresy (sú na konci – skontrolujte adresu)" : "") });
+      return odpoved({ ok: true, hodiny: hod, text: "Trasa vytvorená: " + u.poradie.length + " zastávok, " + hod.toString().replace(".", ",") + " h" });
     }
 
     // --- jedna objednávka (pridať podľa čísla / obnoviť z Upgates) ---
