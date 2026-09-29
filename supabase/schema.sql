@@ -2913,3 +2913,185 @@ select cron.schedule('lbz-upozornenia', '*/30 * * * *', $cron$
     body := '{"akcia":"kontrola"}'::jsonb,
     timeout_milliseconds := 60000)
 $cron$);
+
+-- =========================================================================
+-- 21) KNIHA JÁZD (v0.17) – vozidlá a jazdy; zápis ako stará web appka:
+--     stav tachometra → najazdené → polovica tam, polovica späť (návrat na prevádzku)
+-- =========================================================================
+create table if not exists public.vozidla (
+  id        bigint generated always as identity primary key,
+  nazov     text not null,
+  spz       text,
+  domov     text not null default 'Zbojská',      -- kam sa vracia (riadok „návrat na prevádzku“)
+  aktivne   boolean not null default true
+);
+insert into public.vozidla (nazov) select 'Dacia Sandero' where not exists (select 1 from public.vozidla);
+
+create table if not exists public.jazdy (
+  id          bigint generated always as identity primary key,
+  vozidlo_id  bigint not null references public.vozidla(id),
+  datum       date not null,
+  miesto      text not null,
+  tach        numeric(10,1) not null,     -- stav tachometra na konci úseku
+  km          numeric(8,1),               -- najazdené v úseku
+  vodic       text,
+  ucel        text,
+  tankovanie  numeric(8,2),               -- € (pri ceste tam)
+  navrat      boolean not null default false,
+  par_id      bigint,                     -- cesta tam ↔ návrat
+  zdroj       text not null default 'app' check (zdroj in ('app','import','rucne')),
+  poznamka    text,
+  vytvoril    uuid default auth.uid(),
+  vytvorene   timestamptz not null default now()
+);
+create index if not exists jazdy_voz_dat on public.jazdy (vozidlo_id, datum, tach);
+alter table public.vozidla enable row level security;
+alter table public.jazdy enable row level security;               -- prístup len cez funkcie
+
+insert into public.moduly (kod, nazov, poradie, aktivny) values ('kniha_jazd', 'Kniha jázd', 40, true)
+on conflict (kod) do update set nazov = excluded.nazov, aktivny = true;
+insert into public.pristupy (rola, modul, uprava) select r, 'kniha_jazd', true from unnest(array['it','ceo']) r on conflict do nothing;
+
+create or replace function public.jazdy_ucely() returns text[] language sql immutable as $$
+  select array['obchodné stretnutie','nákup tovaru','rozvoz objednávky','údržba','tankovanie','návšteva úradu','propagácia LBZ']
+$$;
+
+-- úvod: vozidlá, posledný stav tachometra, návrhy miest (priemer km jednej cesty z histórie), posledný vodič
+create or replace function public.jazdy_stav(p_vozidlo bigint default null) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_voz bigint; v_tach numeric; v_vodic text; v_mies jsonb; v_mes numeric;
+begin
+  if not public.som_spravca() then return jsonb_build_object('ok', false, 'text', 'Kniha jázd je len pre IT a CEO'); end if;
+  v_voz := coalesce(p_vozidlo, (select id from public.vozidla where aktivne order by id limit 1));
+  select tach into v_tach from public.jazdy where vozidlo_id = v_voz order by tach desc limit 1;
+  select vodic into v_vodic from public.jazdy where vozidlo_id = v_voz and vodic is not null order by vytvorene desc, id desc limit 1;
+  select coalesce(jsonb_agg(jsonb_build_object('miesto', m, 'km', k, 'pocet', n) order by n desc), '[]') into v_mies from (
+    select min(miesto) m, round(percentile_cont(0.5) within group (order by km)::numeric, 1) k, count(*) n from public.jazdy
+    where vozidlo_id = v_voz and not navrat and km > 0 and miesto <> 'Počiatočný stav'
+      and lower(trim(miesto)) <> lower((select domov from public.vozidla where id = v_voz))
+    group by lower(trim(miesto)) order by count(*) desc limit 60) x;
+  select coalesce(sum(km), 0) into v_mes from public.jazdy where vozidlo_id = v_voz and datum >= date_trunc('month', public.dnes_sk())::date;
+  return jsonb_build_object('ok', true, 'vozidlo_id', v_voz,
+    'vozidla', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'nazov', nazov, 'spz', spz, 'domov', domov) order by id), '[]') from public.vozidla where aktivne),
+    'tach', v_tach, 'vodic', v_vodic, 'miesta', v_mies, 'ucely', to_jsonb(public.jazdy_ucely()), 'km_mesiac', v_mes, 'dnes', public.dnes_sk());
+end $$;
+
+-- zápis jazdy: p = {vozidlo_id, tach, miesto, ucel, vodic, tankovanie, datum, navrat (true = rozdeliť na tam + späť), poznamka}
+create or replace function public.jazdy_zapis(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_voz bigint := (p->>'vozidlo_id')::bigint; v_tach numeric := (p->>'tach')::numeric; v_pred numeric; v_km numeric; v_pol numeric;
+  v_dat date := coalesce(nullif(p->>'datum','')::date, public.dnes_sk()); v_id bigint; v_id2 bigint; v_domov text;
+  v_navrat boolean := coalesce((p->>'navrat')::boolean, true);
+begin
+  if not public.som_spravca() then return jsonb_build_object('ok', false, 'text', 'Kniha jázd je len pre IT a CEO'); end if;
+  if coalesce(trim(p->>'miesto'), '') = '' then return jsonb_build_object('ok', false, 'text', 'Doplň miesto'); end if;
+  select domov into v_domov from public.vozidla where id = v_voz;
+  if v_domov is null then return jsonb_build_object('ok', false, 'text', 'Neznáme vozidlo'); end if;
+  perform pg_advisory_xact_lock(424242, v_voz::int);
+  select tach into v_pred from public.jazdy where vozidlo_id = v_voz order by tach desc limit 1;
+  if v_tach is null or v_pred is null or v_tach <= v_pred then
+    return jsonb_build_object('ok', false, 'text', 'Stav tachometra musí byť väčší ako posledný zapísaný (' || coalesce(v_pred::text, '–') || ' km)');
+  end if;
+  v_km := v_tach - v_pred;
+  if v_km > 2000 then return jsonb_build_object('ok', false, 'text', 'Najazdené ' || v_km || ' km – to je podozrivo veľa, skontroluj tachometer'); end if;
+  if v_navrat then
+    v_pol := round(v_km / 2, 1);
+    insert into public.jazdy (vozidlo_id, datum, miesto, tach, km, vodic, ucel, tankovanie, zdroj, poznamka)
+      values (v_voz, v_dat, trim(p->>'miesto'), v_pred + v_pol, v_pol, nullif(trim(p->>'vodic'), ''), p->>'ucel', nullif(p->>'tankovanie','')::numeric, 'app', nullif(trim(p->>'poznamka'), ''))
+      returning id into v_id;
+    insert into public.jazdy (vozidlo_id, datum, miesto, tach, km, vodic, ucel, navrat, par_id, zdroj)
+      values (v_voz, v_dat, v_domov, v_tach, v_km - v_pol, nullif(trim(p->>'vodic'), ''), 'návrat na prevádzku', true, v_id, 'app') returning id into v_id2;
+    update public.jazdy set par_id = v_id2 where id = v_id;
+  else
+    insert into public.jazdy (vozidlo_id, datum, miesto, tach, km, vodic, ucel, tankovanie, zdroj, poznamka)
+      values (v_voz, v_dat, trim(p->>'miesto'), v_tach, v_km, nullif(trim(p->>'vodic'), ''), p->>'ucel', nullif(p->>'tankovanie','')::numeric, 'app', nullif(trim(p->>'poznamka'), ''))
+      returning id into v_id;
+  end if;
+  return jsonb_build_object('ok', true, 'km', v_km, 'text', case when v_navrat then 'Zapísané: ' || v_km || ' km (2 × ' || v_pol || ' km)' else 'Zapísané: ' || v_km || ' km' end);
+end $$;
+
+-- mesiac: počiatočný stav (posledný tachometer pred mesiacom) + jazdy + súčty
+create or replace function public.jazdy_mesiac(p_vozidlo bigint, p_mesiac date) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_od date := date_trunc('month', p_mesiac)::date; v_do date := (date_trunc('month', p_mesiac) + interval '1 month')::date; v_poc numeric;
+begin
+  if not public.som_spravca() then return jsonb_build_object('ok', false, 'text', 'Kniha jázd je len pre IT a CEO'); end if;
+  select tach into v_poc from public.jazdy where vozidlo_id = p_vozidlo and datum < v_od order by datum desc, tach desc limit 1;
+  return jsonb_build_object('ok', true, 'od', v_od, 'pociatok', v_poc,
+    'vozidlo', (select jsonb_build_object('id', id, 'nazov', nazov, 'spz', spz) from public.vozidla where id = p_vozidlo),
+    'riadky', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'datum', datum, 'miesto', miesto, 'tach', tach, 'km', km, 'vodic', vodic, 'ucel', ucel,
+        'tankovanie', tankovanie, 'navrat', navrat, 'par_id', par_id, 'zdroj', zdroj, 'poznamka', poznamka) order by datum, tach), '[]')
+      from public.jazdy where vozidlo_id = p_vozidlo and datum >= v_od and datum < v_do),
+    'mesiace', (select coalesce(jsonb_agg(m order by m desc), '[]') from (select distinct date_trunc('month', datum)::date m from public.jazdy where vozidlo_id = p_vozidlo) x));
+end $$;
+
+-- úprava / zmazanie riadku: p = {id, zmaz?, datum, miesto, tach, km, vodic, ucel, tankovanie, poznamka}
+create or replace function public.jazdy_uprav(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_id bigint := (p->>'id')::bigint;
+begin
+  if not public.som_spravca() then return jsonb_build_object('ok', false, 'text', 'Len IT a CEO'); end if;
+  if coalesce((p->>'zmaz')::boolean, false) then
+    update public.jazdy set par_id = null where par_id = v_id;
+    delete from public.jazdy where id = v_id;
+    return jsonb_build_object('ok', true, 'text', 'Riadok zmazaný');
+  end if;
+  update public.jazdy set
+    datum = coalesce(nullif(p->>'datum','')::date, datum),
+    miesto = coalesce(nullif(trim(p->>'miesto'),''), miesto),
+    tach = coalesce(nullif(p->>'tach','')::numeric, tach),
+    km = case when p ? 'km' then nullif(p->>'km','')::numeric else km end,
+    vodic = case when p ? 'vodic' then nullif(trim(p->>'vodic'),'') else vodic end,
+    ucel = case when p ? 'ucel' then nullif(p->>'ucel','') else ucel end,
+    tankovanie = case when p ? 'tankovanie' then nullif(p->>'tankovanie','')::numeric else tankovanie end,
+    poznamka = case when p ? 'poznamka' then nullif(trim(p->>'poznamka'),'') else poznamka end,
+    zdroj = case when zdroj = 'import' then 'rucne' else zdroj end
+  where id = v_id;
+  if not found then return jsonb_build_object('ok', false, 'text', 'Riadok sa nenašiel'); end if;
+  return jsonb_build_object('ok', true, 'text', 'Uložené');
+end $$;
+
+revoke all on function public.jazdy_stav(bigint), public.jazdy_zapis(jsonb), public.jazdy_mesiac(bigint, date), public.jazdy_uprav(jsonb) from public, anon;
+grant execute on function public.jazdy_stav(bigint), public.jazdy_zapis(jsonb), public.jazdy_mesiac(bigint, date), public.jazdy_uprav(jsonb) to authenticated;
+
+-- =========================================================================
+-- 22) VYBAVIŤ – osobný zoznam úloh / poznámok (karta na Prehľade pod rozpisom), každý vidí len svoje
+-- =========================================================================
+create table if not exists public.vybavit (
+  id        bigint generated always as identity primary key,
+  uid       uuid not null default auth.uid(),
+  text      text not null,
+  hotovo    timestamptz,
+  poradie   int not null default 0,
+  vytvorene timestamptz not null default now()
+);
+create index if not exists vybavit_uid on public.vybavit (uid);
+alter table public.vybavit enable row level security;
+
+create or replace function public.vybavit_zoznam() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', id, 'text', text, 'hotovo', hotovo) order by (hotovo is not null), coalesce(hotovo, vytvorene) desc, poradie, id), '[]')
+  from public.vybavit where uid = auth.uid() and (hotovo is null or hotovo > now() - interval '7 days')
+$$;
+-- p = {text} nová | {id, text} úprava | {id, hotovo: true/false} | {id, zmaz: true}
+create or replace function public.vybavit_uloz(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_id bigint := nullif(p->>'id','')::bigint;
+begin
+  if auth.uid() is null or not public.som_interny() and public.moja_rola() <> 'zamestnanec' and public.moja_rola() <> 'uctovnicka' then
+    return jsonb_build_object('ok', false, 'text', 'Nepovolené');
+  end if;
+  if v_id is null then
+    if coalesce(trim(p->>'text'), '') = '' then return jsonb_build_object('ok', false, 'text', 'Prázdna poznámka'); end if;
+    insert into public.vybavit (text) values (left(trim(p->>'text'), 500));
+  elsif coalesce((p->>'zmaz')::boolean, false) then
+    delete from public.vybavit where id = v_id and uid = auth.uid();
+  elsif p ? 'hotovo' then
+    update public.vybavit set hotovo = case when (p->>'hotovo')::boolean then now() end where id = v_id and uid = auth.uid();
+  else
+    update public.vybavit set text = left(trim(p->>'text'), 500) where id = v_id and uid = auth.uid() and coalesce(trim(p->>'text'), '') <> '';
+  end if;
+  return jsonb_build_object('ok', true, 'zoznam', public.vybavit_zoznam());
+end $$;
+revoke all on function public.vybavit_zoznam(), public.vybavit_uloz(jsonb) from public, anon;
+grant execute on function public.vybavit_zoznam(), public.vybavit_uloz(jsonb) to authenticated;
