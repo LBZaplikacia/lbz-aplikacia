@@ -1,6 +1,6 @@
 // Service worker: appka sa otvorí aj pri slabom signáli (uložené základné súbory).
 // Pri každej novej verzii appky zvýš číslo VERZIA – zariadenia si ju stiahnu samé.
-const VERZIA = "0.15.8";
+const VERZIA = "0.15.9";
 const CACHE = "lbz-v" + VERZIA;
 const SUPABASE = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
 const SUBORY = ["./", "index.html", "styles.css", "app.js", "sklad.js", "furmanky.js", "rozpis.js", "balenie.js", "trasa.js", "lib/qr.js", "lib/dialog.js", "config.js", "manifest.webmanifest", "icons/logo.svg", "icons/icon-192.png"];

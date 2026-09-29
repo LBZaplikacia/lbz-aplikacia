@@ -158,7 +158,8 @@
       '<div class="t-akt-hore"><span class="t-z-cislo num">' + poradie + '</span><span class="muted">zastávka ' + poradie + " z " + z.length + (a.eta ? ' · príchod <b class="num">' + esc(cas(a.eta)) + "</b>" : "") + "</span>" +
         (vzd != null ? '<span class="t-vzd num">' + (vzd < 1000 ? Math.round(vzd) + " m" : (vzd / 1000).toFixed(1).replace(".", ",") + " km") + "</span>" : "") + "</div>" +
       '<h2 class="t-akt-meno">' + esc(a.meno || a.firma || "-") + "</h2>" +
-      (a.adresa || (a.lat != null && a.lng != null) ? '<a class="t-akt-adresa t-akt-adresa-nav" href="' + navUrl(a) + '" target="_blank" rel="noopener" data-t-nav="' + esc(a.cislo) + '"><span class="t-akt-adresa-txt">📍 ' + esc(a.adresa || "-") + '</span><span class="t-akt-adresa-tip">🧭 NAVIGOVAŤ</span></a>'
+      (a.adresa || (a.lat != null && a.lng != null) ? '<a class="t-akt-adresa t-akt-adresa-nav" href="' + navUrl(a) + '" target="_blank" rel="noopener" data-t-nav="' + esc(a.cislo) + '">📍 ' + esc(a.adresa || "-") + "</a>" +
+          (a.lat != null && a.lng != null && !vybav ? '<div id="t-gmapa-miesto" class="t-gmapa-miesto"></div>' : "")
         : '<div class="t-akt-adresa">📍 -</div>') +
       '<div class="t-akt-platba ' + (dob ? "t-dob" : a.platba === "NA FAKTÚRU" ? "t-fa" : "t-ok") + '">' + (dob ? "💶 DOBIERKA " + esc(eur(a.suma)) : a.platba === "NA FAKTÚRU" ? "🧾 NA FAKTÚRU" : "✅ ZAPLATENÉ") +
         '<span> · ' + esc(a.kusy) + " ks</span></div>" +
@@ -191,12 +192,9 @@
     var caka = z.filter(function (x) { return x.stav === "caka"; }).length, hotovo = z.length - caka;
     var rez = T.rezim || "jazda";
     var prep = '<div class="f-seg t-rezim" role="group"><button data-t-rezim="jazda" aria-pressed="' + (rez === "jazda") + '">🚚 Jazda</button>' +
-      '<button data-t-rezim="mapa" aria-pressed="' + (rez === "mapa") + '">🗺️ Mapa</button>' +
       '<button data-t-rezim="zoznam" aria-pressed="' + (rez === "zoznam") + '">📋 Zoznam (' + hotovo + "/" + z.length + ")</button></div>";
     var prog = '<div class="b-prog" aria-label="Vybavené ' + hotovo + " z " + z.length + '"><span style="width:' + (z.length ? Math.round(100 * hotovo / z.length) : 0) + '%"></span></div>';
     if (rez === "jazda") return head + spravaHtml() + prog + prep + jazdaHtml(t);
-    if (rez === "mapa") return head + spravaHtml() + prog + prep + '<div id="t-mapa-miesto" class="t-mapa-miesto"></div>' +
-      '<p class="muted t-mapa-pozn">Čiary spájajú zastávky v poradí (nie je to cesta po cestách). Ťuknite na zastávku – „Ísť sem“ ju otvorí v Jazde.</p>';
     return head + spravaHtml() + prog + prep +
       (t.stav !== "ukoncena" ? navigacia(z) : "") +
       '<p class="muted t-dalsia">Ťuknite na zastávku, ktorou chcete pokračovať.</p>' +
@@ -225,76 +223,18 @@
       '<button class="btn ' + (nedor ? "t-tl-nie" : "btn-primary") + '" type="submit">' + (nedor ? "Označiť ako nedoručené" : "Uložiť poznámku") + "</button></form></div>";
   }
 
-  // ---------- MAPA (Leaflet + OpenStreetMap, bez kľúča). Mapa sa pri prekreslení nevytvára znova – len sa presunie. ----------
-  var M = { el: null, mapa: null, vrstva: null, ja: null, nacitavam: false, id: null };
-  var START_GPS = [48.7449218, 19.8550656];
-  function mapaKniznica(hotovo) {
-    if (window.L) return hotovo();
-    if (M.nacitavam) return; M.nacitavam = true;
-    var css = document.createElement("link"); css.rel = "stylesheet"; css.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"; document.head.appendChild(css);
-    var sc = document.createElement("script"); sc.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
-    sc.onload = function () { M.nacitavam = false; hotovo(); };
-    sc.onerror = function () { M.nacitavam = false; var m = document.getElementById("t-mapa-miesto"); if (m) m.innerHTML = '<p class="f-sprava f-chyba">Mapa sa nenačítala – skontrolujte signál.</p>'; };
-    document.head.appendChild(sc);
-  }
+  // ---------- MAPA Google v karte zastávky (bez kľúča, embed). Iframe sa pri prekreslení nevytvára znova – len sa presunie. ----------
+  var GM = { el: null, cislo: null };
   function mapaUkaz(miesto) {
-    mapaKniznica(function () {
-      if (!miesto.isConnected) return;
-      if (!M.el) {
-        M.el = document.createElement("div"); M.el.className = "t-mapa";
-        miesto.appendChild(M.el);
-        M.mapa = L.map(M.el, { zoomControl: true, attributionControl: true }).setView(START_GPS, 9);
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(M.mapa);
-        M.vrstva = L.layerGroup().addTo(M.mapa);
-        M.mapa.on("popupopen", function (e) {   // popup Leaflet nepúšťa kliky ďalej → obslúžiť priamo
-          var b = e.popup.getElement() && e.popup.getElement().querySelector("[data-t-vyber]");
-          if (b) b.addEventListener("click", function () { T.akt = b.dataset.tVyber; T.drzAkt = false; T.naMieste = null; T.rezim = "jazda"; prekresli(); window.scrollTo(0, 0); });
-        });
-        var Tl = L.Control.extend({ options: { position: "topright" }, onAdd: function () {
-          var d = L.DomUtil.create("div", "t-mapa-tl");
-          d.innerHTML = '<button type="button" data-mapa="ja" title="Moja poloha">📍</button><button type="button" data-mapa="vsetko" title="Celá trasa">🗺️</button>';
-          L.DomEvent.disableClickPropagation(d);
-          d.addEventListener("click", function (e) { var b = e.target.closest("[data-mapa]"); if (!b) return;
-            if (b.dataset.mapa === "ja" && T.gps) M.mapa.setView([T.gps.lat, T.gps.lng], 15); else mapaVsetko(); });
-          return d; } });
-        M.mapa.addControl(new Tl());
-      } else miesto.appendChild(M.el);
-      setTimeout(function () { M.mapa.invalidateSize(); }, 0);
-      mapaZastavky();
-      mapaPoloha();
-      if (M.id !== T.id) { M.id = T.id; setTimeout(mapaVsetko, 50); }
-    });
-  }
-  function mapaVsetko() {
-    if (!M.mapa) return;
-    var b = zastavky().filter(function (z) { return z.lat != null && z.lng != null; }).map(function (z) { return [z.lat, z.lng]; });
-    if (T.gps) b.push([T.gps.lat, T.gps.lng]);
-    if (b.length) M.mapa.fitBounds(b, { padding: [30, 30], maxZoom: 15 });
-  }
-  function mapaZastavky() {
-    if (!M.vrstva) return;
-    M.vrstva.clearLayers();
-    var z = zastavky(), akt = aktualna(), body = [START_GPS];
-    L.marker(START_GPS, { icon: L.divIcon({ className: "", html: '<span class="t-pin t-pin-start">🏠</span>', iconSize: [30, 30], iconAnchor: [15, 15] }), title: "Sedlo Zbojská" }).addTo(M.vrstva);
-    z.forEach(function (x, i) {
-      if (x.lat == null || x.lng == null) return;
-      body.push([x.lat, x.lng]);
-      var tr = x.stav === "dorucene" ? "t-pin-ok" : x.stav === "nedorucene" ? "t-pin-nie" : akt && akt.cislo === x.cislo ? "t-pin-akt" : "t-pin-caka";
-      var html = "<b>" + (i + 1) + ". " + esc(x.meno || x.firma || x.cislo) + "</b><br>" + esc(x.adresa || "") +
-        (dobierka(x) && x.stav === "caka" ? '<br><span class="t-pin-dob">💶 dobierka ' + esc(eur(x.suma)) + "</span>" : "") +
-        (x.stav === "caka" ? '<div class="t-pin-tl"><button class="btn btn-primary" data-t-vyber="' + esc(x.cislo) + '">🚚 Ísť sem</button>' +
-          '<a class="btn" href="' + navUrl(x) + '" target="_blank" rel="noopener">🧭 Navigovať</a></div>' : '<br><span class="muted">' + (x.stav === "dorucene" ? "✓ doručené" : "✗ nedoručené") + "</span>");
-      L.marker([x.lat, x.lng], { icon: L.divIcon({ className: "", html: '<span class="t-pin ' + tr + '">' + (i + 1) + "</span>", iconSize: [32, 32], iconAnchor: [16, 16] }), zIndexOffset: tr === "t-pin-akt" ? 1000 : 0 })
-        .bindPopup(html).addTo(M.vrstva);
-    });
-    body.push(START_GPS);
-    L.polyline(body, { color: "#583934", weight: 3, opacity: .6, dashArray: "6 8" }).addTo(M.vrstva);
-  }
-  function mapaPoloha() {
-    if (!M.mapa || !T.gps) return;
-    var ll = [T.gps.lat, T.gps.lng];
-    if (!M.ja) M.ja = L.circleMarker(ll, { radius: 9, color: "#fff", weight: 3, fillColor: "#2C5167", fillOpacity: 1 }).addTo(M.mapa);
-    else M.ja.setLatLng(ll);
+    var a = aktualna(); if (!a || a.lat == null || a.lng == null) return;
+    if (!GM.el) { GM.el = document.createElement("iframe"); GM.el.className = "t-gmapa"; GM.el.setAttribute("loading", "lazy"); GM.el.setAttribute("referrerpolicy", "no-referrer-when-downgrade"); GM.el.title = "Mapa k zastávke"; }
+    if (GM.cislo !== a.cislo || (!GM.sGps && T.gps)) {   // nová zastávka (alebo prvá poloha) → trasa z aktuálnej polohy, inak len špendlík
+      GM.cislo = a.cislo; GM.sGps = !!T.gps;
+      var ciel = a.lat + "," + a.lng;
+      GM.el.src = T.gps ? "https://maps.google.com/maps?saddr=" + T.gps.lat + "," + T.gps.lng + "&daddr=" + ciel + "&hl=sk&output=embed"
+        : "https://maps.google.com/maps?q=" + ciel + "&z=15&hl=sk&output=embed";
+    }
+    miesto.appendChild(GM.el);
   }
 
   function prekresli() {
@@ -302,7 +242,7 @@
     var y = window.scrollY;
     koren.innerHTML = (T.id == null ? pohladZoznam() : pohladTrasa()) + dialogHtml();
     window.scrollTo(0, y);
-    var miesto = document.getElementById("t-mapa-miesto"); if (miesto) mapaUkaz(miesto);
+    var miesto = document.getElementById("t-gmapa-miesto"); if (miesto) mapaUkaz(miesto);
     var ta = document.getElementById("t-pozn"); if (ta && T.dialog && T.dialog.fokus) { T.dialog.fokus = false; ta.focus(); }
   }
 
@@ -390,8 +330,12 @@
         T.gps = { lat: p.coords.latitude, lng: p.coords.longitude }; T.gpsChyba = false;
         var a = T.akt && najdi(T.akt), teraz = a ? vzdialenost(a) : null;
         if (teraz != null && teraz < NA_MIESTE_M && (bol == null || bol >= NA_MIESTE_M)) { try { navigator.vibrate && navigator.vibrate([150, 80, 150]); } catch (e) {} }
-        if (T.id != null && (T.rezim || "jazda") === "jazda" && !T.dialog) prekresli();
-        else if (T.rezim === "mapa") mapaPoloha();
+        if (T.id != null && (T.rezim || "jazda") === "jazda" && !T.dialog) {
+          // len vzdialenosť → prepísať text (mapa sa neobnovuje); prekresliť až keď sa zmení „na mieste“ alebo chýba údaj
+          var el = koren && koren.querySelector(".t-vzd"), zmena = (bol == null) !== (teraz == null) || (bol != null && teraz != null && (bol < NA_MIESTE_M) !== (teraz < NA_MIESTE_M));
+          if (el && teraz != null && !zmena) el.textContent = teraz < 1000 ? Math.round(teraz) + " m" : (teraz / 1000).toFixed(1).replace(".", ",") + " km";
+          else prekresli();
+        }
       }, function () { T.gpsChyba = true; }, { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 });
     }
     try { if (navigator.wakeLock && !zamok) navigator.wakeLock.request("screen").then(function (z) { zamok = z; z.addEventListener("release", function () { zamok = null; }); }).catch(function () {}); } catch (e) {}
