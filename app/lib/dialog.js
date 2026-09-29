@@ -59,3 +59,16 @@
 
   window.lbzInfo = function (text) { okno(text, [{ text: "OK", trieda: "btn-primary" }], function () {}); };
 })();
+
+// Pamäť obrazovky: kde bol používateľ naposledy (appka sa po minimalizovaní v mobile niekedy spustí odznova).
+// Platí 12 hodín; ukladá sa len v tomto zariadení.
+(function () {
+  "use strict";
+  var KL = "lbz_pamat", PLATNOST = 12 * 3600 * 1000;
+  function vsetko() { try { var p = JSON.parse(localStorage.getItem(KL) || "{}"); return p && typeof p === "object" ? p : {}; } catch (e) { return {}; } }
+  window.lbzPamat = {
+    nacitaj: function (k) { var p = vsetko()[k]; return p && Date.now() - (p.t || 0) < PLATNOST ? p.v : null; },
+    uloz: function (k, v) { try { var p = vsetko(); p[k] = { t: Date.now(), v: v }; localStorage.setItem(KL, JSON.stringify(p)); } catch (e) {} },
+    zmaz: function () { try { localStorage.removeItem(KL); } catch (e) {} }
+  };
+})();
