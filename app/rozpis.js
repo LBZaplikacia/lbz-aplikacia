@@ -286,7 +286,7 @@
     if (d.r === "pozn-upravit") { R.poznEdit = d.m; prekresli(); var ta = document.getElementById("r-pozn-text"); if (ta) ta.focus(); return; }
     if (d.r === "pozn-zrusit") { R.poznEdit = null; prekresli(); return; }
     if (d.r === "pozn-zmazat") {
-      if (!window.confirm("Odstrániť poznámku k tomuto mesiacu?")) return;
+      if (!lbzPotvrd("Odstrániť poznámku k tomuto mesiacu?")) return;
       ulozPoznamku(d.m, ""); return;
     }
     if (d.r === "dnes") { R.od = dnes(); nacitaj(); return; }
@@ -305,7 +305,7 @@
     if (d.rMiesto) { R.dialog = { typ: "miesto", id: +d.rMiesto }; prekresli(); return; }
     if (d.rPridat) { var c = d.rPridat.split("|"); R.dialog = { typ: "pridat", datum: c[0], pozicia: c[1] || null }; prekresli(); return; }
     if (d.rAkciaTl) {
-      if (d.rAkciaTl === "zmazat" && !window.confirm("Zrušiť toto miesto v rozpise?")) return;
+      if (d.rAkciaTl === "zmazat" && !lbzPotvrd("Zrušiť toto miesto v rozpise?")) return;
       zmena({ akcia: d.rAkciaTl, id: d.id }); return;
     }
     if (t.hasAttribute("data-r-otvorit")) {

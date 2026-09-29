@@ -368,7 +368,7 @@
 
   function prenesZoStareho() {
     if (!spravca() || !API) return;
-    if (!window.confirm("Preniesť aktuálny sklad zo starej tabuľky?\n\nVšetky balíky v appke sa nahradia stavom zo starého skladu (história ostane). Robí sa na začiatku testu a znova pri spustení ostrej verzie.")) return;
+    if (!lbzPotvrd("Preniesť aktuálny sklad zo starej tabuľky?\n\nVšetky balíky v appke sa nahradia stavom zo starého skladu (história ostane). Robí sa na začiatku testu a znova pri spustení ostrej verzie.")) return;
     S.upravaInfo = { typ: "info", text: "Sťahujem zo starého skladu… (môže trvať do minúty)" }; prekresli();
     Promise.all([apiOpakuj({ akcia: "KATALOG", cerstvy: true }, 3), apiOpakuj({ akcia: "BALIKY" }, 3)]).then(function (v) {
       var produkty = Object.keys(v[0].katalog || {}).map(function (k) { return { kod: k, nazov: v[0].katalog[k].n || k, farba: v[0].katalog[k].f || "#ffffff" }; });
@@ -406,7 +406,7 @@
   function ulozBalik() {
     var kod = upravKod(hodnota("s-u-kod")), akcia = hodnota("s-u-stav"), exp = hodnota("s-u-exp"), pozn = hodnota("s-u-pozn");
     if (!kod) { S.upravaInfo = { typ: "chyba", text: "Zadajte kód balíka" }; prekresli(); return; }
-    if (akcia === "zmazat" && !window.confirm("Naozaj zmazať balík " + kod + "? (V histórii ostane záznam.)")) return;
+    if (akcia === "zmazat" && !lbzPotvrd("Naozaj zmazať balík " + kod + "? (V histórii ostane záznam.)")) return;
     rpc("uprav_balik", {
       p_kod: kod, p_stav: akcia === "zmazat" || !akcia ? null : akcia,
       p_expiracia: exp ? exp + "T12:00:00+02:00" : null, p_zmazat: akcia === "zmazat", p_poznamka: pozn || null
@@ -874,8 +874,8 @@
     if (d.sFurmanka) { S.furmanka = d.sFurmanka; S.pohlad = "furmanka"; prekresli(); window.scrollTo(0, 0); return; }
     if (d.sBalik) {
       var kod = d.kod, a = d.sBalik;
-      if (a === "zmazat") { if (window.confirm("Naozaj zmazať balík " + kod + "? (V histórii ostane záznam.)")) upravBalik(kod, { p_zmazat: true }, "zmazané v detaile produktu"); return; }
-      if (a === "vydany" && !window.confirm("Vydať ručne balík " + kod + "?")) return;
+      if (a === "zmazat") { if (lbzPotvrd("Naozaj zmazať balík " + kod + "? (V histórii ostane záznam.)")) upravBalik(kod, { p_zmazat: true }, "zmazané v detaile produktu"); return; }
+      if (a === "vydany" && !lbzPotvrd("Vydať ručne balík " + kod + "?")) return;
       upravBalik(kod, { p_stav: a });
       return;
     }

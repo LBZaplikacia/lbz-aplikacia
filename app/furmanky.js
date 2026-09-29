@@ -115,7 +115,7 @@
   // ---------- Aktualizovať z Upgates ----------
   function stiahni() {
     if (F.stahujem) return;
-    if (!window.confirm("Naozaj stiahnuť objednávky z Upgates teraz?\n\nFurmanky sa podľa nich prepočítajú. Ručné zmeny v appke ostanú.")) return;
+    if (!lbzPotvrd("Naozaj stiahnuť objednávky z Upgates teraz?\n\nFurmanky sa podľa nich prepočítajú. Ručné zmeny v appke ostanú.")) return;
     F.stahujem = true; F.sprava = { typ: "info", text: "Sťahujem objednávky z Upgates… (môže to trvať aj minútu)" }; prekresli();
     DB.functions.invoke("upgates-sync", { body: { akcia: "sync" } }).then(function (res) {
       F.stahujem = false;
@@ -561,7 +561,7 @@
       if (d.nova ? v !== "" : v !== stare) p[k] = v;
     });
     if (d.nova) {
-      if (!p.meno && !p.firma) { alert("Zadajte meno alebo firmu."); return; }
+      if (!p.meno && !p.firma) { lbzInfo("Zadajte meno alebo firmu."); return; }
       p.polozky = {};
       Object.keys(d.zmeny || {}).forEach(function (k) { if (d.zmeny[k]) p.polozky[k] = d.zmeny[k]; });
       p.furmanka_id = F.data.furmanka.id;
@@ -698,11 +698,11 @@
         F.id = null; F.data = null; F.sprava = null; F.dialog = null; F.zArchivu = false; prekresli(); nacitajZoznam(); break;
       case "archiv": F.id = "archiv"; F.zArchivu = true; F.sprava = null; F.archiv = null; prekresli(); nacitajArchiv(); break;
       case "naplanovane":
-        if (!window.confirm("Potvrdiť, že furmanka " + F.data.furmanka.nazov + " je skontrolovaná a naplánovaná?\n\nPo ostrom štarte sa tým objednávky v Upgates označia ako Naplánované. Počas testu sa len zapíše v appke.")) return;
+        if (!lbzPotvrd("Potvrdiť, že furmanka " + F.data.furmanka.nazov + " je skontrolovaná a naplánovaná?\n\nPo ostrom štarte sa tým objednávky v Upgates označia ako Naplánované. Počas testu sa len zapíše v appke.")) return;
         po(rpc("furmanka_naplanovana", { p_id: F.data.furmanka.id }), "Označené ako naplánované").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
         break;
       case "vrat-statusy":
-        if (!window.confirm("Vrátiť statusy vo furmanke " + F.data.furmanka.nazov + "?\n\nZruší sa „Naplánované“. Po ostrom štarte sa tým v Upgates vrátia pôvodné statusy všetkých objednávok vo furmanke. Počas testu sa to len zapíše v appke.")) return;
+        if (!lbzPotvrd("Vrátiť statusy vo furmanke " + F.data.furmanka.nazov + "?\n\nZruší sa „Naplánované“. Po ostrom štarte sa tým v Upgates vrátia pôvodné statusy všetkých objednávok vo furmanke. Počas testu sa to len zapíše v appke.")) return;
         po(rpc("furmanka_vrat_statusy", { p_id: F.data.furmanka.id }), "Statusy vrátené").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
         break;
       case "dalsie": F.vsetky = !F.vsetky; prekresli(); break;
@@ -712,7 +712,7 @@
       case "poradie-uloz":
       case "poradie-auto":
         var cisla = d.f === "poradie-auto" ? [] : Array.prototype.map.call(koren.querySelectorAll("#f-poradie-zoz li"), function (li) { return li.getAttribute("data-c"); });
-        if (d.f === "poradie-auto" && !window.confirm("Zrušiť ručné poradie? Google zoradí zastávky sám (priority pôjdu prvé).")) return;
+        if (d.f === "poradie-auto" && !lbzPotvrd("Zrušiť ručné poradie? Google zoradí zastávky sám (priority pôjdu prvé).")) return;
         po(rpc("furmanka_poradie_pevne", { p_id: F.data.furmanka.id, p_cisla: cisla }), function (r) { return r.text + " · v Trase pre furmana dajte Prepočítať trasu"; }).then(function (r) {
           if (r && r.ok) { F.poradieRezim = false; nacitajFurmanku(true); }
         });
@@ -722,7 +722,7 @@
       case "nova": F.dialog = { typ: "obj", nova: true, zmeny: {} }; prekresli(); break;
       case "presun": F.dialog = { typ: "presun", cislo: o }; prekresli(); break;
       case "odobrat":
-        if (!window.confirm("Odobrať objednávku " + o + " z furmanky? Automatika ju späť nezaradí (nájdete ju v „Odobraté“).")) return;
+        if (!lbzPotvrd("Odobrať objednávku " + o + " z furmanky? Automatika ju späť nezaradí (nájdete ju v „Odobraté“).")) return;
         F.dialog = null;
         po(rpc("zaradenie_nastav", { p_cislo: o, p_furmanka_id: null }), "Objednávka " + o + " odobratá").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
         break;
@@ -731,7 +731,7 @@
         po(rpc("zaradenie_automaticky", { p_cislo: o }), "Objednávka " + o + " zaradená automaticky").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
         break;
       case "z-upgates":
-        if (!window.confirm("Zahodiť zmeny urobené v appke a načítať objednávku " + o + " znova z Upgates?")) return;
+        if (!lbzPotvrd("Zahodiť zmeny urobené v appke a načítať objednávku " + o + " znova z Upgates?")) return;
         nacitajZUpgates(o, false);
         break;
       case "z-upgates-cislo": nacitajZUpgates(F.dialog.text.trim(), true); break;
@@ -740,7 +740,7 @@
         var otazka = s === "full" && F.data.furmanka.stav === "rozvezena" ? "Vrátiť furmanku " + n + " z archívu medzi aktívne? Ostane uzavretá (FULL), nové objednávky do nej nepribudnú a statusy objednávok sa nemenia." :
           s === "full" ? "Uzavrieť furmanku " + n + "? Nové objednávky pôjdu na ďalší termín." :
           s === "otvorena" ? "Znova otvoriť furmanku " + n + "? Automatika do nej môže pridať nové objednávky." : "Archivovať furmanku " + n + "? Presunie sa do Archívu (späť ju vrátite tlačidlom Vrátiť z archívu).";
-        if (!window.confirm(otazka)) return;
+        if (!lbzPotvrd(otazka)) return;
         po(rpc("furmanka_stav", { p_id: F.data.furmanka.id, p_stav: s }), "Hotovo").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
         break;
     }

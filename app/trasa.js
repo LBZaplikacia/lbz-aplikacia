@@ -335,11 +335,11 @@
       if (d.tAkcia === "platba") { T.dialog = { typ: "platba", cislo: c }; prekresli(); return; }
       if (d.tAkcia === "dorucene" || d.tAkcia === "zaplatene") {
         var zd = najdi(c) || {};
-        if (d.tAkcia === "dorucene" && !window.confirm("Označiť ako DORUČENÉ?\n\n" + (zd.meno || zd.firma || c) + (dobierka(zd) ? "\nDobierka " + eur(zd.suma) + " – je zaplatená?" : ""))) return;
+        if (d.tAkcia === "dorucene" && !lbzPotvrd("Označiť ako DORUČENÉ?\n\n" + (zd.meno || zd.firma || c) + (dobierka(zd) ? "\nDobierka " + eur(zd.suma) + " – je zaplatená?" : ""))) return;
         T.dialog = null; T.drzAkt = true;
         zastavka({ p_cislo: c, p_stav: "dorucene" }, "✓ Doručené: " + (zd.meno || zd.firma || c)); vibruj(); return;
       }
-      if (d.tAkcia === "spat") { if (!window.confirm("Vrátiť zastávku medzi nevybavené?")) return; T.akt = c; T.drzAkt = false; T.naMieste = null; zastavka({ p_cislo: c, p_stav: "caka" }); return; }
+      if (d.tAkcia === "spat") { if (!lbzPotvrd("Vrátiť zastávku medzi nevybavené?")) return; T.akt = c; T.drzAkt = false; T.naMieste = null; zastavka({ p_cislo: c, p_stav: "caka" }); return; }
       if (d.tAkcia === "nedorucene" || d.tAkcia === "poznamka") { T.dialog = { typ: d.tAkcia, cislo: c, fokus: true }; prekresli(); return; }
     }
     switch (d.t) {
@@ -350,10 +350,10 @@
       case "tlac": if (T.data) tlacTrasu(); break;
       case "dalsia": case "preskocit":
         var dal = dalsiaCaka(T.akt);
-        if (d.t === "preskocit" && !window.confirm("Preskočiť túto zastávku? Vrátite sa k nej neskôr zo Zoznamu.")) return;
+        if (d.t === "preskocit" && !lbzPotvrd("Preskočiť túto zastávku? Vrátite sa k nej neskôr zo Zoznamu.")) return;
         T.akt = dal ? dal.cislo : null; T.drzAkt = false; T.naMieste = null; T.sprava = null; prekresli(); window.scrollTo(0, 0); break;
       case "ukoncit":
-        if (!window.confirm("Ukončiť rozvoz? Furmanka sa presunie do Archívu a nedoručené objednávky do ďalšej furmanky.")) return;
+        if (!lbzPotvrd("Ukončiť rozvoz? Furmanka sa presunie do Archívu a nedoručené objednávky do ďalšej furmanky.")) return;
         T.prace++;
         rpc("trasa_ukoncit", { p_id: T.id }).then(function (r) {
           T.prace--;

@@ -714,3 +714,17 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 .t-akt-tl .t-tl-tel { background: var(--ok); color: #fff; border-color: var(--ok); }
 .t-akt-tl .t-tl-ok { background: var(--ok); color: #fff; border-color: var(--ok); }
 .t-akt-tl .t-tl-plat { background: #583934; color: #CBA75B; border-color: #583934; }
+
+/* Potvrdzovacie okná (lib/dialog.js) – namiesto systémových confirm/alert */
+.lbz-dlg-pozadie { position: fixed; inset: 0; background: rgba(20, 12, 10, .5); z-index: 1000; animation: lbzDlgFade .15s ease-out; }
+.lbz-dlg { position: fixed; z-index: 1001; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100vw - 32px)); max-height: 86vh; overflow: auto;
+  background: var(--surface); color: var(--ink); border-radius: var(--radius); border-top: 5px solid var(--gold); box-shadow: 0 18px 48px rgba(20, 12, 10, .35);
+  padding: 22px 20px 18px; display: grid; gap: 12px; animation: lbzDlgIn .18s ease-out; }
+.lbz-dlg-nadpis { margin: 0; font: 700 18px/1.35 var(--font-display); }
+.lbz-dlg-text { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.45; }
+.lbz-dlg-tl { display: flex; gap: 10px; margin-top: 6px; }
+.lbz-dlg-tl .btn { flex: 1; min-height: 48px; justify-content: center; font-weight: 700; }
+.lbz-dlg-tl .lbz-dlg-nie { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
+.lbz-dlg-tl .lbz-dlg-zle { background: var(--bad); color: #fff; border-color: var(--bad); }
+@keyframes lbzDlgFade { from { opacity: 0; } }
+@keyframes lbzDlgIn { from { opacity: 0; transform: translate(-50%, -46%) scale(.97); } }

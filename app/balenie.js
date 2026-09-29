@@ -336,7 +336,7 @@
     if (d.bVyber) { B.dialog = null; poslednyKod = ""; skenBalika(d.bVyber); return; }
     if (d.bPotvrd) { po(rpc("balenie_potvrd", { p_cislo: B.obj.cislo, p_kod: d.bPotvrd, p_ks: +d.ks })); return; }
     if (d.bVrat) {
-      if (!window.confirm("Zrušiť sken balíka " + d.bVrat + "? Vráti sa na sklad.")) return;
+      if (!lbzPotvrd("Zrušiť sken balíka " + d.bVrat + "? Vráti sa na sklad.")) return;
       po(rpc("balenie_vrat_balik", { p_cislo: B.obj.cislo, p_kod: d.bVrat }), function (r) { return r.text; }); return;
     }
     switch (d.b) {
@@ -358,7 +358,7 @@
         break;
       case "odlozit": B.dialog = { typ: "odlozit", fokus: true }; prekresli(); break;
       case "znova":
-        if (!window.confirm("Začať balenie tejto objednávky odznova? Všetky naskenované balíky sa vrátia na sklad.")) return;
+        if (!lbzPotvrd("Začať balenie tejto objednávky odznova? Všetky naskenované balíky sa vrátia na sklad.")) return;
         po(rpc("balenie_stav", { p_cislo: B.obj.cislo, p_stav: "znova" }), function (r) { return "Vrátené balíky: " + (r.vratene || 0) + ". Môžete baliť odznova."; });
         break;
     }
