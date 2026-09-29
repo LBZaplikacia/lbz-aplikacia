@@ -9,6 +9,7 @@
   var DB = null, ROLA = null, koren = null;
   var T = { id: null, zoznam: null, data: null, sprava: null, nacitavam: false, dialog: null, fotky: {}, prace: 0 };
   var START = "Sedlo Zbojská, 976 56 Pohronská Polhora";
+  var NA_MIESTE_M = 50;   // do koľkých metrov od zastávky sa ukáže „na mieste“ (Zaplatiť / Doručené)
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -148,7 +149,7 @@
       return '<section class="card t-hotovo"><div class="t-velke">🎉</div><h3>Všetky zastávky sú vybavené</h3>' +
         (t.stav === "ukoncena" ? '<p class="muted">Rozvoz ukončený ' + esc(cas(t.ukoncena)) + ".</p>" : '<button class="btn btn-primary t-koniec" data-t="ukoncit">🏁 Ukončiť rozvoz</button>') + "</section>";
     }
-    var poradie = z.indexOf(a) + 1, dob = dobierka(a), vzd = vzdialenost(a), naMieste = T.naMieste === a.cislo || (vzd != null && vzd < 200);
+    var poradie = z.indexOf(a) + 1, dob = dobierka(a), vzd = vzdialenost(a), naMieste = T.naMieste === a.cislo || (vzd != null && vzd < NA_MIESTE_M);
     var vybav = a.stav !== "caka";
     return '<section class="card t-akt' + (naMieste ? " t-akt-miesto" : "") + '">' +
       '<div class="t-akt-hore"><span class="t-z-cislo num">' + poradie + '</span><span class="muted">zastávka ' + poradie + " z " + z.length + (a.eta ? ' · príchod <b class="num">' + esc(cas(a.eta)) + "</b>" : "") + "</span>" +
@@ -308,7 +309,7 @@
         var bol = T.gps && T.akt ? vzdialenost(najdi(T.akt) || {}) : null;
         T.gps = { lat: p.coords.latitude, lng: p.coords.longitude }; T.gpsChyba = false;
         var a = T.akt && najdi(T.akt), teraz = a ? vzdialenost(a) : null;
-        if (teraz != null && teraz < 200 && (bol == null || bol >= 200)) { try { navigator.vibrate && navigator.vibrate([150, 80, 150]); } catch (e) {} }
+        if (teraz != null && teraz < NA_MIESTE_M && (bol == null || bol >= NA_MIESTE_M)) { try { navigator.vibrate && navigator.vibrate([150, 80, 150]); } catch (e) {} }
         if (T.id != null && (T.rezim || "jazda") === "jazda" && !T.dialog) prekresli();
       }, function () { T.gpsChyba = true; }, { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 });
     }
