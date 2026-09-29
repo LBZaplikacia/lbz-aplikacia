@@ -33,7 +33,10 @@
   function poloha() {
     return new Promise(function (ok) {
       if (!navigator.geolocation) return ok({ chyba: "bez GPS" });
-      navigator.geolocation.getCurrentPosition(function (p) { ok({ lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), presnost: Math.round(p.coords.accuracy) }); },
+      navigator.geolocation.getCurrentPosition(function (p) {
+          var g = { lat: +p.coords.latitude.toFixed(6), lng: +p.coords.longitude.toFixed(6), presnost: Math.round(p.coords.accuracy) };
+          adresaZGps(g).then(function (a) { if (a) g.adresa = a; ok(g); });
+        },
         function (e) { ok({ chyba: e && e.code === 1 ? "poloha zamietnutá" : "poloha nedostupná" }); }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
     });
   }
@@ -94,7 +97,7 @@
         '<div class="d-bezi num" data-d-od="' + esc(o.prichod) + '">' + hm(min) + "</div>" +
         (min >= 840 ? '<p class="f-sprava f-chyba">⚠️ Si v práci už viac ako 14 hodín – nezabudol si zapísať odchod? Ak si už odišiel, zapíš ODCHOD a pošli žiadosť o opravu času.</p>' : "") +
         '<button class="btn d-velke d-tl-odchod" data-d="odchod"' + (D.prace ? " disabled" : "") + ">🔴 ODCHOD</button>" +
-        (min >= 360 ? '<p class="muted d-pozn">Prestávka 30 min sa odpočíta automaticky.</p>' : "") + suhrn + "</section>";
+        (min >= 360 ? '<p class="muted d-pozn">Prestávka 30 min sa odpočíta automaticky.</p>' : "") + suhrn + pushHtml() + "</section>";
     }
     var navrh = navrhMiesta(m);
     return '<section class="card d-karta">' + spr +
@@ -103,7 +106,7 @@
         return '<button class="d-miesto" data-d-miesto="' + x + '" aria-pressed="' + (x === navrh) + '">' + esc(x.charAt(0) + x.slice(1).toLowerCase()) + "</button>";
       }).join("") + "</div>" +
       '<button class="btn btn-primary d-velke d-tl-prichod" data-d="prichod"' + (D.prace ? " disabled" : "") + ">🟢 PRÍCHOD</button>" +
-      (m.zajtra && m.zajtra.length ? '<p class="muted d-pozn">Zajtra: ' + esc(smenaText(m.zajtra)) + "</p>" : "") + suhrn + "</section>";
+      (m.zajtra && m.zajtra.length ? '<p class="muted d-pozn">Zajtra: ' + esc(smenaText(m.zajtra)) + "</p>" : "") + suhrn + pushHtml() + "</section>";
   }
 
   // ---------- modul ----------
@@ -137,8 +140,46 @@
       (r.length ? '<div class="tbl-wrap"><table class="d-tab"><thead><tr><th>Deň</th><th>Miesto / druh</th><th>Príchod–odchod</th><th>Prest.</th><th>Hodiny</th><th>Stravné</th><th></th></tr></thead><tbody>' +
         riadky + "</tbody></table></div>" : '<div class="empty"><strong>V tomto mesiaci nie sú záznamy</strong></div>');
   }
+  // poloha ako text (bez mapy): známe miesto, inak adresa z GPS
+  var ZNAME = [{ n: "Zbojská", lat: 48.7449218, lng: 19.8550656 }];
+  var ADR_CACHE = {}, adrFronta = Promise.resolve();
+  function vzdialM(a, b) {
+    var r = Math.PI / 180, x = (b.lng - a.lng) * r * Math.cos((a.lat + b.lat) / 2 * r), y = (b.lat - a.lat) * r;
+    return Math.sqrt(x * x + y * y) * 6371000;
+  }
+  function adresaZGps(g) {
+    var k = g.lat.toFixed(4) + "," + g.lng.toFixed(4);
+    if (ADR_CACHE[k] !== undefined) return Promise.resolve(ADR_CACHE[k]);
+    // Nominatim: max 1 dopyt/s → fronta
+    var pr = adrFronta.then(function () {
+      var c = new AbortController(); setTimeout(function () { c.abort(); }, 5000);
+      return fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&accept-language=sk&lat=" + g.lat + "&lon=" + g.lng, { signal: c.signal })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          var a = j && j.address; if (!a) return "";
+          var ul = [a.road || a.pedestrian || a.square || a.hamlet || "", a.house_number || ""].join(" ").trim();
+          var obec = a.village || a.town || a.city || a.municipality || "";
+          return [ul, obec].filter(Boolean).join(", ");
+        })
+        .catch(function () { return ""; })
+        .then(function (a) { ADR_CACHE[k] = a; return new Promise(function (ok) { setTimeout(function () { ok(a); }, 1100); }); });
+    });
+    adrFronta = pr.catch(function () {});
+    return pr;
+  }
+  function miestoText(p) {
+    if (!p) return "";
+    if (!p.lat) return p.chyba || "";
+    for (var i = 0; i < ZNAME.length; i++) if (vzdialM(p, ZNAME[i]) <= 150) return ZNAME[i].n;
+    if (p.adresa) return p.adresa;
+    var k = p.lat.toFixed(4) + "," + p.lng.toFixed(4);
+    if (ADR_CACHE[k]) return ADR_CACHE[k];
+    if (ADR_CACHE[k] === "") return "adresa sa nenašla";
+    if (ADR_CACHE[k] === undefined) adresaZGps(p).then(function (a) { if (a && D.zalozka === "osoba") kresli(); });
+    return "zisťujem miesto…";
+  }
   function gpsOdkazy(g) {
-    var f = function (p, t) { return p && p.lat ? ' <a class="btn-link" href="https://www.google.com/maps/search/?api=1&query=' + p.lat + "," + p.lng + '" target="_blank" rel="noopener">📍' + t + "</a>" : ""; };
+    var f = function (p, t) { var m = miestoText(p); return m ? '<div class="d-gps">📍 ' + t + ": " + esc(m) + "</div>" : ""; };
     return f(g.prichod, "príchod") + f(g.odchod, "odchod");
   }
   function pohladMesiac() {
@@ -177,8 +218,9 @@
   function pohladTim() {
     var p = D.prehlad;
     if (!p) return '<div class="empty"><strong>Načítavam…</strong></div>';
+    var ph = pushHtml(); if (ph) ph = '<div class="d-push-obal">' + ph + "</div>";
     var zoz = function (a, f) { return a.length ? '<div class="rows">' + a.map(f).join("") + "</div>" : '<p class="muted">Nikto</p>'; };
-    return '<div class="grid">' +
+    return ph + '<div class="grid">' +
       '<section class="card"><h3>🟢 Teraz v práci <span class="pill ok num">' + p.v_praci.length + "</span></h3>" +
       zoz(p.v_praci, function (x) { return '<div class="row' + (x.min >= 840 ? " d-dlho" : "") + '"><span>' + esc(x.osoba) + ' <span class="muted">' + esc(x.miesto || "") + '</span></span><span class="num">od ' + esc(cas(x.prichod)) +
         (x.min >= 840 ? " · ⚠️ " + hodiny(x.min) + " h" : "") + "</span></div>"; }) + "</section>" +
@@ -240,6 +282,7 @@
     if (d.dUpr) { var r = ((D.data && D.data.riadky) || []).filter(function (x) { return String(x.id) === d.dUpr; })[0]; D.dialog = { riadok: r }; prekresli(); return; }
     switch (d.d) {
       case "suhlas": po(rpc("dochadzka_suhlas", { p_text: SUHLAS_TEXT })); break;
+      case "push": zapniPush(); break;
       case "prichod":
         var m = D.moja, miesto = navrhMiesta(m || {});
         D.prace++; kresli();
@@ -280,7 +323,7 @@
       e.preventDefault();
       po(rpc("dochadzka_ziadost", { p: { typ: hodnota("d-z-typ"), od: hodnota("d-z-od"), do: hodnota("d-z-do") || hodnota("d-z-od"), cas_od: hodnota("d-z-cod"), cas_do: hodnota("d-z-cdo"), poznamka: hodnota("d-z-pozn"),
         miesto: hodnota("d-z-typ") === "oprava" ? hodnota("d-z-miesto") : "", dochadzka_id: hodnota("d-z-typ") === "oprava" && D.oprava ? D.oprava.id : null } }),
-        function () { D.zalozka = "mesiac"; D.oprava = null; nacitajMesiac(); });
+        function () { D.zalozka = "mesiac"; D.oprava = null; nacitajMesiac(); try { DB.functions.invoke("upozornenia", { body: { akcia: "ziadost" } }); } catch (x) {} });
     }
     if (e.target.id === "d-norma-form") {
       e.preventDefault();
@@ -306,7 +349,47 @@
   // po návrate do appky obnoviť stav (príchod mohol byť zapísaný na inom zariadení)
   document.addEventListener("visibilitychange", function () { if (!document.hidden && DB) nacitajMoju(); });
 
-  (function () { var p = window.lbzPamat && lbzPamat.nacitaj("dochadzka"); if (p) { D.zalozka = p.zalozka || "mesiac"; D.osoba = p.osoba || null; D.mesiac = p.mesiac || null; } })();
+  (function () {
+    var p = window.lbzPamat && lbzPamat.nacitaj("dochadzka"); if (p) { D.zalozka = p.zalozka || "mesiac"; D.osoba = p.osoba || null; D.mesiac = p.mesiac || null; }
+    var q = new URLSearchParams(location.search);
+    if (q.get("m") === "dochadzka" && q.get("z")) { D.zalozka = q.get("z"); D.osoba = null; D.mesiac = null; }
+    if (q.get("m")) try { history.replaceState(null, "", location.pathname); } catch (e) {}
+  })();
+
+  // ---------- upozornenia do mobilu ----------
+  function pushMoze() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
+  function b64u(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; var r = atob(s), a = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) a[i] = r.charCodeAt(i); return a; }
+  function pushStav() {
+    if (!pushMoze()) return Promise.resolve("nepodporuje");
+    if (Notification.permission === "denied") return Promise.resolve("zakazane");
+    return navigator.serviceWorker.ready.then(function (r) { return r.pushManager.getSubscription(); }).then(function (s) { return s ? "zapnute" : "vypnute"; }).catch(function () { return "vypnute"; });
+  }
+  function zapniPush() {
+    D.prace++; kresli();
+    var koniec = function (typ, text) { D.prace--; D.sprava = { typ: typ, text: text }; D.push = typ === "ok" ? "zapnute" : D.push; kresli(); };
+    Notification.requestPermission().then(function (perm) {
+      if (perm !== "granted") return koniec("chyba", "Upozornenia nie sú povolené – povoľ ich v nastaveniach prehliadača pre túto appku.");
+      return DB.functions.invoke("upozornenia", { body: { akcia: "kluc" } }).then(function (k) {
+        var kl = k && k.data && k.data.kluc; if (!kl) throw new Error("Upozornenia ešte nie sú nastavené na serveri");
+        return navigator.serviceWorker.ready.then(function (r) { return r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(kl) }); });
+      }).then(function (sub) {
+        var j = sub.toJSON(); j.zariadenie = navigator.userAgent;
+        return rpc("push_uloz", { p: j });
+      }).then(function () {
+        DB.functions.invoke("upozornenia", { body: { akcia: "test" } });
+        koniec("ok", "🔔 Upozornenia sú zapnuté – o chvíľu príde skúšobné.");
+      });
+    }).catch(function (e) { koniec("chyba", chybaText(e)); });
+  }
+  function pushHtml() {
+    if (D.push === undefined) { D.push = null; pushStav().then(function (s) { D.push = s; kresli(); }); }
+    if (!D.push || D.push === "zapnute" || D.push === "nepodporuje") {
+      if (D.push === "nepodporuje" && /iPhone|iPad/.test(navigator.userAgent) && !navigator.standalone) return '<p class="muted d-pozn">🔔 Upozornenia na iPhone fungujú, keď appku pridáš na plochu (Zdieľať → Pridať na plochu).</p>';
+      return "";
+    }
+    if (D.push === "zakazane") return '<p class="muted d-pozn">🔕 Upozornenia sú v prehliadači zakázané – povoľ ich v nastaveniach stránky.</p>';
+    return '<button class="btn d-push" data-d="push"' + (D.prace ? " disabled" : "") + '>🔔 Zapnúť upozornenia do mobilu</button>';
+  }
 
   window.LBZ_DOCHADZKA = {
     nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; D.moja = null; D.data = null; D.prehlad = null; if (DB) nacitajMoju(); },

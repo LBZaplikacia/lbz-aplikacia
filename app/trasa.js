@@ -59,12 +59,16 @@
     var z = T.zoznam;
     if (!z) return head + spravaHtml() + '<div class="empty"><strong>' + (T.nacitavam ? "Načítavam…" : "Nenačítané") + "</strong></div>";
     if (!z.length) return head + spravaHtml() + '<div class="empty"><strong>Zatiaľ nie je naplánovaná žiadna trasa</strong><span class="muted">Trasu vytvára zákaznícky servis vo Furmankách.</span></div>';
-    return head + spravaHtml() + '<div class="b-furmanky">' + z.map(function (t) {
-      return '<button class="card t-karta" data-t-otvor="' + t.id + '"><span class="t-k-hore"><b>' + esc(datumSk(t.datum)) + "</b>" + stavPill(t.stav) + "</span>" +
+    var karta = function (t) {
+      return '<button class="card t-karta t-karta-' + esc(t.stav) + '" data-t-otvor="' + t.id + '"><span class="t-k-hore"><b>' + esc(datumSk(t.datum)) + "</b>" + stavPill(t.stav) + "</span>" +
         '<span class="t-k-nazov">' + esc(t.nazov) + "</span>" +
         '<span class="muted">odchod <b class="num">' + esc(cas(t.odchod)) + '</b> · návrat ~<span class="num">' + esc(cas(t.navrat)) + "</span></span>" +
         '<span class="muted"><span class="num">' + t.hotovo + " / " + t.pocet + "</span> zastávok vybavených</span></button>";
-    }).join("") + "</div>";
+    };
+    var aktivne = z.filter(function (t) { return t.stav !== "ukoncena"; }), ukoncene = z.filter(function (t) { return t.stav === "ukoncena"; });
+    return head + spravaHtml() +
+      (aktivne.length ? '<div class="b-furmanky">' + aktivne.map(karta).join("") + "</div>" : '<div class="empty"><strong>Žiadny rozvoz na ceste ani naplánovaný</strong></div>') +
+      (ukoncene.length ? '<details class="t-ukoncene"><summary>✅ Ukončené rozvozy (' + ukoncene.length + ')</summary><div class="b-furmanky">' + ukoncene.map(karta).join("") + "</div></details>" : "");
   }
 
   // odkazy na Google Mapy po 9 zastávkach (ako starý skript): /maps/dir/<odkiaľ>/<zastávka>/…; prázdny začiatok = moja poloha

@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.16.0 BETA";
+  var VERZIA = "0.16.1 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -77,7 +77,8 @@
   var DOCH = window.LBZ_DOCHADZKA || null;
 
   var stav = {
-    pouzivatel: null, email: null, rola: null, modul: (window.lbzPamat && lbzPamat.nacitaj("modul")) || "prehlad",
+    pouzivatel: null, email: null, rola: null,
+    modul: new URLSearchParams(location.search).get("m") || (window.lbzPamat && lbzPamat.nacitaj("modul")) || "prehlad",
     dbModuly: null,          // moduly z databázy (ostrý režim)
     login: "prihlasenie",    // prihlasenie | zabudnute | nove_heslo
     sprava: null,            // { typ: ok|chyba, text }

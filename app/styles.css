@@ -774,3 +774,15 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 .d-norma .btn { min-height: 36px; padding: 4px 10px; }
 .tbl-wrap { overflow-x: auto; }
 .d-dlho { color: var(--bad); font-weight: 700; }
+.t-karta-naplanovana { background: #fdebd3; border-color: #f0b26b; }
+.t-karta-na_ceste { background: #fff4d6; border-color: var(--gold); }
+.t-karta-ukoncena { background: #e3f2e7; border-color: #9fcfae; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .t-karta-naplanovana { background: #3b2a17; } :root:not([data-theme="light"]) .t-karta-ukoncena { background: #1f3325; } :root:not([data-theme="light"]) .t-karta-na_ceste { background: #3a3019; } }
+.t-ukoncene { margin-top: 16px; }
+.t-ukoncene summary { cursor: pointer; font-weight: 700; padding: 10px 0; color: var(--ok); }
+.d-push { width: 100%; }
+.d-push-obal { margin-bottom: 12px; }
+/* mobil: celá obrazovka bez približovania a posúvania do strán */
+html, body { max-width: 100%; overflow-x: hidden; }
+@media (max-width: 760px) { input, select, textarea { font-size: 16px !important; } }
+.d-gps{font-size:13px;color:var(--muted,#7d6c64);margin-top:2px}
