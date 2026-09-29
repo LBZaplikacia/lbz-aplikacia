@@ -1,5 +1,5 @@
 -- LBZ aplikácia – databáza (Supabase / PostgreSQL)
--- Verzia 0.4 – 29. 9. 2026: roly, profily, sklad, prenos zo starého skladu, používatelia (pozvánky s rolou)
+-- Verzia 0.5 – 30. 9. 2026: roly, profily, sklad, prenos zo starého skladu, používatelia, FURMANKY (objednávky z Upgates)
 -- Spúšťa sa v Supabase: SQL Editor → vložiť celý súbor → Run. Dá sa spustiť opakovane.
 -- Nové tabuľky sa appke NEsprístupňujú automaticky – prístupy sú nižšie vypísané ručne (GRANT + RLS).
 
@@ -553,3 +553,771 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke all on function public.dnesne_skeny(int) from public, anon;
 grant execute on function public.dnesne_skeny(int) to authenticated;
+
+-- =========================================================================
+-- 7) PRÍSTUPY 29. 9. 2026: osobné účty zamestnancov = len dochádzka;
+--    sklad/balenie cez spoločný účet prevadzka@; furmanky len IT, CEO, zákaznícky servis
+-- =========================================================================
+insert into public.roly (kod, nazov, interna) values ('zamestnanec', 'Zamestnanec (osobný účet)', false)
+  on conflict (kod) do update set nazov = excluded.nazov, interna = excluded.interna;
+update public.moduly set aktivny = true where kod = 'balenie';
+delete from public.pristupy where (rola = 'prevadzka' and modul = 'furmanky') or (rola = 'furman' and modul = 'furmanky');
+insert into public.pristupy (rola, modul, uprava) values
+  ('zamestnanec','prehlad',true), ('zamestnanec','dochadzka',true),
+  ('zakaznicky_servis','balenie',true), ('zakaznicky_servis','sklad',true), ('zakaznicky_servis','trasa',true)
+on conflict do nothing;
+
+-- =========================================================================
+-- 8) FURMANKY – objednávky z Upgates priamo v appke (30. 9. 2026)
+--    Sťahovanie: Edge Function „upgates-sync“ (6:00, 11:30, 14:00 + tlačidlo). Počas testu z Upgates LEN ČÍTA.
+--    Pravidlá zaradenia rovnaké ako v skripte „Objednavky eshop“ (mesto → PSČ, Osobný odber, Elektronicky, NEZARADENÉ),
+--    termíny z Google Kalendára, uzávierka deň vopred 11:00 alebo kapacita trasy > 11,75 h.
+--    Vidia a upravujú: IT, CEO, zákaznícky servis. Všetko ide cez funkcie nižšie (tabuľky nie sú priamo prístupné).
+-- =========================================================================
+create or replace function public.som_furmankar() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce(public.moja_rola() in ('it','ceo','zakaznicky_servis'), false)
+$$;
+
+-- bez diakritiky, malými písmenami (ako normalize("NFD") v skriptoch)
+create or replace function public.norm_text(t text) returns text
+language sql immutable as $$
+  select lower(trim(translate(coalesce(t, ''), 'áäčďéěíĺľňóôöŕřšťúůüýžÁÄČĎÉĚÍĹĽŇÓÔÖŔŘŠŤÚŮÜÝŽ', 'aacdeeillnooorrstuuuyzAACDEEILLNOOORRSTUUUYZ')))
+$$;
+
+-- Regióny (mapa miest a PSČ zo skriptu – „Globalna konfiguracia“)
+create table if not exists public.furmanky_regiony (
+  region    text primary key,
+  poradie   int  not null,              -- poradie v appke
+  hladanie  int,                        -- poradie pri hľadaní mesta/PSČ (ako v skripte)
+  rozvoz    boolean not null default true,
+  kluc      text,                       -- kontrola zvolenej dopravy
+  mesta     text[] not null default '{}',
+  psc       text[] not null default '{}'
+);
+insert into public.furmanky_regiony (region, poradie, hladanie, rozvoz, kluc, mesta, psc) values
+  ('Stredná', 1, 2, true, 'stredn',
+    array['banska bystrica','banska stiavnica','brezno','detva','krupina','lucenec','poltar','revuca','rimavska sobota','velky krtis','zvolen','zarnovica','ziar nad hronom','polomka','helpa','zavadka','benus','tisovec','hnusta','kokava','valaska','podbrezova','brusno','slovenska lupca','badin','vlkanova','viglas','stozok','hlinik'],
+    array['974','976','977','960','962','963','965','966','969','990','991','984','985','986','987','979','980','981','982','050']),
+  ('Západná', 2, 1, true, 'zapadn',
+    array['bratislava','hlohovec','malacky','myjava','nitra','pezinok','piestany','senec','senica','skalica','trnava','zlate moravce'],
+    array['81','82','83','84','85','900','901','902','903','905','906','907','908','909','917','918','919','920','921','922','949','951','968','952','953']),
+  ('Južná', 3, 3, true, 'juzn',
+    array['galanta','dunajska streda','sala','nove zamky','komarno','levice','sturovo','zeliezovce'],
+    array['924','925','927','929','930','931','945','946','947','940','941','942','934','935','936','937']),
+  ('Prešovská', 4, 4, true, 'presov',
+    array['bardejov','humenne','kezmarok','levoca','medzilaborce','poprad','presov','sabinov','snina','stara lubovna','stropkov','gelnica','spisska nova ves','svidnik','vranov nad toplou','svit','vysoke tatry'],
+    array['080','081','082','083','085','086','089','090','091','093','094','066','061','067','069','068','058','059','060','064','065','054','052','053']),
+  ('Košická', 5, 5, true, 'kosic',
+    array['kosice','michalovce','roznava','sobrance','trebisov','moldava nad bodvou','kralovsky chlmec'],
+    array['040','044','048','049','056','071','072','073','075','076','077','078']),
+  ('Severná', 6, 6, true, 'severn',
+    array['banovce nad bebravou','bytca','cadca','dolny kubin','ilava','kysucke nove mesto','liptovsky mikulas','martin','namestovo','nove mesto nad vahom','partizanske','povazska bystrica','prievidza','puchov','ruzomberok','topolcany','trencin','turcianske teplice','tvrdosin','zilina','dubnica nad vahom','krasno nad kysucou'],
+    array['911','913','914','915','916','955','956','957','958','971','972','010','013','014','017','018','019','020','022','023','024','026','027','029','031','032','034','036','038','039']),
+  ('Osobný odber', 7, null, false, null, '{}', '{}'),
+  ('Elektronicky', 8, null, false, null, '{}', '{}'),
+  ('NEZARADENÉ',   9, null, false, null, '{}', '{}')
+on conflict (region) do update set poradie = excluded.poradie, hladanie = excluded.hladanie, rozvoz = excluded.rozvoz,
+  kluc = excluded.kluc, mesta = excluded.mesta, psc = excluded.psc;
+
+-- Zaradenie do regiónu (sortOrdersToRegions)
+create or replace function public.region_pre(p_doprava text, p_mesto text, p_psc text) returns text
+language plpgsql stable set search_path = public as $$
+declare v_ship text := public.norm_text(p_doprava); v_mesto text := public.norm_text(p_mesto);
+        v_psc text := regexp_replace(coalesce(p_psc, ''), '\s', '', 'g'); r record;
+begin
+  if v_ship like '%zbojska%' then return 'Osobný odber'; end if;
+  if v_ship like '%elektronicky%' then return 'Elektronicky'; end if;
+  for r in select region, mesta from public.furmanky_regiony where rozvoz order by hladanie loop
+    if v_mesto <> '' and exists (select 1 from unnest(r.mesta) m where position(m in v_mesto) > 0) then return r.region; end if;
+  end loop;
+  for r in select region, psc from public.furmanky_regiony where rozvoz order by hladanie loop
+    if v_psc <> '' and (left(v_psc, 3) = any(r.psc) or left(v_psc, 2) = any(r.psc)) then return r.region; end if;
+  end loop;
+  return 'NEZARADENÉ';
+end $$;
+
+-- Upozornenie, keď zákazník zaklikol inú dopravu, než kam patrí adresa (do Upgates sa počas testu nezapisuje)
+create or replace function public.zla_doprava(p_region text, p_doprava text) returns text
+language sql stable set search_path = public as $$
+  select case when r.rozvoz and public.norm_text(p_doprava) not like '%' || r.kluc || '%'
+                   and public.norm_text(p_doprava) not like '%velko%'
+              then '[POZOR ZLÁ DOPRAVA: Zákazník zaklikol -> ' || public.norm_text(p_doprava) || ' | ZARADENÉ DO: ' || r.region || ']' end
+  from public.furmanky_regiony r where r.region = p_region
+$$;
+
+-- Statusy, ktoré sa berú (targetStatuses)
+create or replace function public.ziva_objednavka(p_status text) returns boolean
+language sql immutable as $$
+  select exists (select 1 from unnest(array['prijata','platba prebieha','platba uspesna','platba zlyhala','platba zrusena',
+                                            'nedoriesena','reklamacia','spracovane nerozvezene']) s
+                 where position(s in public.norm_text(p_status)) > 0)
+$$;
+
+-- Šablóna tabuľky (hárok „Default“ zo Správy objednávok: riadky 10–145, vzorce R1C1, farby)
+create table if not exists public.furmanky_sablona (
+  riadok        int primary key,
+  kod           text,
+  kategoria     text,
+  nazov         text not null,
+  typ           text not null check (typ in ('produkt','sucet','info','suma')),
+  vzorec_ks     text,          -- stĺpec D „Spolu ks“
+  vzorec_davky  text,          -- stĺpec E „Spolu dávok“
+  farba         text
+);
+insert into public.furmanky_sablona (riadok, kod, kategoria, nazov, typ, vzorec_ks, vzorec_davky, farba) values
+  (10, 'P00013', 'Buchty hotové', 'Buchta cokoladova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (11, 'FP000026', 'Buchty hotové', 'Buchta cokoladova s malinami', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (12, 'P00027', 'Buchty hotové', 'Buchta cucoriedkova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (13, 'P00014', 'Buchty hotové', 'Buchta jablkovo skoricova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (14, 'P00012', 'Buchty hotové', 'Buchta jahodova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (15, 'P00046', 'Buchty hotové', 'Buchta keksikova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (16, 'P00021', 'Buchty hotové', 'Buchta makovo visnova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (17, 'P00134', 'Buchty hotové', 'Buchta mango s marakujou', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (18, 'FP000065', 'Buchty hotové', 'Buchta marhulove novinka', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (19, 'P00023', 'Buchty hotové', 'Buchta orechova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (20, 'FP000014', 'Buchty hotové', 'Buchta s ruzovou cokoladou a celymi jahodami', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (21, 'P00018', 'Buchty hotové', 'Buchta slivkova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (22, 'FP000069', 'Buchty hotové', 'Buchta spenatova s horenronskym syrom', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (23, 'P00019', 'Buchty hotové', 'Buchta tvarohova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (24, 'P00020', 'Buchty hotové', 'Buchta vanilkovo cucoriedkova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (25, 'FP000064', 'Buchty hotové', 'Buchta vanilkovo malinova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (26, null, null, 'Čerstvé sladké spolu', 'sucet', 'SUM(R[-16]C[0]:R[-1]C[0])', 'SUM(R[-16]C[0]:R[-1]C[0])', '#fff2cc'),
+  (27, 'P00024', 'Buchty hotové', 'Buchta oskvarkovo cesnakovo syrova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (28, 'P00025', 'Buchty hotové', 'Buchta oskvarkovo kapustova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (29, 'P00026', 'Buchty hotové', 'Buchta oskvarkovo slivkova', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/60', '#fff2cc'),
+  (30, null, null, 'Čerstvé škvarkové spolu', 'sucet', 'SUM(R[-3]C[0]:R[-1]C[0])', 'SUM(R[-3]C[0]:R[-1]C[0])', '#fff2cc'),
+  (31, 'FP000058', 'Buchty hotové', 'Poskrucanec', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/16', '#fff2cc'),
+  (32, 'FP000039', 'Buchty hotové', 'Buchta mini upečená', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/30', '#fff2cc'),
+  (33, null, null, 'ČERSTVÉ SPOLU', 'sucet', 'R[-7]C[0]+R[-3]C[0]+R[-2]C[0]+R[-1]C[0]', 'R[-7]C[0]+R[-3]C[0]+R[-2]C[0]+R[-1]C[0]', '#ff0000'),
+  (34, 'FP000061', 'Buchty na pečenie', 'Poskrucanec mrazeny', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/16', '#cfe2f3'),
+  (35, 'FP000025-3', 'Buchty na pečenie', 'Buchty cokolada s malinami 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (36, 'P00017-3', 'Buchty na pečenie', 'Buchty cokoladove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (37, 'P00031-3', 'Buchty na pečenie', 'Buchty cucoriedkove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (38, 'P00122-3', 'Buchty na pečenie', 'Buchty jablkovo skoricove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (39, 'P00016-3', 'Buchty na pečenie', 'Buchty jahodova 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (40, 'FP000049-2', 'Buchty na pečenie', 'Buchty keksikove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (41, 'P00045-3', 'Buchty na pečenie', 'Buchty makovo visnove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (42, 'P00132-3', 'Buchty na pečenie', 'Buchty mango s marakujou 1 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (43, 'FP000067-3', 'Buchty na pečenie', 'Buchty marhulove novinka 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (44, 'P00039-3', 'Buchty na pečenie', 'Buchty orechove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (45, 'FP000016-3', 'Buchty na pečenie', 'Buchty ruzove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (46, 'P00037-3', 'Buchty na pečenie', 'Buchty slivkove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (47, 'FP000073-3', 'Buchty na pečenie', 'Buchty spenatove s horehronskym syrom 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (48, 'P00032-3', 'Buchty na pečenie', 'Buchty tvarohove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (49, 'P00038-3', 'Buchty na pečenie', 'Buchty vanilkovo cucoriedkove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (50, 'FP000062-3', 'Buchty na pečenie', 'Buchty vanilkovo malinove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (51, null, null, 'medzisúčet', 'sucet', 'SUM(R[-17]C[0]:R[-1]C[0])', 'SUM(R[-17]C[0]:R[-1]C[0])', null),
+  (52, 'P00040-3', 'Buchty na pečenie', 'Buchty oskvarkovo cesnakovo syrove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (53, 'P00114-3', 'Buchty na pečenie', 'Buchty oskvarkovo kapustove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (54, 'P00041-3', 'Buchty na pečenie', 'Buchty oskvarkovo slivkove 5ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/12', '#cfe2f3'),
+  (55, null, null, 'medzisúčet', 'sucet', 'SUM(R[-3]C[0]:R[-1]C[0])', 'SUM(R[-3]C[0]:R[-1]C[0])', null),
+  (56, 'FP000050-2', 'Buchty na pečenie', 'Mix buchiet 15 ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (57, 'FP000025-4', 'Buchty na pečenie', 'Buchty cokolada s malinami 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (58, 'P00017-4', 'Buchty na pečenie', 'Buchty cokoladove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (59, 'P00031-4', 'Buchty na pečenie', 'Buchty cucoriedkove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (60, 'P00122-4', 'Buchty na pečenie', 'Buchty jablkovo skoricove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (61, 'P00016-4', 'Buchty na pečenie', 'Buchty jahodova 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (62, 'FP000049-4', 'Buchty na pečenie', 'Buchty keksikove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (63, 'P00045-4', 'Buchty na pečenie', 'Buchty makovo visnove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (64, 'P00132-4', 'Buchty na pečenie', 'Buchty mango s marakujou 1 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (65, 'FP000067-4', 'Buchty na pečenie', 'Buchty marhulove novinka 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (66, 'P00039-4', 'Buchty na pečenie', 'Buchty orechove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (67, 'FP000016-4', 'Buchty na pečenie', 'Buchty ruzove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (68, 'P00037-4', 'Buchty na pečenie', 'Buchty slivkove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (69, 'FP000073-4', 'Buchty na pečenie', 'Buchty spenatove s horehronskym syrom 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (70, 'P00032-4', 'Buchty na pečenie', 'Buchty tvarohove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (71, 'P00038-4', 'Buchty na pečenie', 'Buchty vanilkovo cucoriedkove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (72, 'FP000062-4', 'Buchty na pečenie', 'Buchty vanilkovo malinove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (73, null, null, 'medzisúčet', 'sucet', 'SUM(R[-17]C[0]:R[-1]C[0])', 'SUM(R[-17]C[0]:R[-1]C[0])', null),
+  (74, 'P00040-4', 'Buchty na pečenie', 'Buchty oskvarkovo cesnakovo syrove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (75, 'P00114-4', 'Buchty na pečenie', 'Buchty oskvarkovo kapustove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (76, 'P00041-4', 'Buchty na pečenie', 'Buchty oskvarkovo slivkove 15ks standard', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#9fc5e8'),
+  (77, null, null, 'medzisúčet', 'sucet', 'SUM(R[-3]C[0]:R[-1]C[0])', 'SUM(R[-3]C[0]:R[-1]C[0])', null),
+  (78, 'FP000050-1', 'Buchty na pečenie', 'Mix buchiet 15 ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (79, 'FP000025-1', 'Buchty na pečenie', 'Buchty cokolada s malinami 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (80, 'P00017-1', 'Buchty na pečenie', 'Buchty cokoladove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (81, 'P00031-1', 'Buchty na pečenie', 'Buchty cucoriedkove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (82, 'P00122-1', 'Buchty na pečenie', 'Buchty jablkovo skoricove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (83, 'P00016-1', 'Buchty na pečenie', 'Buchty jahodova 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (84, 'FP000049-1', 'Buchty na pečenie', 'Buchty keksikove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (85, 'P00045-1', 'Buchty na pečenie', 'Buchty makovo visnove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (86, 'P00132-1', 'Buchty na pečenie', 'Buchty mango s marakujou 1 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (87, 'FP000067-1', 'Buchty na pečenie', 'Buchty marhulove novinka 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (88, 'P00039-1', 'Buchty na pečenie', 'Buchty orechove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (89, 'FP000016-1', 'Buchty na pečenie', 'Buchty ruzove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (90, 'P00037-1', 'Buchty na pečenie', 'Buchty slivkove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (91, 'FP000073-1', 'Buchty na pečenie', 'Buchty spenatove s horehronskym syrom 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (92, 'P00032-1', 'Buchty na pečenie', 'Buchty tvarohove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (93, 'P00038-1', 'Buchty na pečenie', 'Buchty vanilkovo cucoriedkove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (94, 'FP000062-1', 'Buchty na pečenie', 'Buchty vanilkovo malinove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (95, null, null, 'medzisúčet', 'sucet', 'SUM(R[-17]C[0]:R[-1]C[0])', 'SUM(R[-17]C[0]:R[-1]C[0])', null),
+  (96, 'P00040-1', 'Buchty na pečenie', 'Buchty oskvarkovo cesnakovo syrove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (97, 'P00114-1', 'Buchty na pečenie', 'Buchty oskvarkovo kapustove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (98, 'P00041-1', 'Buchty na pečenie', 'Buchty oskvarkovo slivkove 10ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/6', '#f7caac'),
+  (99, null, null, 'medzisúčet', 'sucet', 'SUM(R[-3]C[0]:R[-1]C[0])', 'SUM(R[-3]C[0]:R[-1]C[0])', null),
+  (100, 'FP000025-2', 'Buchty na pečenie', 'Buchty cokolada s malinami 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (101, 'P00017-2', 'Buchty na pečenie', 'Buchty cokoladove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (102, 'P00031-2', 'Buchty na pečenie', 'Buchty cucoriedkove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (103, 'P00122-2', 'Buchty na pečenie', 'Buchty jablkovo skoricove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (104, 'P00016-2', 'Buchty na pečenie', 'Buchty jahodova 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (105, 'FP000049-3', 'Buchty na pečenie', 'Buchty keksikove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (106, 'P00045-2', 'Buchty na pečenie', 'Buchty makovo visnove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (107, 'P00132-2', 'Buchty na pečenie', 'Buchty mango s marakujou 1 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (108, 'FP000067-2', 'Buchty na pečenie', 'Buchty marhulove novinka 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (109, 'P00039-2', 'Buchty na pečenie', 'Buchty orechove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (110, 'FP000016-2', 'Buchty na pečenie', 'Buchty ruzove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (111, 'P00037-2', 'Buchty na pečenie', 'Buchty slivkove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (112, 'FP000073-2', 'Buchty na pečenie', 'Buchty spenatove s horehronskym syrom 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (113, 'P00032-2', 'Buchty na pečenie', 'Buchty tvarohove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (114, 'P00038-2', 'Buchty na pečenie', 'Buchty vanilkovo cucoriedkove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (115, 'FP000062-2', 'Buchty na pečenie', 'Buchty vanilkovo malinove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (116, null, null, 'medzisúčet', 'sucet', 'SUM(R[-3]C[0]:R[-1]C[0])', 'SUM(R[-16]C[0]:R[-1]C[0])', null),
+  (117, 'P00040-2', 'Buchty na pečenie', 'Buchty oskvarkovo cesnakovo syrove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (118, 'P00114-2', 'Buchty na pečenie', 'Buchty oskvarkovo kapustove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (119, 'P00041-2', 'Buchty na pečenie', 'Buchty oskvarkovo slivkove 30ks mini', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', 'R[0]C[-1]/4', '#fbe4d5'),
+  (120, null, null, 'medzisúčet', 'sucet', 'SUM(R[-3]C[0]:R[-1]C[0])', 'SUM(R[-3]C[0]:R[-1]C[0])', null),
+  (121, null, null, 'POLOTOVAR SLADKÉ SPOLU', 'sucet', 'R[-5]C[0]+R[-26]C[0]+R[-48]C[0]+R[-70]C[0]+R[-95]C[0]+R[-90]C[0]', 'R[-5]C[0]+R[-26]C[0]+R[-48]C[0]+R[-70]C[0]+R[-95]C[0]+R[-90]C[0]', '#f6e7ca'),
+  (122, null, null, 'POLOTOVAR ŠKVARKOVÉ SPOLU', 'sucet', 'R[-23]C[0]+R[-45]C[0]+R[-67]C[0]+R[-92]C[0]', 'R[-23]C[0]+R[-45]C[0]+R[-67]C[0]+R[-92]C[0]', '#f6e7ca'),
+  (123, null, null, 'POLOTOVARY SPOLU', 'sucet', 'R[-1]C[0]+R[-2]C[0]', 'R[-1]C[0]+R[-2]C[0]', '#ff0000'),
+  (124, null, null, 'celkový súčet', 'info', 'SUM(R[0]C[5]:R[0]C[680])', null, '#f6e7ca'),
+  (125, null, null, 'Doručenie 3,00', 'info', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ff0000'),
+  (126, null, null, 'Doručenie 5,00', 'info', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ff0000'),
+  (127, null, null, 'Doručenie 10,00', 'info', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ff0000'),
+  (128, 'P00129', 'Darčekové', 'Darčekové balenie malé', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ff2fe9'),
+  (129, 'P00128', 'Darčekové', 'Darčekové balenie veľké', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ff2fe9'),
+  (130, 'FP000035', 'Darčekové', 'Plátená taška LBZ', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ffc000'),
+  (131, 'FP000033', 'Darčekové', 'Vosková taška LBZ', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ffc000'),
+  (132, 'FP000032', 'Darčekové', 'Kovový pohár na víno LBZ', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ffc000'),
+  (133, 'FP000030', 'Darčekové', 'Kávový pohár LBZ', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ffc000'),
+  (134, 'FP000031', 'Darčekové', 'Vysivana klucenka LBZ', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ffc000'),
+  (135, 'FP000060-1', 'Darčekové', 'Darčekový poukaz 10€', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ffc000'),
+  (136, 'FP000060-6', 'Darčekové', 'Darčekový poukaz 15€', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ffc000'),
+  (137, 'FP000060-2', 'Darčekové', 'Darčekový poukaz 20€', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ffc000'),
+  (138, 'FP000060-3', 'Darčekové', 'Darčekový poukaz 30€', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ffc000'),
+  (139, 'FP000060-4', 'Darčekové', 'Darčekový poukaz 40€', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ffc000'),
+  (140, 'FP000060-5', 'Darčekové', 'Darčekový poukaz 50€', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#ffc000'),
+  (141, 'FP000075-1', 'Buchty hotové', 'Tabuľa TU UPEČENÉ 55x75cm veľká', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#b6d7a8'),
+  (142, 'FP000075-2', 'Buchty hotové', 'Tabuľa TU UPEČENÉ 21x29,5cm malá A4', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#b6d7a8'),
+  (143, 'FP000074', 'Buchty hotové', 'Zloženie všetkých buchiet- vytlačené A4', 'produkt', 'SUM(R[0]C[5]:R[0]C[680])', null, '#b6d7a8'),
+  (144, null, null, 'VŠETKO SPOLU', 'sucet', 'R[-111]C[0]+R[-21]C[0]+R[-16]C[0]+R[-15]C[0]+R[-14]C[0]+R[-13]C[0]+R[-12]C[0]+R[-11]C[0]+R[-10]C[0]+R[-9]C[0]+R[-8]C[0]+R[-7]C[0]+R[-6]C[0]+R[-5]C[0]+R[-4]C[0]', 'R[-111]C[0]+R[-21]C[0]+R[-16]C[0]+R[-15]C[0]+R[-14]C[0]+R[-13]C[0]+R[-12]C[0]+R[-11]C[0]+R[-10]C[0]+R[-9]C[0]+R[-8]C[0]+R[-7]C[0]+R[-6]C[0]+R[-5]C[0]+R[-4]C[0]', '#ff0000'),
+  (145, null, null, 'SUMA €', 'suma', null, 'SUM(R[0]C[4]:R[0]C[679])', null)
+on conflict (riadok) do nothing;
+
+-- Furmanky = región + dátum (Osobný odber, Elektronicky, NEZARADENÉ a „bez termínu“ majú dátum prázdny)
+create table if not exists public.furmanky (
+  id              bigint generated always as identity primary key,
+  region          text not null references public.furmanky_regiony(region),
+  datum           date,
+  stav            text not null default 'otvorena' check (stav in ('otvorena','full','rozvezena')),
+  v_kalendari     boolean not null default true,
+  uzavreta        timestamptz,
+  dovod           text,
+  trasa_hodiny    numeric(5,2),
+  trasa_kontrola  timestamptz,
+  trasa_hash      text,
+  vytvorena       timestamptz not null default now(),
+  unique nulls not distinct (region, datum)
+);
+alter table public.furmanky add column if not exists trasa_hash text;
+
+create table if not exists public.objednavky (
+  cislo          text primary key,
+  zdroj          text not null default 'upgates' check (zdroj in ('upgates','rucna')),
+  status         text,
+  meno           text,
+  firma          text,
+  telefon        text,
+  email          text,
+  ulica          text,
+  psc            text,
+  mesto          text,
+  doprava        text,
+  platba_nazov   text,
+  platba         text,                 -- ZAPLATENÉ | DOBIERKA | NA FAKTÚRU
+  suma           numeric(12,2),
+  faktura        text,
+  poznamka       text,
+  upozornenie    text,
+  region         text,
+  vytvorena      timestamptz,
+  zmenena        timestamptz,          -- posledná zmena v Upgates
+  stiahnuta      timestamptz,
+  rucne_polia    text[] not null default '{}',   -- čo zmenil zákaznícky servis v appke (Upgates to neprepíše)
+  upravil        uuid,
+  upravena       timestamptz
+);
+create index if not exists objednavky_region on public.objednavky (region);
+
+create table if not exists public.objednavky_polozky (
+  cislo     text not null references public.objednavky(cislo) on delete cascade,
+  kod       text not null,
+  nazov     text,
+  mnozstvo  numeric not null default 0,
+  cena      numeric(12,2),
+  primary key (cislo, kod)
+);
+
+-- V ktorej furmanke je objednávka. rucne = zmenené v appke (automatika ju nepresúva); rucne + bez furmanky = odobratá.
+create table if not exists public.zaradenia (
+  cislo        text primary key references public.objednavky(cislo) on delete cascade,
+  furmanka_id  bigint references public.furmanky(id) on delete set null,
+  rucne        boolean not null default false,
+  poradie      int,
+  kedy         timestamptz not null default now(),
+  kto          uuid
+);
+create index if not exists zaradenia_furmanka on public.zaradenia (furmanka_id);
+
+create table if not exists public.furmanky_log (
+  id     bigint generated always as identity primary key,
+  cas    timestamptz not null default now(),
+  typ    text not null,                -- auto | rucne | objednavka | kapacita | chyba
+  kto    uuid,
+  ok     boolean not null default true,
+  text   text,
+  pocet  int
+);
+
+create table if not exists public.geokody (
+  adresa  text primary key,
+  lat     double precision,
+  lng     double precision,
+  ok      boolean not null default true,
+  cas     timestamptz not null default now()
+);
+
+create sequence if not exists public.rucne_objednavky_seq;
+
+alter table public.furmanky_regiony   enable row level security;
+alter table public.furmanky_sablona   enable row level security;
+alter table public.furmanky           enable row level security;
+alter table public.objednavky         enable row level security;
+alter table public.objednavky_polozky enable row level security;
+alter table public.zaradenia          enable row level security;
+alter table public.furmanky_log       enable row level security;
+alter table public.geokody            enable row level security;
+
+-- ---------- pomocné ----------
+create or replace function public.dnes_sk() returns date
+language sql stable as $$ select (now() at time zone 'Europe/Bratislava')::date $$;
+
+create or replace function public.furmanka_nazov(p_region text, p_datum date) returns text
+language sql immutable as $$
+  select p_region || case when p_datum is null then '' else ' ' || to_char(p_datum, 'DD.MM.YYYY') end
+$$;
+
+-- furmanka pre región: prvý otvorený termín z kalendára (od zajtra), inak „bez termínu“
+create or replace function public.furmanka_pre_region(p_region text) returns bigint
+language plpgsql set search_path = public as $$
+declare v_id bigint; v_rozvoz boolean;
+begin
+  select rozvoz into v_rozvoz from public.furmanky_regiony where region = p_region;
+  if v_rozvoz is null then p_region := 'NEZARADENÉ'; v_rozvoz := false; end if;
+  if v_rozvoz then
+    select id into v_id from public.furmanky
+      where region = p_region and stav = 'otvorena' and v_kalendari and datum > public.dnes_sk()
+      order by datum limit 1;
+    if v_id is not null then return v_id; end if;
+  end if;
+  insert into public.furmanky (region, datum) values (p_region, null)
+    on conflict (region, datum) do update set stav = 'otvorena'
+    returning id into v_id;
+  return v_id;
+end $$;
+
+-- Automatické zaradenie všetkých objednávok (volá sa po stiahnutí a po ručnej zmene)
+create or replace function public.furmanky_prirad() returns int
+language plpgsql set search_path = public as $$
+declare r record; v_ciel bigint; v_n int := 0;
+begin
+  for r in
+    select o.cislo, o.region, public.ziva_objednavka(o.status) as ziva, z.furmanka_id, coalesce(z.rucne, false) as rucne, f.stav as fstav
+    from public.objednavky o
+    left join public.zaradenia z on z.cislo = o.cislo
+    left join public.furmanky f on f.id = z.furmanka_id
+    where o.zdroj = 'upgates'
+  loop
+    continue when r.rucne;                                   -- ručné rozhodnutie má prednosť
+    continue when r.fstav in ('full', 'rozvezena');          -- uzavretá furmanka sa už nemení
+    if not r.ziva then
+      delete from public.zaradenia where cislo = r.cislo;
+      continue;
+    end if;
+    v_ciel := public.furmanka_pre_region(coalesce(r.region, 'NEZARADENÉ'));
+    if r.furmanka_id is distinct from v_ciel then
+      insert into public.zaradenia (cislo, furmanka_id, rucne, kedy) values (r.cislo, v_ciel, false, now())
+        on conflict (cislo) do update set furmanka_id = excluded.furmanka_id, rucne = false, kedy = now();
+      v_n := v_n + 1;
+    end if;
+  end loop;
+  return v_n;
+end $$;
+
+-- ---------- stiahnutie z Upgates (volá LEN Edge Function so service kľúčom) ----------
+-- p_obj: [{cislo,status,meno,firma,telefon,email,ulica,psc,mesto,doprava,platba_nazov,platba,suma,faktura,poznamka,vytvorena,zmenena,polozky:[{kod,nazov,mnozstvo,cena}]}]
+-- p_terminy: [{region, datum}] z Google Kalendára (null = kalendár sa nepodarilo načítať, termíny ostanú)
+-- p_reset: čísla objednávok, pri ktorých sa zahodia ručné zmeny (tlačidlo „Obnoviť z Upgates“)
+create or replace function public.furmanky_sync(p_obj jsonb, p_terminy jsonb, p_typ text default 'auto',
+                                                p_kto uuid default null, p_reset text[] default '{}')
+returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_obj int := 0; v_ter int := 0; v_zar int; v_uz int; v_uzavrete text[];
+begin
+  if coalesce(array_length(p_reset, 1), 0) > 0 then
+    update public.objednavky set rucne_polia = '{}' where cislo = any(p_reset);
+  end if;
+
+  create temp table if not exists _sync (x jsonb, cislo text primary key) on commit drop;
+  truncate _sync;
+  insert into _sync select distinct on (trim(x->>'cislo')) x, trim(x->>'cislo')
+    from jsonb_array_elements(coalesce(p_obj, '[]'::jsonb)) x where coalesce(trim(x->>'cislo'), '') <> ''
+    order by trim(x->>'cislo'), x->>'zmenena' desc nulls last;
+  get diagnostics v_obj = row_count;
+
+  insert into public.objednavky as o (cislo, zdroj, status, meno, firma, telefon, email, ulica, psc, mesto, doprava, platba_nazov,
+                                      platba, suma, faktura, poznamka, vytvorena, zmenena, stiahnuta)
+  select s.cislo, 'upgates', s.x->>'status', s.x->>'meno', s.x->>'firma', s.x->>'telefon', s.x->>'email', s.x->>'ulica', s.x->>'psc', s.x->>'mesto',
+         s.x->>'doprava', s.x->>'platba_nazov', s.x->>'platba', nullif(s.x->>'suma', '')::numeric, nullif(s.x->>'faktura', ''), nullif(s.x->>'poznamka', ''),
+         nullif(s.x->>'vytvorena', '')::timestamptz, nullif(s.x->>'zmenena', '')::timestamptz, now()
+  from _sync s
+  on conflict (cislo) do update set
+    status = excluded.status, platba_nazov = excluded.platba_nazov, faktura = excluded.faktura,
+    vytvorena = excluded.vytvorena, zmenena = excluded.zmenena, stiahnuta = excluded.stiahnuta,
+    meno     = case when 'meno'     = any(o.rucne_polia) then o.meno     else excluded.meno end,
+    firma    = case when 'meno'     = any(o.rucne_polia) then o.firma    else excluded.firma end,
+    telefon  = case when 'telefon'  = any(o.rucne_polia) then o.telefon  else excluded.telefon end,
+    email    = case when 'email'    = any(o.rucne_polia) then o.email    else excluded.email end,
+    ulica    = case when 'adresa'   = any(o.rucne_polia) then o.ulica    else excluded.ulica end,
+    psc      = case when 'adresa'   = any(o.rucne_polia) then o.psc      else excluded.psc end,
+    mesto    = case when 'adresa'   = any(o.rucne_polia) then o.mesto    else excluded.mesto end,
+    doprava  = excluded.doprava,
+    platba   = case when 'platba'   = any(o.rucne_polia) then o.platba   else excluded.platba end,
+    suma     = case when 'suma'     = any(o.rucne_polia) then o.suma     else excluded.suma end,
+    poznamka = case when 'poznamka' = any(o.rucne_polia) then o.poznamka else excluded.poznamka end;
+
+  -- položky (ak ich zákaznícky servis neupravoval)
+  delete from public.objednavky_polozky p using _sync s, public.objednavky o
+   where p.cislo = s.cislo and o.cislo = s.cislo and not ('polozky' = any(o.rucne_polia));
+  insert into public.objednavky_polozky (cislo, kod, nazov, mnozstvo, cena)
+  select s.cislo, trim(i->>'kod'), max(i->>'nazov'), sum(coalesce(nullif(i->>'mnozstvo', '')::numeric, 0)), max(nullif(i->>'cena', '')::numeric)
+  from _sync s join public.objednavky o on o.cislo = s.cislo and not ('polozky' = any(o.rucne_polia))
+       cross join lateral jsonb_array_elements(coalesce(s.x->'polozky', '[]'::jsonb)) i
+  where coalesce(trim(i->>'kod'), '') <> ''
+  group by s.cislo, trim(i->>'kod')
+  on conflict (cislo, kod) do nothing;
+
+  update public.objednavky o set region = public.region_pre(o.doprava, o.mesto, o.psc)
+    from _sync s where o.cislo = s.cislo;
+  update public.objednavky o set upozornenie = public.zla_doprava(o.region, o.doprava)
+    from _sync s where o.cislo = s.cislo;
+
+  -- termíny z kalendára
+  if p_terminy is not null then
+    update public.furmanky f set v_kalendari = false
+     where f.datum is not null and f.stav = 'otvorena'
+       and not exists (select 1 from jsonb_array_elements(p_terminy) t
+                       where t->>'region' = f.region and (t->>'datum')::date = f.datum);
+    insert into public.furmanky (region, datum)
+      select distinct t->>'region', (t->>'datum')::date from jsonb_array_elements(p_terminy) t
+      where exists (select 1 from public.furmanky_regiony r where r.region = t->>'region' and r.rozvoz)
+    on conflict (region, datum) do update set v_kalendari = true;
+    get diagnostics v_ter = row_count;
+  end if;
+
+  v_zar := public.furmanky_prirad();
+  with u as (
+    update public.furmanky set stav = 'full', uzavreta = now(), dovod = 'Automaticky uzavreté (11:00)'
+     where stav = 'otvorena' and datum is not null
+       and now() >= ((datum - 1) + time '11:00') at time zone 'Europe/Bratislava'
+    returning public.furmanka_nazov(region, datum) n)
+  select coalesce(array_agg(n), '{}') into v_uzavrete from u;
+
+  insert into public.furmanky_log (typ, kto, ok, text, pocet)
+    values (coalesce(p_typ, 'auto'), p_kto, true,
+            'Objednávok ' || v_obj || ', presunov ' || v_zar ||
+            case when array_length(v_uzavrete, 1) > 0 then ', uzavreté: ' || array_to_string(v_uzavrete, ', ') else '' end, v_obj);
+
+  return jsonb_build_object('ok', true, 'objednavky', v_obj, 'terminy', v_ter, 'presuny', v_zar, 'uzavrete', to_jsonb(v_uzavrete));
+end $$;
+
+-- posledný beh + ochrana pred zbytočným míňaním Upgates API
+create or replace function public.furmanky_posledny_beh() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'posledny', (select to_jsonb(l) from (select cas, typ, ok, text from public.furmanky_log where typ in ('auto','rucne') order by cas desc limit 1) l),
+    'posledny_ok', (select max(cas) from public.furmanky_log where typ in ('auto','rucne') and ok))
+$$;
+
+create or replace function public.furmanky_zapis_log(p_typ text, p_ok boolean, p_text text, p_kto uuid default null) returns void
+language sql security definer set search_path = public as $$
+  insert into public.furmanky_log (typ, kto, ok, text) values (p_typ, p_kto, p_ok, left(p_text, 2000))
+$$;
+
+-- ---------- kapacita trasy (Edge Function počíta cez Google Mapy) ----------
+create or replace function public.furmanky_na_kontrolu() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', f.id, 'nazov', public.furmanka_nazov(f.region, f.datum), 'hash', f.trasa_hash, 'hodiny', f.trasa_hodiny, 'zastavky',
+    (select coalesce(jsonb_agg(jsonb_build_object(
+        'cislo', o.cislo,
+        'adresa', concat_ws(', ', nullif(o.ulica, ''), nullif(trim(concat_ws(' ', o.psc, o.mesto)), '')),
+        'dobierka', coalesce(o.platba, 'DOBIERKA') not in ('ZAPLATENÉ', 'NA FAKTÚRU'),
+        'poznamka', o.poznamka) order by z.poradie nulls last, o.vytvorena), '[]'::jsonb)
+     from public.zaradenia z join public.objednavky o on o.cislo = z.cislo where z.furmanka_id = f.id)) order by f.datum), '[]'::jsonb)
+  from public.furmanky f join public.furmanky_regiony r on r.region = f.region and r.rozvoz
+  where f.stav = 'otvorena' and f.datum > public.dnes_sk()
+$$;
+
+create or replace function public.furmanky_kapacita(p_id bigint, p_hodiny numeric, p_uzavriet boolean, p_hash text default null) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update public.furmanky set trasa_hodiny = p_hodiny, trasa_kontrola = now(), trasa_hash = coalesce(p_hash, trasa_hash) where id = p_id;
+  if p_uzavriet then
+    update public.furmanky set stav = 'full', uzavreta = now(), dovod = 'Kapacita naplnená (>11,75h)' where id = p_id and stav = 'otvorena';
+    insert into public.furmanky_log (typ, text) select 'kapacita', 'Uzavretá ' || public.furmanka_nazov(region, datum) || ' – trasa ' || p_hodiny || ' h' from public.furmanky where id = p_id;
+  end if;
+end $$;
+
+create or replace function public.geokody_daj(p_adresy text[]) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select coalesce(jsonb_object_agg(adresa, jsonb_build_object('lat', lat, 'lng', lng, 'ok', ok)), '{}'::jsonb)
+  from public.geokody where adresa = any(p_adresy)
+$$;
+create or replace function public.geokody_uloz(p jsonb) returns void
+language sql security definer set search_path = public as $$
+  insert into public.geokody (adresa, lat, lng, ok)
+  select k, nullif(v->>'lat', '')::float8, nullif(v->>'lng', '')::float8, coalesce((v->>'ok')::boolean, true) from jsonb_each(p) e(k, v)
+  on conflict (adresa) do update set lat = excluded.lat, lng = excluded.lng, ok = excluded.ok, cas = now()
+$$;
+
+-- token pre plánované spúšťanie (vytvorí sa sám v trezore Supabase, nikto ho nemusí poznať)
+create or replace function public.furmanky_cron_ok(p_token text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce(p_token, '') <> '' and exists (select 1 from vault.decrypted_secrets where name = 'furmanky_cron' and decrypted_secret = p_token)
+$$;
+
+-- ---------- pre appku (IT, CEO, zákaznícky servis) ----------
+create or replace function public.furmanky_zoznam() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Furmanky vidí len IT, CEO a zákaznícky servis'); end if;
+  return jsonb_build_object('ok', true, 'beh', public.furmanky_posledny_beh(), 'furmanky', coalesce((
+    select jsonb_agg(jsonb_build_object('id', f.id, 'region', f.region, 'datum', f.datum, 'nazov', public.furmanka_nazov(f.region, f.datum),
+             'stav', f.stav, 'v_kalendari', f.v_kalendari, 'dovod', f.dovod, 'uzavreta', f.uzavreta, 'rozvoz', r.rozvoz,
+             'trasa_hodiny', f.trasa_hodiny, 'pocet', coalesce(z.pocet, 0), 'suma', coalesce(z.suma, 0))
+           order by (f.datum is null), f.datum, r.poradie)
+    from public.furmanky f
+    join public.furmanky_regiony r on r.region = f.region
+    left join lateral (select count(*) pocet, sum(o.suma) suma from public.zaradenia z join public.objednavky o on o.cislo = z.cislo
+                       where z.furmanka_id = f.id) z on true
+    where (f.datum is null and coalesce(z.pocet, 0) > 0)
+       or (f.datum is not null and f.stav <> 'rozvezena' and (f.v_kalendari or coalesce(z.pocet, 0) > 0))
+       or (f.stav = 'rozvezena' and f.datum >= public.dnes_sk() - 14)
+  ), '[]'::jsonb), 'odobrate', (select count(*) from public.zaradenia where rucne and furmanka_id is null));
+end $$;
+
+create or replace function public.objednavka_json(p_cislo text) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select jsonb_build_object('cislo', o.cislo, 'zdroj', o.zdroj, 'status', o.status, 'meno', o.meno, 'firma', o.firma, 'telefon', o.telefon,
+    'email', o.email, 'ulica', o.ulica, 'psc', o.psc, 'mesto', o.mesto, 'doprava', o.doprava, 'platba', o.platba, 'platba_nazov', o.platba_nazov,
+    'suma', o.suma, 'faktura', o.faktura, 'poznamka', o.poznamka, 'upozornenie', o.upozornenie, 'region', o.region,
+    'vytvorena', o.vytvorena, 'zmenena', o.zmenena, 'rucne_polia', o.rucne_polia, 'ziva', public.ziva_objednavka(o.status),
+    'furmanka_id', z.furmanka_id, 'rucne', coalesce(z.rucne, false), 'poradie', z.poradie,
+    'polozky', coalesce((select jsonb_object_agg(p.kod, p.mnozstvo) from public.objednavky_polozky p where p.cislo = o.cislo and p.mnozstvo <> 0), '{}'::jsonb),
+    'nazvy', coalesce((select jsonb_object_agg(p.kod, p.nazov) from public.objednavky_polozky p where p.cislo = o.cislo and p.mnozstvo <> 0), '{}'::jsonb))
+  from public.objednavky o left join public.zaradenia z on z.cislo = o.cislo
+  where o.cislo = p_cislo
+$$;
+
+-- p_id null = odobraté objednávky (ručne vyradené z furmaniek)
+create or replace function public.furmanka_data(p_id bigint) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_f jsonb;
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Furmanky vidí len IT, CEO a zákaznícky servis'); end if;
+  if p_id is not null then
+    select jsonb_build_object('id', f.id, 'region', f.region, 'datum', f.datum, 'nazov', public.furmanka_nazov(f.region, f.datum), 'stav', f.stav,
+                              'dovod', f.dovod, 'uzavreta', f.uzavreta, 'rozvoz', r.rozvoz, 'trasa_hodiny', f.trasa_hodiny, 'v_kalendari', f.v_kalendari)
+      into v_f from public.furmanky f join public.furmanky_regiony r on r.region = f.region where f.id = p_id;
+    if v_f is null then return jsonb_build_object('ok', false, 'text', 'Furmanka neexistuje'); end if;
+  else
+    v_f := jsonb_build_object('id', null, 'nazov', 'Odobraté objednávky', 'stav', 'otvorena', 'rozvoz', false);
+  end if;
+  return jsonb_build_object('ok', true, 'furmanka', v_f, 'objednavky', coalesce((
+    select jsonb_agg(public.objednavka_json(z.cislo) order by z.poradie nulls last, o.vytvorena nulls last, z.cislo)
+    from public.zaradenia z join public.objednavky o on o.cislo = z.cislo
+    where (p_id is not null and z.furmanka_id = p_id) or (p_id is null and z.furmanka_id is null and z.rucne)), '[]'::jsonb));
+end $$;
+
+create or replace function public.furmanky_sablona_data() returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when public.som_interny() then coalesce(jsonb_agg(to_jsonb(s) order by s.riadok), '[]'::jsonb) else '[]'::jsonb end
+  from public.furmanky_sablona s
+$$;
+
+-- hľadanie objednávky (podľa čísla, mena, telefónu) – na pridanie do furmanky
+create or replace function public.objednavky_hladaj(p_text text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v text := public.norm_text(p_text);
+begin
+  if not public.som_furmankar() then return '[]'::jsonb; end if;
+  if length(v) < 2 then return '[]'::jsonb; end if;
+  return coalesce((select jsonb_agg(x) from (
+    select jsonb_build_object('cislo', o.cislo, 'meno', coalesce(nullif(o.meno, ''), o.firma), 'mesto', o.mesto, 'status', o.status, 'suma', o.suma,
+                              'furmanka', (select public.furmanka_nazov(f.region, f.datum) from public.furmanky f where f.id = z.furmanka_id)) x
+    from public.objednavky o left join public.zaradenia z on z.cislo = o.cislo
+    where public.norm_text(o.cislo) like '%' || v || '%' or public.norm_text(o.meno) like '%' || v || '%'
+       or public.norm_text(o.firma) like '%' || v || '%' or regexp_replace(coalesce(o.telefon, ''), '\D', '', 'g') like '%' || regexp_replace(v, '\D', '', 'g') || '%' and length(regexp_replace(v, '\D', '', 'g')) >= 4
+    order by o.vytvorena desc nulls last limit 20) q), '[]'::jsonb);
+end $$;
+
+-- presun / pridanie / odobratie (p_furmanka_id null = odobrať z furmaniek)
+create or replace function public.zaradenie_nastav(p_cislo text, p_furmanka_id bigint) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Nemáte oprávnenie'); end if;
+  if not exists (select 1 from public.objednavky where cislo = p_cislo) then return jsonb_build_object('ok', false, 'text', 'Objednávka ' || p_cislo || ' nie je v appke'); end if;
+  if p_furmanka_id is not null and not exists (select 1 from public.furmanky where id = p_furmanka_id) then return jsonb_build_object('ok', false, 'text', 'Furmanka neexistuje'); end if;
+  insert into public.zaradenia (cislo, furmanka_id, rucne, kedy, kto) values (p_cislo, p_furmanka_id, true, now(), auth.uid())
+    on conflict (cislo) do update set furmanka_id = excluded.furmanka_id, rucne = true, kedy = now(), kto = auth.uid(), poradie = null;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- vrátiť objednávku automatike (zruší ručné presunutie/odobratie)
+create or replace function public.zaradenie_automaticky(p_cislo text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Nemáte oprávnenie'); end if;
+  delete from public.zaradenia where cislo = p_cislo;
+  perform public.furmanky_prirad();
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- úprava objednávky alebo nová ručná objednávka (bez čísla → M-1, M-2, …)
+-- p: {cislo?, meno, firma, telefon, email, ulica, psc, mesto, platba, suma, poznamka, polozky: {kod: počet}, furmanka_id}
+create or replace function public.objednavka_uloz(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_cislo text := nullif(trim(coalesce(p->>'cislo', '')), ''); v_nova boolean := false; v_polia text[] := '{}'; k text;
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Nemáte oprávnenie'); end if;
+  if v_cislo is null then
+    v_cislo := 'M-' || nextval('public.rucne_objednavky_seq');
+    v_nova := true;
+    insert into public.objednavky (cislo, zdroj, status, vytvorena, platba, upravil, upravena)
+      values (v_cislo, 'rucna', 'ručná', now(), 'DOBIERKA', auth.uid(), now());
+  elsif not exists (select 1 from public.objednavky where cislo = v_cislo) then
+    return jsonb_build_object('ok', false, 'text', 'Objednávka ' || v_cislo || ' neexistuje');
+  end if;
+
+  foreach k in array array['meno','firma','telefon','email','ulica','psc','mesto','platba','suma','poznamka'] loop
+    if p ? k then
+      v_polia := v_polia || case when k in ('ulica','psc','mesto') then 'adresa' when k = 'firma' then 'meno' else k end;
+    end if;
+  end loop;
+  update public.objednavky o set
+    meno     = case when p ? 'meno'     then nullif(trim(p->>'meno'), '')     else o.meno end,
+    firma    = case when p ? 'firma'    then nullif(trim(p->>'firma'), '')    else o.firma end,
+    telefon  = case when p ? 'telefon'  then nullif(trim(p->>'telefon'), '')  else o.telefon end,
+    email    = case when p ? 'email'    then nullif(trim(p->>'email'), '')    else o.email end,
+    ulica    = case when p ? 'ulica'    then nullif(trim(p->>'ulica'), '')    else o.ulica end,
+    psc      = case when p ? 'psc'      then nullif(trim(p->>'psc'), '')      else o.psc end,
+    mesto    = case when p ? 'mesto'    then nullif(trim(p->>'mesto'), '')    else o.mesto end,
+    platba   = case when p ? 'platba'   then nullif(trim(p->>'platba'), '')   else o.platba end,
+    suma     = case when p ? 'suma'     then nullif(replace(p->>'suma', ',', '.'), '')::numeric else o.suma end,
+    poznamka = case when p ? 'poznamka' then nullif(trim(p->>'poznamka'), '') else o.poznamka end,
+    rucne_polia = case when o.zdroj = 'upgates' then array(select distinct unnest(o.rucne_polia || v_polia)) else o.rucne_polia end,
+    upravil = auth.uid(), upravena = now()
+  where o.cislo = v_cislo;
+
+  if p ? 'polozky' and jsonb_typeof(p->'polozky') = 'object' then
+    perform public.polozka_nastav(v_cislo, e.key, nullif(replace(e.value #>> '{}', ',', '.'), '')::numeric)
+      from jsonb_each(p->'polozky') e;
+  end if;
+
+  update public.objednavky o set region = public.region_pre(o.doprava, o.mesto, o.psc) where o.cislo = v_cislo and o.zdroj = 'upgates';
+  if v_nova or (p ? 'furmanka_id' and nullif(p->>'furmanka_id', '') is not null) then
+    insert into public.zaradenia (cislo, furmanka_id, rucne, kedy, kto) values (v_cislo, nullif(p->>'furmanka_id', '')::bigint, true, now(), auth.uid())
+      on conflict (cislo) do update set furmanka_id = excluded.furmanka_id, rucne = true, kedy = now(), kto = auth.uid();
+  end if;
+  return jsonb_build_object('ok', true, 'cislo', v_cislo, 'objednavka', public.objednavka_json(v_cislo));
+end $$;
+
+-- jedna bunka tabuľky: počet kusov produktu v objednávke (0 alebo prázdne = zmazať)
+create or replace function public.polozka_nastav(p_cislo text, p_kod text, p_mnozstvo numeric) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Nemáte oprávnenie'); end if;
+  if coalesce(p_mnozstvo, 0) = 0 then
+    delete from public.objednavky_polozky where cislo = p_cislo and kod = p_kod;
+  else
+    insert into public.objednavky_polozky (cislo, kod, nazov, mnozstvo)
+      values (p_cislo, p_kod, (select nazov from public.furmanky_sablona where kod = p_kod limit 1), p_mnozstvo)
+      on conflict (cislo, kod) do update set mnozstvo = excluded.mnozstvo;
+  end if;
+  update public.objednavky set rucne_polia = case when zdroj = 'upgates' and not ('polozky' = any(rucne_polia)) then rucne_polia || 'polozky'::text else rucne_polia end,
+         upravil = auth.uid(), upravena = now()
+   where cislo = p_cislo;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- zmena stavu furmanky: otvorena | full | rozvezena
+create or replace function public.furmanka_stav(p_id bigint, p_stav text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Nemáte oprávnenie'); end if;
+  if p_stav not in ('otvorena','full','rozvezena') then return jsonb_build_object('ok', false, 'text', 'Neznámy stav'); end if;
+  update public.furmanky set stav = p_stav,
+         uzavreta = case when p_stav = 'otvorena' then null else coalesce(uzavreta, now()) end,
+         dovod = case when p_stav = 'otvorena' then null when p_stav = 'full' and stav = 'otvorena' then 'Ručne uzavreté' else dovod end
+   where id = p_id;
+  insert into public.furmanky_log (typ, kto, text) select 'stav', auth.uid(), public.furmanka_nazov(region, datum) || ' → ' || p_stav from public.furmanky where id = p_id;
+  perform public.furmanky_prirad();
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- poradie objednávok (stĺpcov) vo furmanke
+create or replace function public.furmanka_poradie(p_cisla text[]) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.som_furmankar() then return jsonb_build_object('ok', false, 'text', 'Nemáte oprávnenie'); end if;
+  update public.zaradenia z set poradie = x.i from unnest(p_cisla) with ordinality x(c, i) where z.cislo = x.c;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- ---------- prístupy k funkciám ----------
+revoke all on function public.furmanky_sync(jsonb, jsonb, text, uuid, text[]), public.furmanky_prirad(), public.furmanka_pre_region(text),
+  public.furmanky_posledny_beh(), public.furmanky_zapis_log(text, boolean, text, uuid), public.furmanky_na_kontrolu(),
+  public.furmanky_kapacita(bigint, numeric, boolean, text), public.geokody_daj(text[]), public.geokody_uloz(jsonb), public.furmanky_cron_ok(text)
+  from public, anon, authenticated;
+grant execute on function public.furmanky_sync(jsonb, jsonb, text, uuid, text[]), public.furmanky_posledny_beh(),
+  public.furmanky_zapis_log(text, boolean, text, uuid), public.furmanky_na_kontrolu(), public.furmanky_kapacita(bigint, numeric, boolean, text),
+  public.geokody_daj(text[]), public.geokody_uloz(jsonb), public.furmanky_cron_ok(text), public.som_furmankar()
+  to service_role;
+revoke all on function public.furmanky_zoznam(), public.objednavka_json(text), public.furmanka_data(bigint), public.furmanky_sablona_data(),
+  public.objednavky_hladaj(text), public.zaradenie_nastav(text, bigint), public.zaradenie_automaticky(text), public.objednavka_uloz(jsonb),
+  public.polozka_nastav(text, text, numeric), public.furmanka_stav(bigint, text), public.furmanka_poradie(text[])
+  from public, anon;
+grant execute on function public.som_furmankar(), public.furmanky_zoznam(), public.furmanka_data(bigint), public.furmanky_sablona_data(),
+  public.objednavky_hladaj(text), public.zaradenie_nastav(text, bigint), public.zaradenie_automaticky(text), public.objednavka_uloz(jsonb),
+  public.polozka_nastav(text, text, numeric), public.furmanka_stav(bigint, text), public.furmanka_poradie(text[])
+  to authenticated;
+revoke all on function public.objednavka_json(text) from authenticated;
+
+-- ---------- plánované sťahovanie 6:00, 11:30, 14:00 (spustiť AŽ po nasadení Edge Function „upgates-sync“) ----------
+-- Plánovač volá funkciu v UTC časoch pre letný aj zimný čas; funkcia sama pustí len ten, ktorý v Bratislave padne na 6:00/11:30/14:00.
+create extension if not exists pg_cron;
+create extension if not exists pg_net with schema extensions;
+do $$ begin
+  if not exists (select 1 from vault.secrets where name = 'furmanky_cron') then
+    perform vault.create_secret(encode(extensions.gen_random_bytes(32), 'hex'), 'furmanky_cron', 'Plánované sťahovanie objednávok z Upgates');
+  end if;
+end $$;
+select cron.unschedule(jobid) from cron.job where jobname = 'furmanky-upgates';
+select cron.schedule('furmanky-upgates', '0,30 4,5,9,10,12,13 * * *', $cron$
+  select net.http_post(
+    url := 'https://ykwiqsneroxzpkwpadie.supabase.co/functions/v1/upgates-sync',
+    headers := jsonb_build_object('Content-Type', 'application/json',
+                                  'x-lbz-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'furmanky_cron')),
+    body := '{"akcia":"sync"}'::jsonb,
+    timeout_milliseconds := 150000)
+$cron$);
