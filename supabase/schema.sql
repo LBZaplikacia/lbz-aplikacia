@@ -1711,6 +1711,233 @@ update public.objednavky o set region = public.region_pre(o.doprava, o.mesto, o.
 update public.objednavky o set upozornenie = public.zla_doprava(o.region, o.doprava) where o.zdroj = 'upgates';
 select public.furmanky_prirad();
 
+-- =========================================================================
+-- 13) ROZPIS PRÁCE (smeny) – 29. 9. 2026
+--     Rozpis sa vedie v appke (stará tabuľka „Rozpis práce LBZ 2026“ sa bude generovať z appky).
+--     Miesto = jedna smena jedného človeka na pozícii v daný deň (každý môže mať iný čas od–do).
+--     Riadok bez osoby = voľné miesto (zapíš sa). Kde miesto nie je, v ten deň sa na pozícii nerobí
+--     (tmavé políčko) – zapísať sa tam dá len výnimočne.
+--     Úpravy: IT/CEO všetko; spoločné účty (prevádzka, furman, zákaznícky servis) za ktoréhokoľvek zamestnanca;
+--     osobný účet zamestnanca len svoje smeny (zapísať sa, uvoľniť, odovzdať, prehodiť, čas). Každá zmena ide do histórie.
+-- =========================================================================
+insert into public.moduly (kod, nazov, poradie, aktivny) values ('rozpis', 'Rozpis práce', 29, true)
+  on conflict (kod) do update set nazov = excluded.nazov, poradie = excluded.poradie, aktivny = true;
+insert into public.pristupy (rola, modul, uprava)
+  select r, 'rozpis', r <> 'uctovnicka' from unnest(array['it','ceo','prevadzka','furman','zakaznicky_servis','zamestnanec','uctovnicka']) r
+on conflict do nothing;
+
+create table if not exists public.rozpis_pozicie (
+  kod      text primary key,
+  nazov    text not null,
+  poradie  int not null,
+  max_ludi int not null default 3
+);
+insert into public.rozpis_pozicie (kod, nazov, poradie, max_ludi) values
+  ('pecenie', 'Pečenie', 1, 3), ('bar', 'Bar', 2, 3), ('rozvoz', 'Rozvoz', 3, 2),
+  ('buchtac', 'Buchťáč', 4, 8), ('obchod', 'Obchod, manažment', 5, 2)
+on conflict (kod) do update set nazov = excluded.nazov, poradie = excluded.poradie, max_ludi = excluded.max_ludi;
+
+-- ľudia v rozpise (prezývka + farba ako v tabuľke); e-mail spojí človeka s jeho osobným účtom v appke
+create table if not exists public.rozpis_osoby (
+  id       bigint generated always as identity primary key,
+  meno     text not null unique,
+  farba    text not null default '#eeeeee',
+  email    text,
+  aktivny  boolean not null default true,
+  poradie  int not null default 100
+);
+
+create table if not exists public.rozpis_miesta (
+  id        bigint generated always as identity primary key,
+  datum     date not null,
+  pozicia   text not null references public.rozpis_pozicie(kod),
+  miesto    int  not null,
+  osoba_id  bigint references public.rozpis_osoby(id),
+  cas_od    time,
+  cas_do    time,
+  poznamka  text,
+  vynimka   boolean not null default false,   -- dopísané do dňa, keď sa na pozícii bežne nerobí
+  upravene  timestamptz not null default now(),
+  unique (datum, pozicia, miesto)
+);
+create index if not exists rozpis_miesta_datum on public.rozpis_miesta (datum);
+
+create table if not exists public.rozpis_poznamky (
+  mesiac  date primary key,                   -- 1. deň mesiaca
+  text    text
+);
+
+create table if not exists public.rozpis_log (
+  id      bigint generated always as identity primary key,
+  cas     timestamptz not null default now(),
+  kto     uuid,
+  ucet    text,
+  datum   date,
+  pozicia text,
+  akcia   text,
+  text    text
+);
+
+alter table public.rozpis_pozicie  enable row level security;
+alter table public.rozpis_osoby    enable row level security;
+alter table public.rozpis_miesta   enable row level security;
+alter table public.rozpis_poznamky enable row level security;
+alter table public.rozpis_log      enable row level security;
+-- tabuľky nie sú priamo prístupné – všetko ide cez funkcie nižšie
+
+create or replace function public.rozpis_rola() returns text
+language sql stable security definer set search_path = public as $$
+  select case when public.moja_rola() in ('it','ceo') then 'sprava'
+              when public.moja_rola() in ('prevadzka','furman','zakaznicky_servis') then 'spolocny'
+              when public.moja_rola() = 'zamestnanec' then 'osobny'
+              when public.moja_rola() = 'uctovnicka' then 'citanie' end
+$$;
+create or replace function public.rozpis_moja_osoba() returns bigint
+language sql stable security definer set search_path = public as $$
+  select o.id from public.rozpis_osoby o join public.profily p on lower(p.email) = lower(o.email)
+  where p.id = auth.uid() and o.aktivny order by o.id limit 1
+$$;
+
+-- rozpis pre obdobie (týždeň / mesiac)
+create or replace function public.rozpis_data(p_od date, p_do date) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_rola text := public.rozpis_rola();
+begin
+  if v_rola is null then return jsonb_build_object('ok', false, 'text', 'Rozpis nemáte povolený'); end if;
+  return jsonb_build_object('ok', true, 'rola', v_rola, 'ja', public.rozpis_moja_osoba(),
+    'pozicie', (select jsonb_agg(to_jsonb(p) order by p.poradie) from public.rozpis_pozicie p),
+    'osoby', (select coalesce(jsonb_agg(jsonb_build_object('id', o.id, 'meno', o.meno, 'farba', o.farba, 'aktivny', o.aktivny,
+                'email', case when v_rola = 'sprava' then o.email end) order by o.poradie, o.meno), '[]') from public.rozpis_osoby o),
+    'miesta', (select coalesce(jsonb_agg(jsonb_build_object('id', m.id, 'datum', m.datum, 'pozicia', m.pozicia, 'miesto', m.miesto,
+                'osoba', m.osoba_id, 'od', to_char(m.cas_od, 'HH24:MI'), 'do', to_char(m.cas_do, 'HH24:MI'), 'poznamka', m.poznamka, 'vynimka', m.vynimka)
+                order by m.datum, m.pozicia, m.miesto), '[]')
+               from public.rozpis_miesta m where m.datum between p_od and p_do),
+    'poznamky', (select coalesce(jsonb_agg(jsonb_build_object('mesiac', n.mesiac, 'text', n.text)), '[]') from public.rozpis_poznamky n
+                 where n.mesiac between date_trunc('month', p_od)::date and p_do));
+end $$;
+
+-- jedna zmena v rozpise
+-- p: {akcia, id?, datum?, pozicia?, osoba?, komu?, s_id?, od?, do?, poznamka?}
+--   zapisat (osoba na voľné miesto alebo nové miesto v dni) · uvolnit · odovzdat (komu) · prehodit (s_id – druhé obsadené miesto)
+--   cas (od, do, poznamka) · otvorit (nové voľné miesto, len správa) · zmazat (miesto preč, len správa)
+create or replace function public.rozpis_zmena(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_rola text := public.rozpis_rola(); v_ja bigint := public.rozpis_moja_osoba();
+        v_akcia text := p->>'akcia'; m public.rozpis_miesta; m2 public.rozpis_miesta;
+        v_osoba bigint := nullif(p->>'osoba', '')::bigint; v_komu bigint := nullif(p->>'komu', '')::bigint;
+        v_dat date := nullif(p->>'datum', '')::date; v_poz text := p->>'pozicia'; v_n int; v_text text; v_meno text;
+        v_ucet text := (select email from public.profily where id = auth.uid());
+        v_max int;
+begin
+  if v_rola is null or v_rola = 'citanie' then return jsonb_build_object('ok', false, 'text', 'Rozpis môžete len prezerať'); end if;
+  if nullif(p->>'id', '') is not null then
+    select * into m from public.rozpis_miesta where id = (p->>'id')::bigint for update;
+    if not found then return jsonb_build_object('ok', false, 'text', 'Smena už neexistuje – obnovte rozpis'); end if;
+    v_dat := m.datum; v_poz := m.pozicia;
+  end if;
+  if v_rola = 'osobny' then
+    if v_ja is null then return jsonb_build_object('ok', false, 'text', 'Váš účet ešte nie je spojený s menom v rozpise – povedzte vedeniu'); end if;
+    if v_akcia in ('otvorit', 'zmazat') then return jsonb_build_object('ok', false, 'text', 'Toto môže len vedenie'); end if;
+    if v_akcia = 'zapisat' then v_osoba := v_ja; end if;
+    if v_akcia in ('uvolnit', 'odovzdat', 'prehodit', 'cas') and m.osoba_id is distinct from v_ja then
+      return jsonb_build_object('ok', false, 'text', 'Meniť môžete len svoje smeny'); end if;
+  end if;
+  if v_dat is null or v_poz is null then return jsonb_build_object('ok', false, 'text', 'Chýba deň alebo pozícia'); end if;
+  if v_dat < public.dnes_sk() and v_rola <> 'sprava' then return jsonb_build_object('ok', false, 'text', 'Minulé dni môže meniť len vedenie'); end if;
+
+  if v_akcia = 'zapisat' then
+    if v_osoba is null then return jsonb_build_object('ok', false, 'text', 'Vyberte, kto sa zapisuje'); end if;
+    if exists (select 1 from public.rozpis_miesta where datum = v_dat and pozicia = v_poz and osoba_id = v_osoba) then
+      return jsonb_build_object('ok', false, 'text', 'Už je na tejto pozícii zapísaný'); end if;
+    if m.id is not null then
+      if m.osoba_id is not null then return jsonb_build_object('ok', false, 'text', 'Smenu medzitým obsadil niekto iný'); end if;
+      update public.rozpis_miesta set osoba_id = v_osoba, cas_od = coalesce(nullif(p->>'od','')::time, cas_od), cas_do = coalesce(nullif(p->>'do','')::time, cas_do), upravene = now() where id = m.id;
+    else
+      select max_ludi into v_max from public.rozpis_pozicie where kod = v_poz;
+      select coalesce(max(miesto), 0) + 1 into v_n from public.rozpis_miesta where datum = v_dat and pozicia = v_poz;
+      if v_n > v_max and v_rola <> 'sprava' then return jsonb_build_object('ok', false, 'text', 'Na pozícii je už plno'); end if;
+      insert into public.rozpis_miesta (datum, pozicia, miesto, osoba_id, cas_od, cas_do, vynimka)
+        values (v_dat, v_poz, v_n, v_osoba, nullif(p->>'od','')::time, nullif(p->>'do','')::time, coalesce((p->>'vynimka')::boolean, false));
+    end if;
+    select meno into v_meno from public.rozpis_osoby where id = v_osoba;
+    v_text := v_meno || ' sa zapísal(a)';
+  elsif v_akcia = 'uvolnit' then
+    select meno into v_meno from public.rozpis_osoby where id = m.osoba_id;
+    if m.vynimka then delete from public.rozpis_miesta where id = m.id;
+    else update public.rozpis_miesta set osoba_id = null, upravene = now() where id = m.id; end if;
+    v_text := coalesce(v_meno, '?') || ' uvoľnil(a) smenu';
+  elsif v_akcia = 'odovzdat' then
+    if v_komu is null then return jsonb_build_object('ok', false, 'text', 'Vyberte, komu smenu odovzdávate'); end if;
+    if exists (select 1 from public.rozpis_miesta where datum = v_dat and pozicia = v_poz and osoba_id = v_komu) then
+      return jsonb_build_object('ok', false, 'text', 'Kolega už na tejto pozícii v ten deň je'); end if;
+    update public.rozpis_miesta set osoba_id = v_komu, upravene = now() where id = m.id;
+    v_text := (select meno from public.rozpis_osoby where id = m.osoba_id) || ' → ' || (select meno from public.rozpis_osoby where id = v_komu);
+  elsif v_akcia = 'prehodit' then
+    select * into m2 from public.rozpis_miesta where id = nullif(p->>'s_id', '')::bigint for update;
+    if m2.id is null or m2.osoba_id is null then return jsonb_build_object('ok', false, 'text', 'Vyberte obsadenú smenu kolegu'); end if;
+    if m2.datum < public.dnes_sk() and v_rola <> 'sprava' then return jsonb_build_object('ok', false, 'text', 'Minulé dni môže meniť len vedenie'); end if;
+    update public.rozpis_miesta set osoba_id = m2.osoba_id, upravene = now() where id = m.id;
+    update public.rozpis_miesta set osoba_id = m.osoba_id, upravene = now() where id = m2.id;
+    v_text := 'prehodené: ' || (select meno from public.rozpis_osoby where id = m.osoba_id) || ' (' || to_char(m.datum, 'DD.MM.') || ') ↔ ' ||
+              (select meno from public.rozpis_osoby where id = m2.osoba_id) || ' (' || to_char(m2.datum, 'DD.MM.') || ')';
+  elsif v_akcia = 'cas' then
+    update public.rozpis_miesta set cas_od = nullif(p->>'od','')::time, cas_do = nullif(p->>'do','')::time,
+      poznamka = nullif(trim(coalesce(p->>'poznamka','')), ''), upravene = now() where id = m.id;
+    v_text := 'čas ' || coalesce(p->>'od', '') || '–' || coalesce(p->>'do', '') || coalesce(' · ' || nullif(trim(coalesce(p->>'poznamka','')), ''), '');
+  elsif v_akcia = 'otvorit' then
+    if v_rola <> 'sprava' then return jsonb_build_object('ok', false, 'text', 'Toto môže len vedenie'); end if;
+    select coalesce(max(miesto), 0) + 1 into v_n from public.rozpis_miesta where datum = v_dat and pozicia = v_poz;
+    insert into public.rozpis_miesta (datum, pozicia, miesto, cas_od, cas_do) values (v_dat, v_poz, v_n, nullif(p->>'od','')::time, nullif(p->>'do','')::time);
+    v_text := 'otvorené voľné miesto';
+  elsif v_akcia = 'zmazat' then
+    if v_rola <> 'sprava' then return jsonb_build_object('ok', false, 'text', 'Toto môže len vedenie'); end if;
+    delete from public.rozpis_miesta where id = m.id;
+    v_text := 'miesto zrušené' || coalesce(' (' || (select meno from public.rozpis_osoby where id = m.osoba_id) || ')', '');
+  else
+    return jsonb_build_object('ok', false, 'text', 'Neznáma akcia');
+  end if;
+  insert into public.rozpis_log (kto, ucet, datum, pozicia, akcia, text) values (auth.uid(), v_ucet, v_dat, v_poz, v_akcia, v_text);
+  return jsonb_build_object('ok', true, 'text', v_text);
+end $$;
+
+-- ľudia v rozpise (len IT a CEO)
+create or replace function public.rozpis_osoba_uloz(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.som_spravca() then return jsonb_build_object('ok', false, 'text', 'Len IT a CEO'); end if;
+  if coalesce(trim(p->>'meno'), '') = '' then return jsonb_build_object('ok', false, 'text', 'Chýba meno'); end if;
+  if nullif(p->>'id', '') is null then
+    insert into public.rozpis_osoby (meno, farba, email) values (trim(p->>'meno'), coalesce(nullif(p->>'farba', ''), '#eeeeee'), nullif(lower(trim(p->>'email')), ''));
+  else
+    update public.rozpis_osoby set meno = trim(p->>'meno'), farba = coalesce(nullif(p->>'farba', ''), farba),
+      email = nullif(lower(trim(coalesce(p->>'email', ''))), ''), aktivny = coalesce((p->>'aktivny')::boolean, aktivny)
+    where id = (p->>'id')::bigint;
+  end if;
+  return jsonb_build_object('ok', true);
+exception when unique_violation then return jsonb_build_object('ok', false, 'text', 'Toto meno už v rozpise je');
+end $$;
+
+create or replace function public.rozpis_poznamka_uloz(p_mesiac date, p_text text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.som_spravca() then return jsonb_build_object('ok', false, 'text', 'Len IT a CEO'); end if;
+  insert into public.rozpis_poznamky (mesiac, text) values (date_trunc('month', p_mesiac)::date, nullif(trim(p_text), ''))
+    on conflict (mesiac) do update set text = excluded.text;
+  return jsonb_build_object('ok', true);
+end $$;
+
+create or replace function public.rozpis_historia(p_pocet int default 50) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select case when public.rozpis_rola() in ('sprava', 'spolocny') then coalesce((
+    select jsonb_agg(jsonb_build_object('cas', l.cas, 'ucet', l.ucet, 'datum', l.datum, 'pozicia', l.pozicia, 'text', l.text) order by l.cas desc)
+    from (select * from public.rozpis_log order by cas desc limit greatest(1, least(p_pocet, 300))) l), '[]') else '[]' end
+$$;
+
+revoke all on function public.rozpis_rola(), public.rozpis_moja_osoba(), public.rozpis_data(date, date), public.rozpis_zmena(jsonb),
+  public.rozpis_osoba_uloz(jsonb), public.rozpis_poznamka_uloz(date, text), public.rozpis_historia(int) from public, anon;
+grant execute on function public.rozpis_data(date, date), public.rozpis_zmena(jsonb), public.rozpis_osoba_uloz(jsonb),
+  public.rozpis_poznamka_uloz(date, text), public.rozpis_historia(int) to authenticated;
+
 -- ---------- plánované sťahovanie 6:00, 11:30, 14:00 (spustiť AŽ po nasadení Edge Function „upgates-sync“) ----------
 -- Plánovač volá funkciu v UTC časoch pre letný aj zimný čas; funkcia sama pustí len ten, ktorý v Bratislave padne na 6:00/11:30/14:00.
 create extension if not exists pg_cron;
