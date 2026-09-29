@@ -6,6 +6,8 @@ window.LBZ_CONFIG = {
   supabaseAnonKey: "sb_publishable_kz5IYgvire5jHh-qZGacjw_OLVcj85G",
   // Tlačidlo „Prihlásiť sa cez Google“ – zapnúť (true) až po nastavení Google v Supabase (Authentication → Sign In / Providers).
   googleLogin: true,
+  // Verejné ID klienta Google (nie je tajné) – prihlásenie priamo v appke
+  googleClientId: "249449066239-k9ahndadsls9aheteq6igntl1voorshr.apps.googleusercontent.com",
   // Adresa webovej aplikácie „LBZ appka v2“ zo skladového Apps Scriptu (SKLAD LBZ → Nasadiť).
   // Kým je prázdna, moduly Sklad a Furmanky ukazujú „čoskoro“.
   skladApiUrl: "https://script.google.com/macros/s/AKfycbzx3P0Jk0nHCWanpfACXVjvIR8_ntBb_gRBeFox8lGczH4CqT1BuTar0jf3lM9kfns2/exec"

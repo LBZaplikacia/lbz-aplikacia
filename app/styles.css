@@ -275,3 +275,5 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
 #offline-pas { position: fixed; top: 0; left: 0; right: 0; z-index: 50; background: var(--warn); color: #1b120f; text-align: center; font: 700 14px var(--font-display, inherit); padding: 6px 12px calc(6px); padding-top: calc(6px + env(safe-area-inset-top)); }
 .s-pridaj-kod .s-mono { white-space: nowrap; }
 body.bez-signalu { padding-top: 34px; }
+.g-tlacidlo { display: flex; justify-content: center; min-height: 44px; }
+.g-tlacidlo > .btn { width: 100%; }

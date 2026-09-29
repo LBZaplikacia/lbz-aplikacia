@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.8 BETA";
+  var VERZIA = "0.9 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -175,7 +175,7 @@
         '<button class="btn btn-primary" type="submit">Uložiť heslo</button></form>';
     } else {
       obsah = '<form class="panel" id="f-prihlasenie">' +
-        (cfg.googleLogin ? '<button class="btn btn-google" type="button" data-login="google">' + GOOGLE_IKONA + "Prihlásiť sa cez Google</button>" +
+        (cfg.googleLogin ? '<div id="g-tlacidlo" class="g-tlacidlo">' + (gNonce ? "" : '<button class="btn btn-google" type="button" data-login="google">' + GOOGLE_IKONA + "Prihlásiť sa cez Google</button>") + "</div>" +
           '<div class="divider">alebo e-mailom</div>' : "") +
         '<label class="field"><span class="label">E-mail</span><input id="in-email" type="email" autocomplete="username" placeholder="meno@legendarnebuchty.sk" required></label>' +
         '<label class="field"><span class="label">Heslo</span><input id="in-heslo" type="password" autocomplete="current-password" required></label>' +
@@ -294,8 +294,49 @@
       '<span class="muted">Kým nebude hotový, funguje pôvodný nástroj. Moduly pribúdajú postupne, po jednom.</span></div>';
   }
 
+  // ---------- Google priamo v appke (Google Identity Services) ----------
+  // Okno Googlu potom ukazuje adresu appky, nie adresu Supabase. Ak sa knižnica Googlu
+  // nenačíta, ostane záložné tlačidlo s presmerovaním cez Supabase.
+  var gNonce = null, gPripraveny = false;
+  function hexSha256(text) {
+    return crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)).then(function (buf) {
+      return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+    });
+  }
+  function pripravGoogle() {
+    if (!OSTRY || !cfg.googleLogin || !cfg.googleClientId || gPripraveny || !window.crypto || !crypto.subtle) return;
+    gPripraveny = true;
+    var raw = Array.prototype.map.call(crypto.getRandomValues(new Uint8Array(16)), function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+    var sc = document.createElement("script");
+    sc.src = "https://accounts.google.com/gsi/client"; sc.async = true;
+    sc.onload = function () {
+      hexSha256(raw).then(function (hash) {
+        google.accounts.id.initialize({
+          client_id: cfg.googleClientId,
+          nonce: hash,
+          use_fedcm_for_prompt: true,
+          callback: function (odpoved) {
+            stav.sprava = { typ: "ok", text: "Prihlasujem…" }; render();
+            db.auth.signInWithIdToken({ provider: "google", token: odpoved.credential, nonce: raw }).then(function (res) {
+              if (res.error) { stav.sprava = { typ: "chyba", text: "Prihlásenie cez Google sa nepodarilo. Skúste znova alebo e-mail a heslo." }; render(); }
+            });
+          }
+        });
+        gNonce = raw;
+        vykresliGoogle();
+      });
+    };
+    document.head.appendChild(sc);
+  }
+  function vykresliGoogle() {
+    var el = document.getElementById("g-tlacidlo");
+    if (!el || !gNonce || !window.google || !google.accounts) return;
+    el.innerHTML = "";
+    google.accounts.id.renderButton(el, { type: "standard", theme: "outline", size: "large", text: "signin_with", shape: "rectangular", locale: "sk", logo_alignment: "center", width: Math.min(360, el.clientWidth || 320) });
+  }
+
   function render() {
-    if (stav.rola) renderApp(); else renderLogin();
+    if (stav.rola) renderApp(); else { renderLogin(); vykresliGoogle(); }
     var sk = document.getElementById("sklad-root");
     if (sk && SKLAD) SKLAD.mount(sk, sk.getAttribute("data-modul"));
   }
@@ -396,6 +437,7 @@
   }
 
   render();
+  pripravGoogle();
 
   // pás „Bez signálu“ nad celou appkou (údaje sa neobnovujú)
   function pasSignalu() {
