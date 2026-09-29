@@ -1,0 +1,111 @@
+// LBZ – upozornenia do mobilu (web push)
+// akcie:
+//   kluc      – verejný VAPID kľúč pre appku (bez prihlásenia)
+//   ziadost   – nová žiadosť v dochádzke → upozornenie IT a CEO (volá appka zamestnanca po odoslaní žiadosti)
+//   test      – skúšobné upozornenie prihlásenému používateľovi
+//   kontrola  – plánovač (pg_cron, hlavička x-lbz-cron): šichty dlhšie ako 14 h → zamestnanec + vedenie
+// Kľúče: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY v trezore Supabase (Edge Function Secrets).
+import webpush from "npm:web-push@3.6.7";
+
+const SB_URL = Deno.env.get("SUPABASE_URL") || "";
+function kluc(...mena: string[]) {
+  for (const m of mena) {
+    const v = Deno.env.get(m); if (!v) continue;
+    if (v.trim().startsWith("{")) { try { const o = JSON.parse(v); const x = o.default || Object.values(o)[0]; if (x) return String(x); } catch (_) { /* */ } }
+    return v;
+  }
+  return "";
+}
+const SERVICE = kluc("SUPABASE_SERVICE_ROLE_KEY", "SUPABASE_SECRET_KEYS");
+const ANON = kluc("SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEYS");
+const VAPID_PUB = (Deno.env.get("VAPID_PUBLIC_KEY") || "").trim();
+const VAPID_PRIV = (Deno.env.get("VAPID_PRIVATE_KEY") || "").trim();
+const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
+const odpoved = (d: unknown, s = 200) => new Response(JSON.stringify(d), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
+const TYPY: Record<string, string> = { dovolenka: "Dovolenka", pn: "PN", ocr: "OČR", lekar: "Lekár", oprava: "Oprava záznamu" };
+
+function hl(k: string, extra: Record<string, string> = {}) { return { apikey: k, Authorization: "Bearer " + k, "Content-Type": "application/json", ...extra }; }
+async function rest(cesta: string, init: RequestInit = {}) {
+  const r = await fetch(SB_URL + "/rest/v1/" + cesta, { ...init, headers: { ...hl(SERVICE), ...(init.headers || {}) } });
+  if (!r.ok) throw new Error("DB " + r.status + ": " + (await r.text()).slice(0, 200));
+  const t = await r.text(); return t ? JSON.parse(t) : null;
+}
+async function rpc(fn: string, args: unknown) { return rest("rpc/" + fn, { method: "POST", body: JSON.stringify(args || {}) }); }
+function datumSk(s: string) { const p = String(s).slice(0, 10).split("-"); return +p[2] + ". " + +p[1] + "."; }
+
+// pošle upozornenie všetkým zariadeniam daných používateľov; neplatné odbery zmaže
+async function posli(uids: string[], sprava: { title: string; body: string; url?: string; tag?: string }) {
+  if (!uids.length) return 0;
+  webpush.setVapidDetails("mailto:ceo@legendarnebuchty.sk", VAPID_PUB, VAPID_PRIV);
+  const odbery = await rest("push_odbery?select=endpoint,p256dh,auth&uid=in.(" + uids.join(",") + ")");
+  let n = 0;
+  for (const o of odbery || []) {
+    try {
+      await webpush.sendNotification({ endpoint: o.endpoint, keys: { p256dh: o.p256dh, auth: o.auth } }, JSON.stringify(sprava), { TTL: 3600 });
+      n++;
+    } catch (e: any) {
+      if (e && (e.statusCode === 404 || e.statusCode === 410)) await rest("push_odbery?endpoint=eq." + encodeURIComponent(o.endpoint), { method: "DELETE" });
+    }
+  }
+  return n;
+}
+async function vedenie(): Promise<string[]> {
+  const p = await rest("profily?select=id&aktivny=eq.true&rola=in.(it,ceo)");
+  return (p || []).map((x: any) => x.id);
+}
+async function uidyOsoby(osobaId: number): Promise<string[]> {
+  const o = await rest("rozpis_osoby?select=email,email2&id=eq." + osobaId);
+  const em = [o?.[0]?.email, o?.[0]?.email2].filter(Boolean).map((x: string) => x.toLowerCase());
+  if (!em.length) return [];
+  const p = await rest("profily?select=id,email&aktivny=eq.true");
+  return (p || []).filter((x: any) => em.includes(String(x.email || "").toLowerCase())).map((x: any) => x.id);
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+  try {
+    const body = await req.json().catch(() => ({}));
+    const akcia = String(body.akcia || "");
+    if (akcia === "kluc") return odpoved({ ok: !!VAPID_PUB, kluc: VAPID_PUB });
+    if (!VAPID_PUB || !VAPID_PRIV) return odpoved({ ok: false, text: "Chýbajú kľúče VAPID v trezore" });
+
+    const cron = req.headers.get("x-lbz-cron");
+    if (cron) {
+      if (!(await rpc("furmanky_cron_ok", { p_token: cron }))) return odpoved({ ok: false, text: "Neplatný token" }, 401);
+      if (akcia !== "kontrola") return odpoved({ ok: false, text: "Neznáma akcia" }, 400);
+      const hranica = new Date(Date.now() - 14 * 3600 * 1000).toISOString();
+      const dlhe = await rest("dochadzka?select=id,osoba_id,prichod,miesto,rozpis_osoby(meno)&typ=eq.praca&odchod=is.null&upozornene=is.null&zdroj=neq.import&prichod=lt." + encodeURIComponent(hranica));
+      const ved = await vedenie();
+      let n = 0;
+      for (const d of dlhe || []) {
+        const meno = d.rozpis_osoby?.meno || "Zamestnanec";
+        n += await posli(await uidyOsoby(d.osoba_id), { title: "⏰ Si stále v práci?", body: "Príchod si zapísal(a) pred viac ako 14 hodinami. Nezabudni zapísať ODCHOD.", url: "/", tag: "doch-" + d.id });
+        n += await posli(ved, { title: "⏰ " + meno + " – 14 h v práci", body: "Stále nemá zapísaný odchod (" + (d.miesto || "") + "). Skontroluj v Dochádzke → Tím.", url: "/?m=dochadzka&z=tim", tag: "doch-v-" + d.id });
+        await rest("dochadzka?id=eq." + d.id, { method: "PATCH", body: JSON.stringify({ upozornene: new Date().toISOString() }), headers: { Prefer: "return=minimal" } });
+      }
+      return odpoved({ ok: true, dlhe: (dlhe || []).length, poslane: n });
+    }
+
+    // ostatné akcie – prihlásený používateľ
+    const jwt = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+    const u = await fetch(SB_URL + "/auth/v1/user", { headers: { apikey: ANON, Authorization: "Bearer " + jwt } });
+    if (!u.ok) return odpoved({ ok: false, text: "Treba sa prihlásiť" }, 401);
+    const pouz = await u.json();
+
+    if (akcia === "test") {
+      const n = await posli([pouz.id], { title: "🔔 Legendárne buchty", body: "Upozornenia fungujú. Takto ti budú chodiť správy z appky.", url: "/" });
+      return odpoved({ ok: n > 0, text: n ? "Skúšobné upozornenie odoslané" : "Toto zariadenie nemá zapnuté upozornenia" });
+    }
+    if (akcia === "ziadost") {
+      // posledná čakajúca žiadosť, ktorú tento používateľ práve poslal
+      const z = await rest("dochadzka_absencie?select=id,typ,od_dna,do_dna,cas_od,cas_do,poznamka,rozpis_osoby(meno)&stav=eq.ziadost&kto=eq." + pouz.id + "&order=id.desc&limit=1");
+      const x = z?.[0]; if (!x) return odpoved({ ok: false, text: "Žiadosť sa nenašla" });
+      const kedy = datumSk(x.od_dna) + (x.do_dna !== x.od_dna ? " – " + datumSk(x.do_dna) : "") + (x.cas_od ? " " + String(x.cas_od).slice(0, 5) + "–" + String(x.cas_do || "").slice(0, 5) : "");
+      const n = await posli(await vedenie(), { title: "📝 " + (x.rozpis_osoby?.meno || "Zamestnanec") + ": " + (TYPY[x.typ] || x.typ), body: kedy + (x.poznamka ? " · " + x.poznamka : "") + " – ťukni a schváľ v appke", url: "/?m=dochadzka&z=tim", tag: "ziadost-" + x.id });
+      return odpoved({ ok: true, poslane: n });
+    }
+    return odpoved({ ok: false, text: "Neznáma akcia" }, 400);
+  } catch (e) {
+    return odpoved({ ok: false, text: String((e as Error).message || e) }, 500);
+  }
+});
