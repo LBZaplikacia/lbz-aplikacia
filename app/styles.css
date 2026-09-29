@@ -735,3 +735,5 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 .f-zle-adresy li { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--bad); border-radius: 8px; padding: 8px 10px; }
 .f-zle-adresy .btn { min-height: 36px; padding: 4px 10px; margin-top: 6px; }
 
+.t-gmapa-obal { position: relative; }
+.t-gmapa-nav { position: absolute; right: 10px; bottom: 34px; min-height: 42px; padding: 6px 14px; background: var(--accent); color: #fff; border-color: var(--accent); text-decoration: none; box-shadow: 0 2px 8px rgba(0,0,0,.3); }

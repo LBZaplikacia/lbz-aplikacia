@@ -159,7 +159,8 @@
         (vzd != null ? '<span class="t-vzd num">' + (vzd < 1000 ? Math.round(vzd) + " m" : (vzd / 1000).toFixed(1).replace(".", ",") + " km") + "</span>" : "") + "</div>" +
       '<h2 class="t-akt-meno">' + esc(a.meno || a.firma || "-") + "</h2>" +
       (a.adresa || (a.lat != null && a.lng != null) ? '<a class="t-akt-adresa t-akt-adresa-nav" href="' + navUrl(a) + '" target="_blank" rel="noopener" data-t-nav="' + esc(a.cislo) + '">📍 ' + esc(a.adresa || "-") + "</a>" +
-          (a.lat != null && a.lng != null && !vybav ? '<div id="t-gmapa-miesto" class="t-gmapa-miesto"></div>' : "")
+          (a.lat != null && a.lng != null && !vybav ? '<div class="t-gmapa-obal"><div id="t-gmapa-miesto" class="t-gmapa-miesto"></div>' +
+            '<a class="btn t-gmapa-nav" href="' + navUrl(a) + '" target="_blank" rel="noopener" data-t-nav="' + esc(a.cislo) + '">🧭 Navigovať</a></div>' : "")
         : '<div class="t-akt-adresa">📍 -</div>') +
       '<div class="t-akt-platba ' + (dob ? "t-dob" : a.platba === "NA FAKTÚRU" ? "t-fa" : "t-ok") + '">' + (dob ? "💶 DOBIERKA " + esc(eur(a.suma)) : a.platba === "NA FAKTÚRU" ? "🧾 NA FAKTÚRU" : "✅ ZAPLATENÉ") +
         '<span> · ' + esc(a.kusy) + " ks</span></div>" +
