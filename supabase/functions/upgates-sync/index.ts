@@ -329,6 +329,33 @@ async function skontrolujKapacitu() {
   return vysl;
 }
 
+// ---------- okres obce (Google Geocoding) → zaradenie do furmanky podľa schválenej mapy okresov ----------
+// Každá obec (mesto + PSČ) sa hľadá len raz, výsledok ostáva v databáze (obce_okres).
+const MAX_OBCI = 150;                               // najviac nových obcí za jeden beh
+async function doplnOkresy(obj: any[]) {
+  const key = Deno.env.get("GOOGLE_MAPS_KEY") || "";
+  if (!key) return 0;
+  const chyba: { mesto: string; psc: string }[] = (await rpc("obce_bez_okresu", {
+    p: obj.map((o) => ({ mesto: o.mesto, psc: o.psc, doprava: o.doprava })),
+  })) || [];
+  const nove: any[] = [];
+  for (const c of chyba.slice(0, MAX_OBCI)) {
+    const q = [c.psc, c.mesto].filter(Boolean).join(" ") + ", Slovensko";
+    let okres = "";
+    try {
+      const r = await fetch("https://maps.googleapis.com/maps/api/geocode/json?address=" + encodeURIComponent(q) +
+        "&components=country:SK&language=sk&key=" + key);
+      const j = await r.json();
+      const res = j.status === "OK" && j.results && j.results[0];
+      const k = res && res.address_components.find((x: any) => x.types.includes("administrative_area_level_2"));
+      if (k) okres = String(k.long_name || "");
+    } catch (_) { /* skúsi sa pri ďalšom behu */ continue; }
+    nove.push({ mesto: c.mesto, psc: c.psc, okres });
+  }
+  if (nove.length) await rpc("obce_okres_uloz", { p: nove });
+  return nove.length;
+}
+
 // ---------- hlavný beh ----------
 function jeSlot(teraz: Date) {
   const m = miestne(teraz), min = m.hod * 60 + m.min;
@@ -364,7 +391,9 @@ Deno.serve(async (req) => {
       const data = await upgatesGet("/orders?order_number=" + encodeURIComponent(cislo));
       const o = ((data && data.orders) || []).find((x: any) => String(x.order_number).trim() === cislo);
       if (!o) return odpoved({ ok: false, text: "Objednávka " + cislo + " sa v Upgates nenašla" });
-      const res = await rpc("furmanky_sync", { p_obj: [prevedObjednavku(o)], p_terminy: null, p_typ: "objednavka", p_kto: kto, p_reset: body.obnovit ? [cislo] : [] });
+      const riadok = prevedObjednavku(o);
+      try { await doplnOkresy([riadok]); } catch (_) { /* zaradí sa podľa mesta/PSČ */ }
+      const res = await rpc("furmanky_sync", { p_obj: [riadok], p_terminy: null, p_typ: "objednavka", p_kto: kto, p_reset: body.obnovit ? [cislo] : [] });
       return odpoved({ ok: true, cislo, text: "Objednávka " + cislo + " načítaná z Upgates", vysledok: res });
     }
 
@@ -398,7 +427,10 @@ Deno.serve(async (req) => {
         } catch (_) { return null; }
       })(),
     ]);
-    const res = await rpc("furmanky_sync", { p_obj: objednavky.map(prevedObjednavku), p_terminy: terminy, p_typ: typ, p_kto: kto, p_reset: [] });
+    const riadky = objednavky.map(prevedObjednavku);
+    let okresy = 0;
+    try { okresy = await doplnOkresy(riadky); } catch (_) { /* zaradí sa podľa mesta/PSČ */ }
+    const res = await rpc("furmanky_sync", { p_obj: riadky, p_terminy: terminy, p_typ: typ, p_kto: kto, p_reset: [] });
     let kapacita: any[] = [];
     try { kapacita = await skontrolujKapacitu(); } catch (e) { kapacita = [{ chyba: String((e as Error).message || e) }]; }
     const zatvorene = [...(res.uzavrete || []), ...kapacita.filter((k) => k.uzavreta).map((k) => k.furmanka + " (kapacita)")];
@@ -407,7 +439,7 @@ Deno.serve(async (req) => {
       text: "Stiahnutých " + objednavky.length + " objednávok" + (cele ? " (všetky za " + DNI_SPAT + " dní)" : " (zmenené od posledného stiahnutia)") +
         (terminy === null ? " · kalendár sa nepodarilo načítať, termíny ostali" : "") +
         (zatvorene.length ? " · uzavreté: " + zatvorene.join(", ") : ""),
-      vysledok: res, kapacita,
+      vysledok: res, kapacita, okresy,
     });
   } catch (e) {
     const text = String((e as Error).message || e);
