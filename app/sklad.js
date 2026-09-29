@@ -98,6 +98,7 @@
     var teraz = Date.now();
     if (kod === poslednyKod && teraz - poslednyCas < 2500) return; // dvojité načítanie toho istého kódu
     poslednyKod = kod; poslednyCas = teraz;
+    if (S.kamera || kameraStav !== "vyp") vypniKameru(); // po načítaní kódu sa kamera vypne
 
     // prepínacie kódy
     if (/^(IN|ÍŇ|PRIJEM|PRÍJEM)$/.test(kod)) return nastavRezim("Príjem");
@@ -112,14 +113,17 @@
       pip("chyba"); prekresli(); return;
     }
 
-    // ten istý balík v tom istom režime dnes už naskenovaný
+    // ten istý balík v tom istom režime hneď po sebe (napr. dvakrát Príjem) – zablokujeme.
+    // Iný režim medzi tým (Príjem → Výdaj → Krčmička → Výdaj) je v poriadku.
     for (var i = S.skeny.length - 1; i >= 0; i--) {
       var s = S.skeny[i];
       if (!dnes(s.cas)) break;
-      if (s.kod === kod && s.rezim === S.rezim && s.stav !== "chyba") {
-        S.sprava = { typ: "chyba", text: kod + " – už naskenované o " + cas(s.cas) };
+      if (s.kod !== kod || s.stav === "chyba") continue;
+      if (s.rezim === S.rezim && teraz - s.cas < 15 * 60000) { // staršie opakovanie posúdi tabuľka (mohla to zmeniť stará appka)
+        S.sprava = { typ: "chyba", text: kod + " – už naskenované (" + S.rezim + ") o " + cas(s.cas) };
         pip("chyba"); prekresli(); return;
       }
+      break; // posledný sken tohto balíka bol v inom režime
     }
 
     var kmen = kmenKodu(kod);
@@ -217,30 +221,51 @@
   }
 
   // ---------- kamera ----------
-  function zapniKameru() {
-    if (S.kamera) return vypniKameru();
+  // Tlačidlá kamery sú pripnuté dole (na dosah palca). Po každom načítanom kóde sa kamera sama vypne.
+  var kameraStav = "vyp"; // vyp | spusta | bezi
+  function zapniKameru(smer) {
+    if (kameraStav !== "vyp") return;
+    kameraStav = "spusta"; prekresliTlacidloKamery();
     var spusti = function () {
-      var el = document.getElementById("s-kamera"); if (!el) return;
+      var el = document.getElementById("s-kamera");
+      if (!el) { kameraStav = "vyp"; prekresliTlacidloKamery(); return; }
       el.hidden = false;
-      var q = new window.Html5Qrcode("s-kamera");
+      var formaty = window.Html5QrcodeSupportedFormats ? { formatsToSupport: [window.Html5QrcodeSupportedFormats.QR_CODE] } : undefined;
+      var q = new window.Html5Qrcode("s-kamera", formaty);
       S.kamera = q;
-      q.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 240, height: 240 } }, function (text) { spracujSken(text); }, function () {})
-        .then(function () { prekresliTlacidloKamery(); })
-        .catch(function () { S.kamera = null; el.hidden = true; S.sprava = { typ: "chyba", text: "Kameru sa nepodarilo zapnúť (povoľte prístup ku kamere)." }; prekresli(); });
+      var strana = Math.min(280, Math.max(180, (el.clientWidth || 300) - 40));
+      var nastav = { fps: 15, qrbox: { width: strana, height: strana }, aspectRatio: 1.0 };
+      var hotovo = function () { kameraStav = "bezi"; prekresliTlacidloKamery(); try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {} };
+      var zlyhalo = function () {
+        S.kamera = null; kameraStav = "vyp"; el.hidden = true;
+        S.sprava = { typ: "chyba", text: "Kameru sa nepodarilo zapnúť (povoľte prístup ku kamere)." }; prekresli();
+      };
+      var ciel = smer === "user" ? { facingMode: "user" } : { facingMode: { exact: "environment" } };
+      q.start(ciel, nastav, function (text) { spracujSken(text); }, function () {})
+        .then(hotovo)
+        .catch(function () { q.start({ facingMode: smer || "environment" }, nastav, function (text) { spracujSken(text); }, function () {}).then(hotovo).catch(zlyhalo); });
     };
     if (window.Html5Qrcode) return spusti();
     var sc = document.createElement("script");
     sc.src = "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js";
     sc.onload = spusti;
-    sc.onerror = function () { S.sprava = { typ: "chyba", text: "Knižnica kamery sa nenačítala (bez signálu?)" }; prekresli(); };
+    sc.onerror = function () { kameraStav = "vyp"; S.sprava = { typ: "chyba", text: "Knižnica kamery sa nenačítala (bez signálu?)" }; prekresli(); };
     document.head.appendChild(sc);
   }
   function vypniKameru() {
     var q = S.kamera; S.kamera = null;
-    if (q) q.stop().catch(function () {}).then(function () { var el = document.getElementById("s-kamera"); if (el) { el.hidden = true; el.innerHTML = ""; } prekresliTlacidloKamery(); });
+    var skry = function () { kameraStav = "vyp"; var el = document.getElementById("s-kamera"); if (el) { el.hidden = true; el.innerHTML = ""; } prekresliTlacidloKamery(); };
+    if (q) { try { q.stop().then(skry, skry); } catch (e) { skry(); } } else skry();
+  }
+  function listaKamery() {
+    if (kameraStav === "vyp") {
+      return '<button class="s-kam s-kam-zadna" data-s-akcia="kamera-zadna">📸 Skenovať kamerou</button>' +
+        '<button class="s-kam s-kam-predna" data-s-akcia="kamera-predna" aria-label="Predná kamera">🤳 Predná</button>';
+    }
+    return '<button class="s-kam s-kam-stop" data-s-akcia="kamera-stop">' + (kameraStav === "spusta" ? "⏳ Spúšťam kameru…" : "🛑 Vypnúť kameru") + "</button>";
   }
   function prekresliTlacidloKamery() {
-    var b = document.getElementById("s-btn-kamera"); if (b) b.textContent = S.kamera ? "Vypnúť kameru" : "📷 Skenovať kamerou";
+    var b = document.getElementById("s-kam-lista"); if (b) b.innerHTML = listaKamery();
   }
 
   // čítačka cez Bluetooth píše ako klávesnica – zachytíme rýchle písanie + Enter
@@ -262,7 +287,7 @@
   // ---------- kreslenie ----------
   function prekresli() {
     if (!koren || !document.body.contains(koren)) { koren = null; return; }
-    var kameraBezi = !!S.kamera;
+    var kameraBezi = kameraStav !== "vyp";
     var html = hlavickaModulu() + (S.pohlad === "skener" ? pohladSkener() : S.pohlad === "stav" ? pohladStav() : S.pohlad === "furmanka" ? pohladFurmanka() : pohladFurmanky());
     if (kameraBezi && S.pohlad === "skener") {
       // kameru neprekresľujeme, aby sa nevypla – obnovíme len zvyšok
@@ -313,7 +338,9 @@
           '<span class="s-ikona">' + ikonaRezimu(r) + "</span>" + r + "</button>";
       }).join("") + "</div>" +
       '<div id="s-kamera" hidden></div>' +
-      '<div data-s-obnov>' + castSkenera() + "</div></div>";
+      '<div data-s-obnov>' + castSkenera() + "</div>" +
+      '<div class="s-kam-miesto" aria-hidden="true"></div>' +
+      '<div id="s-kam-lista" class="s-kam-lista">' + listaKamery() + "</div></div>";
   }
 
   function castSkenera() {
@@ -325,7 +352,6 @@
     var ok = dnesne.filter(function (s) { return s.stav === "ok"; }).length;
     return panel +
       '<div class="s-ovladanie">' +
-        '<button class="btn" id="s-btn-kamera" data-s-akcia="kamera">' + (S.kamera ? "Vypnúť kameru" : "📷 Skenovať kamerou") + "</button>" +
         '<form class="s-rucne" data-s-form="rucne"><input id="s-rucny" autocomplete="off" autocapitalize="characters" placeholder="Kód ručne, napr. P00017-2-15" aria-label="Kód balíka ručne">' +
         '<button class="btn btn-primary" type="submit">Zapísať</button></form>' +
       "</div>" +
@@ -499,7 +525,9 @@
     if (d.sFilter) { S.filter = d.sFilter; Array.prototype.forEach.call(koren.querySelectorAll("[data-s-filter]"), function (b) { b.setAttribute("aria-pressed", b.dataset.sFilter === S.filter); }); filtrujRiadky(); return; }
     if (d.sFurmanka) { S.furmanka = d.sFurmanka; S.pohlad = "furmanka"; prekresli(); window.scrollTo(0, 0); return; }
     switch (d.sAkcia) {
-      case "kamera": zapniKameru(); break;
+      case "kamera-zadna": zapniKameru("environment"); break;
+      case "kamera-predna": zapniKameru("user"); break;
+      case "kamera-stop": vypniKameru(); break;
       case "obnov-stav": nacitajStav(true); break;
       case "obnov-furmanky": obnovFurmanky(); break;
       case "tlac-stav": tlacStav(); break;

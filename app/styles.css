@@ -128,14 +128,23 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
 .s-taby button { border: 0; background: transparent; border-radius: 8px; padding: 10px; font-weight: 700; color: var(--muted); min-height: 44px; }
 .s-taby button[aria-selected="true"] { background: var(--surface); color: var(--ink); }
 .s-rezimy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.s-rezim { border: 2px solid var(--line); background: var(--surface); border-radius: 12px; min-height: 76px; padding: 10px 6px;
-  display: grid; place-items: center; gap: 2px; font: 700 16px var(--font-display); }
+.s-rezim { border: 2px solid var(--gold); background: var(--surface); color: #583934; border-radius: 12px; min-height: 76px; padding: 10px 6px;
+  display: grid; place-items: center; gap: 2px; font: 700 16px var(--font-display); transition: transform .15s, box-shadow .15s; }
 .s-ikona { font-size: 24px; line-height: 1; }
-.s-rezim[aria-pressed="true"] { color: #fff; border-color: transparent; }
-.s-prijem[aria-pressed="true"] { background: #2f7d4f; }
-.s-krcmicka[aria-pressed="true"] { background: #583934; }
-.s-vydaj[aria-pressed="true"] { background: #2C5167; }
-#s-kamera { width: 100%; max-width: 420px; border-radius: 12px; overflow: hidden; background: #000; }
+.s-rezim[aria-pressed="true"] { color: #fff; transform: scale(1.04); box-shadow: 0 4px 10px rgba(0,0,0,.3); }
+.s-prijem[aria-pressed="true"] { background: #43a047; border-color: #2e7d32; }
+.s-krcmicka[aria-pressed="true"] { background: #235172; border-color: #14334a; }
+.s-vydaj[aria-pressed="true"] { background: #e53935; border-color: #b71c1c; }
+#s-kamera { width: 100%; max-width: 420px; margin: 0 auto; border-radius: 12px; overflow: hidden; background: #000; border: 4px solid var(--gold); }
+/* tlačidlá kamery pripnuté dole – na dosah palca */
+.s-kam-miesto { height: 96px; }
+.s-kam-lista { position: fixed; left: 0; right: 0; bottom: 20px; z-index: 20; display: flex; justify-content: center; gap: 10px; padding: 0 16px; pointer-events: none; }
+.s-kam { pointer-events: auto; border-radius: 14px; min-height: 60px; padding: 14px 18px; font: 700 17px var(--font-display); box-shadow: 0 8px 20px rgba(0,0,0,.3); cursor: pointer; }
+.s-kam-zadna { flex: 1 1 auto; max-width: 340px; background: #583934; color: #CBA75B; border: 1px solid #CBA75B; }
+.s-kam-predna { flex: 0 0 auto; background: var(--surface); color: #583934; border: 2px solid #CBA75B; font-size: 15px; }
+.s-kam-stop { flex: 1 1 auto; max-width: 500px; background: #000; color: #CBA75B; border: 2px solid #CBA75B; }
+@media (min-width: 761px) { .s-kam-lista { left: 240px; } }
+@media (max-width: 760px) { .s-kam-lista { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); } }
 .s-sprava { border-radius: 12px; padding: 16px 18px; font: 700 20px/1.3 var(--font-display); display: grid; gap: 4px; }
 .s-sprava .s-kod { font: 500 14px var(--font-body); opacity: .85; }
 .s-ok { background: #e3f1e8; color: #1d5635; }
