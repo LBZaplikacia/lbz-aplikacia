@@ -543,10 +543,11 @@
   }
 
   function hlavickaModulu() {
-    var sklad = S.pohlad === "skener" || S.pohlad === "stav" || S.pohlad === "sprava" || S.pohlad === "produkt";
+    var sklad = S.pohlad === "skener" || S.pohlad === "stav" || S.pohlad === "sprava" || S.pohlad === "produkt" || S.pohlad === "furmanky" || S.pohlad === "furmanka";
     var taby = sklad
       ? '<div class="s-taby" role="tablist"><button data-s-pohlad="skener" aria-selected="' + (S.pohlad === "skener") + '">Skenovanie</button>' +
         '<button data-s-pohlad="stav" aria-selected="' + (S.pohlad === "stav" || S.pohlad === "produkt") + '">Stav skladu</button>' +
+        '<button data-s-pohlad="furmanky" aria-selected="' + (S.pohlad === "furmanky" || S.pohlad === "furmanka") + '">Na rozvozy</button>' +
         (SUPA && spravca() ? '<button data-s-pohlad="sprava" aria-selected="' + (S.pohlad === "sprava") + '">Správa</button>' : "") + "</div>"
       : "";
     var test = SUPA && sklad ? '<p class="s-test">🧪 Testovací sklad appky – skeny sa nezapisujú do starej tabuľky. Ostrá práca zatiaľ v <a href="' + STARY_SKENER + '" target="_blank" rel="noopener">starom skeneri</a>.</p>' : "";
@@ -557,7 +558,7 @@
         " a nemusia byť aktuálne. Skeny sa uložia v zariadení a odošlú sa samé, keď bude signál.</p>"
       : (stare && S.pohlad !== "skener" ? '<p class="s-varovanie s-varovanie-info">Údaje sú z ' + cas(st) + ' – <button class="btn-link" data-s-akcia="obnov-stav">obnoviť</button></p>' : "");
     return '<div class="head"><div><div class="label">' + (sklad ? "Sklad" : "Furmanky") + "</div><h2>" +
-      (S.pohlad === "skener" ? "Skenovanie" : S.pohlad === "stav" ? "Stav skladu" : S.pohlad === "sprava" ? "Správa skladu" : S.pohlad === "produkt" ? esc(nazovProduktu(S.produkt)) : S.pohlad === "furmanka" ? esc(S.furmanka) : "Furmanky") +
+      (S.pohlad === "skener" ? "Skenovanie" : S.pohlad === "stav" ? "Stav skladu" : S.pohlad === "sprava" ? "Správa skladu" : S.pohlad === "produkt" ? esc(nazovProduktu(S.produkt)) : S.pohlad === "furmanka" ? esc(S.furmanka) : "Na rozvozy") +
       "</h2></div>" + indikatorSiete() + "</div>" + varovanie + test + taby;
   }
 
@@ -860,7 +861,7 @@
     if (d.sRezim) { t.blur(); nastavRezim(d.sRezim); return; }
     if (d.sPohlad) {
       S.pohlad = d.sPohlad; S.sprava = null; prekresli();
-      if (S.pohlad === "stav") nacitajStav(false);
+      if (S.pohlad === "stav" || S.pohlad === "furmanky") nacitajStav(false);
       if (S.pohlad === "sprava") nacitajPohyby();
       if (S.pohlad === "skener") nacitajDnesne();
       return;
@@ -914,7 +915,7 @@
       koren = el;
       S._fokusHladat = false;
       if (modul === "furmanky") { if (S.pohlad !== "furmanka") S.pohlad = "furmanky"; }
-      else if (S.pohlad !== "stav" && S.pohlad !== "produkt" && !(S.pohlad === "sprava" && spravca())) S.pohlad = "skener";
+      else if (S.pohlad !== "stav" && S.pohlad !== "produkt" && S.pohlad !== "furmanky" && S.pohlad !== "furmanka" && !(S.pohlad === "sprava" && spravca())) S.pohlad = "skener";
       el.addEventListener("click", klik);
       el.addEventListener("change", zmena);
       el.addEventListener("keydown", function (e) {
@@ -922,7 +923,7 @@
         if (riadok && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); otvorProdukt(riadok.getAttribute("data-s-produkt")); }
       });
       prekresli();
-      if (modul === "furmanky" || S.pohlad === "stav" || S.pohlad === "produkt") nacitajStav(false);
+      if (modul === "furmanky" || S.pohlad === "stav" || S.pohlad === "produkt" || S.pohlad === "furmanky" || S.pohlad === "furmanka") nacitajStav(false);
       if (S.pohlad === "produkt") nacitajBaliky();
       if (!Object.keys(S.katalog).length) nacitajKatalog();
       if (S.pohlad === "sprava") nacitajPohyby();

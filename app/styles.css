@@ -277,3 +277,103 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
 body.bez-signalu { padding-top: 34px; }
 .g-tlacidlo { display: flex; justify-content: center; min-height: 44px; }
 .g-tlacidlo > .btn { width: 100%; }
+
+/* ---------- Furmanky ---------- */
+.main:has(.f-siroke) { max-width: none; }
+#furm-root { display: grid; gap: 16px; min-width: 0; }
+.f-nadpis { font-size: 16px; margin: 4px 0 -4px; color: var(--muted); }
+.f-karty { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.f-karta { text-align: left; gap: 6px; cursor: pointer; font: inherit; color: inherit; }
+.f-karta:hover { border-color: var(--gold); }
+.f-karta-hore { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.f-datum { font-weight: 700; }
+.f-mini { font-size: 12px; }
+.f-zle { color: var(--bad); }
+.f-sprava { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--accent-soft); display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.f-sprava.f-ok { color: var(--ok); }
+.f-sprava.f-chyba { color: var(--bad); background: var(--warn-soft); }
+.f-sprava .btn-link { min-height: 0; padding: 0 4px; text-decoration: none; }
+.f-lista { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.f-lista-tl { display: flex; gap: 8px; flex-wrap: wrap; }
+.f-lista-tl .btn { min-height: 42px; padding: 8px 12px; }
+.f-prepinace { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.f-check { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; }
+.f-check input { width: 18px; height: 18px; }
+.f-seg { display: inline-flex; background: var(--surface-2); border-radius: 8px; padding: 3px; }
+.f-seg button { border: 0; background: transparent; border-radius: 6px; padding: 6px 12px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.f-seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); }
+
+/* tabuľka ako v Správe objednávok */
+.f-obal { overflow: auto; min-width: 0; max-height: calc(100vh - 220px); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.f-tab { border-collapse: separate; border-spacing: 0; font-size: 13px; line-height: 1.3; }
+.f-tab th, .f-tab td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 3px 6px; vertical-align: middle; }
+.f-tab .f-n { position: sticky; left: 0; z-index: 2; background: var(--surface); text-align: left; font-weight: 600; min-width: 220px; max-width: 280px; }
+.f-tab .f-k { position: sticky; left: 220px; z-index: 2; background: var(--surface); width: 58px; min-width: 58px; font-weight: 700; }
+.f-tab .f-d { position: sticky; left: 278px; z-index: 2; background: var(--surface); width: 58px; min-width: 58px; box-shadow: 2px 0 0 var(--line); }
+.f-tab tr.f-hl .f-n { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.f-tab .f-o { min-width: 128px; max-width: 170px; }
+.f-tab tr.f-hl td.f-o { font-size: 12px; cursor: pointer; overflow-wrap: anywhere; }
+.f-tab tr.f-hl-meno td.f-o { font-weight: 700; font-size: 13px; }
+.f-tab tr.f-hl td.f-o:hover { background: var(--accent-soft); }
+.f-tab tr.f-stlpce th { position: sticky; top: 0; z-index: 3; background: var(--surface-2); font-size: 12px; }
+.f-tab tr.f-stlpce th.f-n, .f-tab tr.f-stlpce th.f-k, .f-tab tr.f-stlpce th.f-d { z-index: 4; }
+.f-tab tr.f-stlpce .btn-link { min-height: 0; padding: 0; font-size: 12px; }
+.f-num { text-align: right; font-variant-numeric: tabular-nums; }
+.f-tab tr.f-t-sucet th, .f-tab tr.f-t-sucet td { font-weight: 800; }
+.f-tab tr.f-t-suma th, .f-tab tr.f-t-suma td { font-weight: 800; background: var(--surface-2); }
+.f-tab tr.f-ine th.f-n { font-style: italic; }
+.f-bunka { padding: 0 !important; }
+.f-bunka input, .f-ks { width: 100%; min-width: 48px; border: 0; background: transparent; padding: 6px; text-align: center; font-weight: 700; font-size: 14px; color: inherit; }
+.f-bunka input:focus, .f-ks:focus { background: var(--accent-soft); outline: 2px solid var(--gold); }
+.f-ks { width: 64px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+input.f-uklada { background: var(--warn-soft) !important; }
+input.f-ulozene { background: #d9ead3 !important; color: #1d1412; }
+input.f-zla { outline: 2px solid var(--bad) !important; }
+.f-rucne { color: var(--gold); font-weight: 800; }
+.f-platba { font-weight: 800; font-size: 11px; }
+.f-p-ok { color: #2f7d4f; } .f-p-db { color: #b3261e; } .f-p-fa { color: #2C5167; }
+.f-pozn { font-size: 13px; background: var(--warn-soft); border-radius: 6px; padding: 6px 8px; }
+
+/* zoznam (mobil) */
+.f-obj-karty { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.f-obj .rows .row, .f-sumar-m .rows .row, .f-polozky .rows .row { border-radius: 6px; padding: 4px 8px; align-items: center; }
+.f-sumar-m summary { cursor: pointer; }
+.f-sumar-m .f-r-sucet { font-weight: 800; }
+
+/* dialóg */
+.f-dialog-pozadie { position: fixed; inset: 0; background: rgba(20, 12, 10, .45); z-index: 20; }
+.f-dialog { position: fixed; z-index: 21; left: 50%; top: 4vh; transform: translateX(-50%); width: min(640px, calc(100vw - 24px)); max-height: 92vh; overflow: auto;
+  background: var(--surface); border-radius: 14px; padding: 18px; display: grid; gap: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+.f-dialog h3 { margin: 0; font-size: 20px; }
+.f-form { display: grid; gap: 10px; }
+.f-form textarea { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--bg); font: inherit; color: var(--ink); }
+.f-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 520px) { .f-2 { grid-template-columns: 1fr; } }
+.f-hladat { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--bg); width: 100%; }
+.f-polozky { display: grid; gap: 8px; }
+.f-polozky .rows { max-height: 40vh; overflow: auto; }
+.f-tl { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.f-akcie { display: flex; gap: 8px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 12px; }
+.f-akcie .btn, .f-dialog .rows .btn { min-height: 40px; padding: 6px 12px; }
+.f-dialog .rows .row { align-items: center; }
+.f-hr { border: 0; border-top: 1px solid var(--line); width: 100%; margin: 4px 0; }
+
+/* tlač: sumár a štítky */
+@media print {
+  #tlac-oblast.f-tlac-sumar tr.f-t-sucet td { font-weight: 800; }
+  #tlac-oblast.f-tlac-sumar td.t-c { font-size: 12pt; width: 28mm; }
+  #tlac-oblast.f-tlac-stitky .f-stitky { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; align-items: start; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok { width: 100%; border-collapse: collapse; break-inside: avoid; font-size: 9pt; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok th, #tlac-oblast.f-tlac-stitky table.f-stitok td { border: 1px solid #000; padding: 1mm 1.5mm; text-align: center; background: transparent; font-size: 9pt; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok th { width: 45%; font-weight: 700; background: #f2f2f2 !important; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok th.f-s-pol { text-align: left; font-weight: 600; background: transparent !important; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok tr[style] th.f-s-pol, #tlac-oblast.f-tlac-stitky table.f-stitok tr[style] td { background: inherit !important; }
+  #tlac-oblast.f-tlac-stitky .f-s-meno { font-weight: 800; font-size: 11pt; }
+  #tlac-oblast.f-tlac-stitky tr.f-s-qr th { background: #fff !important; padding: 1mm; }
+  #tlac-oblast.f-tlac-stitky tr.f-s-qr svg { width: 30mm; height: 30mm; display: block; margin: 0 auto; }
+  #tlac-oblast.f-tlac-stitky tr.f-s-hl th, #tlac-oblast.f-tlac-stitky tr.f-s-hl td { background: #ccc !important; font-weight: 800; }
+  #tlac-oblast.f-tlac-stitky td.f-s-ok { background: #d9ead3 !important; color: #1b5e20; font-weight: 800; }
+  #tlac-oblast.f-tlac-stitky td.f-s-db { background: #f4cccc !important; color: #b3261e; font-weight: 800; }
+  #tlac-oblast.f-tlac-stitky td.f-s-fa { background: #cfe2f3 !important; color: #2C5167; font-weight: 800; }
+  #tlac-oblast.f-tlac-stitky td.f-s-suma { color: #b3261e; font-weight: 800; }
+}

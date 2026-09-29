@@ -5,14 +5,15 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.9 BETA";
+  var VERZIA = "0.10 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
     it:                { nazov: "IT (správca)" },
     ceo:               { nazov: "CEO" },
     uctovnicka:        { nazov: "Účtovníčka / mzdárka" },
-    prevadzka:         { nazov: "Zamestnanec prevádzky" },
+    prevadzka:         { nazov: "Prevádzka (spoločný účet)" },
+    zamestnanec:       { nazov: "Zamestnanec (osobný účet)" },
     furman:            { nazov: "Furman (vodič)" },
     zakaznicky_servis: { nazov: "Zákaznícky servis" },
     zakaznik:          { nazov: "Zákazník" }
@@ -38,9 +39,10 @@
   var PRISTUPY = {
     it: MODULY.map(function (m) { return m.kod; }),
     ceo: MODULY.map(function (m) { return m.kod; }),
-    prevadzka: ["prehlad", "sklad", "furmanky", "balenie", "dochadzka", "kniha_jazd", "nastavenia"],
-    furman: ["prehlad", "trasa", "furmanky", "dochadzka", "kniha_jazd", "nastavenia"],
-    zakaznicky_servis: ["prehlad", "objednavky", "furmanky", "komentare", "nastavenia"],
+    prevadzka: ["prehlad", "sklad", "balenie", "dochadzka", "kniha_jazd", "nastavenia"],
+    zamestnanec: ["prehlad", "dochadzka", "nastavenia"],
+    furman: ["prehlad", "trasa", "dochadzka", "kniha_jazd", "nastavenia"],
+    zakaznicky_servis: ["prehlad", "objednavky", "furmanky", "balenie", "trasa", "sklad", "komentare", "nastavenia"],
     uctovnicka: ["prehlad", "dochadzka", "zamestnanci", "exporty", "nastavenia"],
     zakaznik: ["prehlad", "moje_objednavky", "sledovanie", "nastavenia"]
   };
@@ -59,6 +61,7 @@
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   }) : null;
   var SKLAD = window.LBZ_SKLAD || null;
+  var FURM = window.LBZ_FURMANKY || null;
 
   var stav = {
     pouzivatel: null, email: null, rola: null, modul: "prehlad",
@@ -134,6 +137,7 @@
   });
 
   function skladZapnuty() { return !!(SKLAD && SKLAD.zapnute()); }
+  function furmankyZapnute() { return !!(FURM && FURM.mozem()); }
 
   // ---------- prihlásenie ----------
   var GOOGLE_IKONA = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.3 6.9-17.7z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.1 1.4-4.9 2.3-8.2 2.3-6.2 0-11.5-4.2-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
@@ -198,7 +202,8 @@
         .map(function (m) { return { kod: m.kod, nazov: m.nazov, aktivny: !!m.aktivny }; });
     }
     zoznam.forEach(function (m) {
-      if (m.kod === "sklad" || m.kod === "furmanky") m.aktivny = skladZapnuty();
+      if (m.kod === "sklad") m.aktivny = skladZapnuty();
+      if (m.kod === "furmanky") m.aktivny = furmankyZapnute();
     });
     return zoznam;
   }
@@ -239,7 +244,7 @@
   }
 
   function kartaFurmanky() {
-    if (skladZapnuty()) return SKLAD.kartaFurmanky();
+    if (furmankyZapnute()) return FURM.karta();
     return '<section class="card"><h3>Furmanky dnes <span class="pill ok">' + UKAZKA.trasy.length + " trasy</span></h3><div class=\"rows\">" +
       UKAZKA.trasy.map(function (t) {
         return '<div class="row"><span>' + esc(t.nazov) + ' <span class="muted num">· ' + t.zastavky + ' zastávok</span></span><span class="pill ok">' + esc(t.stav) + "</span></div>";
@@ -285,7 +290,8 @@
         (OSTRY && spravca() ? kartaPouzivatelia() : "") +
         '<button class="btn" id="btn-odhlasit-m" style="max-width:520px">Odhlásiť sa</button>';
     }
-    if (skladZapnuty() && (stav.modul === "sklad" || stav.modul === "furmanky")) {
+    if (furmankyZapnute() && stav.modul === "furmanky") return '<div id="furm-root"></div>';
+    if (skladZapnuty() && stav.modul === "sklad") {
       return '<div id="sklad-root" data-modul="' + stav.modul + '"></div>';
     }
     var m = mojeModuly().filter(function (x) { return x.kod === stav.modul; })[0] || { nazov: stav.modul };
@@ -340,6 +346,8 @@
     if (stav.rola) renderApp(); else { renderLogin(); vykresliGoogle(); }
     var sk = document.getElementById("sklad-root");
     if (sk && SKLAD) SKLAD.mount(sk, sk.getAttribute("data-modul"));
+    var fu = document.getElementById("furm-root");
+    if (fu && FURM) FURM.mount(fu);
   }
 
   // ---------- udalosti ----------
@@ -360,6 +368,7 @@
       if (OSTRY) db.auth.signOut();
       stav.rola = null; stav.pouzivatel = null; stav.modul = "prehlad"; stav.dbModuly = null; stav.login = "prihlasenie"; stav.sprava = null;
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(null, null);
+      if (FURM) FURM.nastavDb(null, null);
       render();
     }
   });
@@ -403,6 +412,7 @@
     if (!session) {
       stav.rola = null; stav.dbModuly = null; stav.nacitavam = false; stav.uid = null;
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(null, null);
+      if (FURM) FURM.nastavDb(null, null);
       render(); return;
     }
     stav.email = session.user.email; stav.uid = session.user.id;
@@ -416,6 +426,7 @@
       stav.rola = p.rola; stav.pouzivatel = p.meno || session.user.email;
       stav.dbModuly = v[1].data || [];
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(interny() ? db : null, stav.rola);
+      if (FURM) FURM.nastavDb(interny() ? db : null, stav.rola);
       render();
     }).catch(function () { stav.nacitavam = false; stav.sprava = { typ: "chyba", text: "Bez spojenia so serverom." }; render(); });
   }
