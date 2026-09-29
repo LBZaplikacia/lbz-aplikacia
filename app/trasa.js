@@ -67,13 +67,15 @@
 
   // odkazy na Google Mapy po 9 zastávkach (ako starý skript): /maps/dir/<odkiaľ>/<zastávka>/…; prázdny začiatok = moja poloha
   function navOdkazy(zast, odStartu) {
-    var body = zast.filter(function (z) { return !z.bez_gps && z.adresa; });
-    var out = [];
-    for (var i = 0; i < body.length; i += 9) {
-      var kus = body.slice(i, i + 9), posl = i + 9 >= body.length;
-      var zac = i === 0 ? (odStartu ? START : "") : body[i - 1].adresa;
-      var body2 = kus.map(function (z) { return z.adresa; }); if (posl) body2.push(START);
-      out.push({ od: i + 1, po: Math.min(i + 9, body.length), url: "https://www.google.com/maps/dir/" + [zac].concat(body2).map(function (a) { return encodeURIComponent(a).replace(/%20/g, "+"); }).join("/") });
+    // bod = súradnice (ak sú), inak adresa bez „/“ (Google Mapy „/“ v adrese rozdelia na dve zastávky)
+    function bod(z) { return z.lat != null && z.lng != null ? z.lat + "," + z.lng : String(z.adresa).replace(/\//g, " "); }
+    var body = zast.filter(function (z) { return (z.lat != null && z.lng != null) || (!z.bez_gps && z.adresa); });
+    var out = [], N = 9;
+    for (var i = 0; i < body.length; i += N) {
+      var kus = body.slice(i, i + N), posl = i + N >= body.length;
+      var zac = i === 0 ? (odStartu ? START : "") : bod(body[i - 1]);
+      var body2 = kus.map(bod); if (posl && body2.length < N) body2.push(START);
+      out.push({ od: i + 1, po: Math.min(i + N, body.length), url: "https://www.google.com/maps/dir/" + [zac].concat(body2).map(function (a) { return encodeURIComponent(a).replace(/%20/g, "+").replace(/%2C/g, ","); }).join("/") });
     }
     return out;
   }
