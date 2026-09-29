@@ -3095,3 +3095,174 @@ begin
 end $$;
 revoke all on function public.vybavit_zoznam(), public.vybavit_uloz(jsonb) from public, anon;
 grant execute on function public.vybavit_zoznam(), public.vybavit_uloz(jsonb) to authenticated;
+
+-- =========================================================================
+-- 23) ZAMESTNANCI (v0.18) – karta zamestnanca (nahrádza hárok Zamestnanci v Master_dochadzka a formulár „Zamestnanci – prihlásenie“)
+--     Pracovný pomer upravuje IT/CEO, účtovníčka číta, zamestnanec vidí a dopĺňa svoje osobné údaje (dotazník).
+--     Citlivé údaje (rodné číslo, OP, IBAN, …) sú v samostatnej tabuľke – len IT/CEO/účtovníčka a samotný zamestnanec.
+--     Mzdy sa v appke nevedú (rozhodnutie 29. 9.).
+-- =========================================================================
+create table if not exists public.zamestnanci (
+  osoba_id        bigint primary key references public.rozpis_osoby(id) on delete cascade,
+  priezvisko      text, meno text, titul text,
+  telefon         text, email text,
+  ulica           text, psc text, obec text, kor_adresa text,
+  vzdelanie       text, odbor text,
+  vodicak         boolean, zdrav_preukaz date,
+  student         boolean, skola text, dochodca boolean, urad_prace boolean, ine_zamestnanie boolean,
+  nczd            boolean, bonus_deti boolean, odvod_vynimka boolean,
+  -- pracovný pomer (len IT/CEO)
+  typ_vztahu      text, pozicia text, druh_prace text, napln_prace text, miesto_vykonu text,
+  nastup          date, koniec date, skusobna text, narocnost int, isco text,
+  rozsah_hodin    text, pracovne_dni text, pracovny_cas text, typ_prijmu text,
+  dokumenty_url   text, dochadzka_subor text, poznamka text,
+  stav            text not null default 'aktivny' check (stav in ('aktivny','ukonceny','uchadzac')),
+  dotaznik        timestamptz,            -- kedy zamestnanec potvrdil svoje údaje
+  suhlas_gdpr     timestamptz,
+  upravene        timestamptz not null default now(),
+  upravil         uuid
+);
+create table if not exists public.zamestnanci_citlive (
+  osoba_id            bigint primary key references public.rozpis_osoby(id) on delete cascade,
+  rodne_priezvisko    text, pohlavie text, datum_narodenia date, miesto_narodenia text,
+  rodne_cislo         text, cislo_op text, statna_prislusnost text, rodinny_stav text,
+  zdravotna_poistovna text, iban text, ztp boolean, deti text, zakonny_zastupca text, cudzinec text,
+  upravene            timestamptz not null default now(),
+  upravil             uuid
+);
+create table if not exists public.zamestnanci_log (
+  id        bigint generated always as identity primary key,
+  osoba_id  bigint not null,
+  kto       uuid default auth.uid(),
+  kedy      timestamptz not null default now(),
+  polia     text[]                         -- len názvy zmenených polí, nie hodnoty
+);
+alter table public.zamestnanci enable row level security;
+alter table public.zamestnanci_citlive enable row level security;
+alter table public.zamestnanci_log enable row level security;
+
+insert into public.moduly (kod, nazov, poradie, aktivny) values ('zamestnanci', 'Zamestnanci', 60, true)
+on conflict (kod) do update set nazov = excluded.nazov, aktivny = true;
+insert into public.pristupy (rola, modul, uprava) values ('it','zamestnanci',true), ('ceo','zamestnanci',true), ('uctovnicka','zamestnanci',false), ('zamestnanec','zamestnanci',true)
+on conflict (rola, modul) do nothing;
+
+create or replace function public.zam_citatel() returns boolean
+language sql stable security definer set search_path = public as $$ select coalesce(public.moja_rola() in ('it','ceo','uctovnicka'), false) $$;
+
+-- polia, ktoré smie meniť zamestnanec sám (osobné údaje); ostatné len IT/CEO
+create or replace function public.zam_polia_osobne() returns text[] language sql immutable as $$
+  select array['priezvisko','meno','titul','telefon','email','ulica','psc','obec','kor_adresa','vzdelanie','odbor','vodicak','zdrav_preukaz',
+               'student','skola','dochodca','urad_prace','ine_zamestnanie','nczd','bonus_deti','odvod_vynimka']
+$$;
+create or replace function public.zam_polia_pomer() returns text[] language sql immutable as $$
+  select array['typ_vztahu','pozicia','druh_prace','napln_prace','miesto_vykonu','nastup','koniec','skusobna','narocnost','isco',
+               'rozsah_hodin','pracovne_dni','pracovny_cas','typ_prijmu','dokumenty_url','dochadzka_subor','poznamka','stav']
+$$;
+create or replace function public.zam_polia_citlive() returns text[] language sql immutable as $$
+  select array['rodne_priezvisko','pohlavie','datum_narodenia','miesto_narodenia','rodne_cislo','cislo_op','statna_prislusnost','rodinny_stav',
+               'zdravotna_poistovna','iban','ztp','deti','zakonny_zastupca','cudzinec']
+$$;
+
+-- zoznam: IT/CEO/účtovníčka všetkých, ostatní len seba
+create or replace function public.zam_zoznam() returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_moja bigint := public.rozpis_moja_osoba();
+begin
+  if auth.uid() is null then return jsonb_build_object('ok', false, 'text', 'Treba sa prihlásiť'); end if;
+  return jsonb_build_object('ok', true, 'spravca', public.som_spravca(), 'citatel', public.zam_citatel(), 'moja', v_moja,
+    'zoznam', (select coalesce(jsonb_agg(jsonb_build_object(
+        'osoba_id', o.id, 'prezyvka', o.meno, 'farba', o.farba, 'aktivny', o.aktivny, 'norma_h', o.norma_h,
+        'priezvisko', z.priezvisko, 'meno', z.meno, 'pozicia', z.pozicia, 'typ_vztahu', z.typ_vztahu, 'stav', coalesce(z.stav, 'aktivny'),
+        'nastup', z.nastup, 'koniec', z.koniec, 'zdrav_preukaz', z.zdrav_preukaz, 'dotaznik', z.dotaznik,
+        'email', coalesce(z.email, o.email),
+        'ucet', exists (select 1 from public.profily p where p.aktivny and lower(p.email) in (lower(o.email), lower(coalesce(o.email2, '')))),
+        'vyplnene', (select count(*) from unnest(array[z.priezvisko, z.meno, z.telefon, z.ulica, z.obec, z.typ_vztahu, z.pozicia, z.nastup::text]) v where coalesce(v, '') <> '')
+          + (case when c.rodne_cislo is not null then 1 else 0 end) + (case when c.iban is not null then 1 else 0 end) + (case when c.zdravotna_poistovna is not null then 1 else 0 end)
+      ) order by coalesce(z.stav, 'aktivny') = 'ukonceny', not o.aktivny, coalesce(z.priezvisko, o.meno)), '[]')
+      from public.rozpis_osoby o
+      left join public.zamestnanci z on z.osoba_id = o.id
+      left join public.zamestnanci_citlive c on c.osoba_id = o.id
+      where public.zam_citatel() or o.id = v_moja));
+end $$;
+
+create or replace function public.zam_detail(p_osoba bigint) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare v_ja boolean := p_osoba = public.rozpis_moja_osoba();
+begin
+  if not (public.zam_citatel() or v_ja) then return jsonb_build_object('ok', false, 'text', 'Nemáš prístup'); end if;
+  return jsonb_build_object('ok', true, 'ja', v_ja, 'spravca', public.som_spravca(),
+    'osoba', (select jsonb_build_object('id', id, 'prezyvka', meno, 'farba', farba, 'email', email, 'email2', email2, 'norma_h', norma_h, 'aktivny', aktivny) from public.rozpis_osoby where id = p_osoba),
+    'z', coalesce((select to_jsonb(z) - 'upravil' from public.zamestnanci z where osoba_id = p_osoba), '{}'::jsonb),
+    'c', coalesce((select to_jsonb(c) - 'upravil' from public.zamestnanci_citlive c where osoba_id = p_osoba), '{}'::jsonb),
+    'ucet', exists (select 1 from public.profily p, public.rozpis_osoby o where o.id = p_osoba and p.aktivny and lower(p.email) in (lower(o.email), lower(coalesce(o.email2, '')))),
+    'log', (select coalesce(jsonb_agg(jsonb_build_object('kedy', l.kedy, 'kto', coalesce(p.meno, p.email), 'polia', l.polia) order by l.id desc), '[]')
+            from (select * from public.zamestnanci_log where osoba_id = p_osoba order by id desc limit 15) l left join public.profily p on p.id = l.kto));
+end $$;
+
+create or replace function public.zam_typ(p_tab text, p_stlpec text) returns text
+language sql stable set search_path = public as $$
+  select format_type(a.atttypid, a.atttypmod) from pg_attribute a where a.attrelid = ('public.' || p_tab)::regclass and a.attname = p_stlpec and not a.attisdropped
+$$;
+
+-- uloženie: p = {osoba_id, z: {pole: hodnota}, c: {pole: hodnota}, dotaznik: true?, suhlas: true?}
+create or replace function public.zam_uloz(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_os bigint := (p->>'osoba_id')::bigint; v_sprav boolean := public.som_spravca(); v_ja boolean; k text; v_zmeny text[] := '{}';
+  v_n int; v_povol text[]; v_z jsonb := coalesce(p->'z', '{}'); v_c jsonb := coalesce(p->'c', '{}');
+begin
+  v_ja := v_os = public.rozpis_moja_osoba();
+  if not (v_sprav or v_ja) then return jsonb_build_object('ok', false, 'text', 'Nemáš oprávnenie upravovať'); end if;
+  v_povol := public.zam_polia_osobne() || case when v_sprav then public.zam_polia_pomer() else '{}'::text[] end;
+  insert into public.zamestnanci (osoba_id) values (v_os) on conflict do nothing;
+  for k in select jsonb_object_keys(v_z) loop
+    if not k = any(v_povol) then continue; end if;
+    execute format('update public.zamestnanci set %I = cast($1 as %s) where osoba_id = $2 and %I is distinct from cast($1 as %s)', k, public.zam_typ('zamestnanci', k), k, public.zam_typ('zamestnanci', k))
+      using (select case when jsonb_typeof(v_z->k) = 'null' or v_z->>k = '' then null else v_z->>k end), v_os;
+    get diagnostics v_n = row_count; if v_n > 0 then v_zmeny := v_zmeny || k; end if;
+  end loop;
+  if v_c <> '{}'::jsonb then
+    insert into public.zamestnanci_citlive (osoba_id) values (v_os) on conflict do nothing;
+    for k in select jsonb_object_keys(v_c) loop
+      if not k = any(public.zam_polia_citlive()) then continue; end if;
+      execute format('update public.zamestnanci_citlive set %I = cast($1 as %s) where osoba_id = $2 and %I is distinct from cast($1 as %s)', k, public.zam_typ('zamestnanci_citlive', k), k, public.zam_typ('zamestnanci_citlive', k))
+        using (select case when jsonb_typeof(v_c->k) = 'null' or v_c->>k = '' then null else v_c->>k end), v_os;
+      get diagnostics v_n = row_count; if v_n > 0 then v_zmeny := v_zmeny || k; end if;
+    end loop;
+    update public.zamestnanci_citlive set upravene = now(), upravil = auth.uid() where osoba_id = v_os and cardinality(v_zmeny) > 0;
+  end if;
+  if coalesce((p->>'dotaznik')::boolean, false) then update public.zamestnanci set dotaznik = now() where osoba_id = v_os; v_zmeny := v_zmeny || 'dotaznik'::text; end if;
+  if coalesce((p->>'suhlas')::boolean, false) then update public.zamestnanci set suhlas_gdpr = coalesce(suhlas_gdpr, now()) where osoba_id = v_os; end if;
+  if cardinality(v_zmeny) > 0 then
+    update public.zamestnanci set upravene = now(), upravil = auth.uid() where osoba_id = v_os;
+    insert into public.zamestnanci_log (osoba_id, polia) values (v_os, v_zmeny);
+  end if;
+  -- e-mail a denná norma sa premietnu aj do rozpisu / dochádzky
+  if v_sprav and v_z ? 'email' and coalesce(v_z->>'email', '') <> '' then
+    update public.rozpis_osoby set email = lower(trim(v_z->>'email')) where id = v_os and coalesce(email, '') = '';
+  end if;
+  if v_sprav and p ? 'norma_h' and nullif(p->>'norma_h', '') is not null then
+    update public.rozpis_osoby set norma_h = (p->>'norma_h')::numeric where id = v_os;
+  end if;
+  return jsonb_build_object('ok', true, 'text', case when cardinality(v_zmeny) > 0 then 'Uložené' else 'Bez zmeny' end);
+end $$;
+
+-- nový zamestnanec (IT/CEO): p = {prezyvka, priezvisko, meno, email, typ_vztahu, pozicia, nastup}
+create or replace function public.zam_novy(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_id bigint;
+begin
+  if not public.som_spravca() then return jsonb_build_object('ok', false, 'text', 'Len IT a CEO'); end if;
+  if coalesce(trim(p->>'prezyvka'), '') = '' then return jsonb_build_object('ok', false, 'text', 'Doplň meno do rozpisu (prezývku)'); end if;
+  if exists (select 1 from public.rozpis_osoby where lower(meno) = lower(trim(p->>'prezyvka'))) then
+    return jsonb_build_object('ok', false, 'text', 'Meno „' || trim(p->>'prezyvka') || '“ už v rozpise existuje – zvoľ iné');
+  end if;
+  insert into public.rozpis_osoby (meno, email) values (trim(p->>'prezyvka'), nullif(lower(trim(p->>'email')), '')) returning id into v_id;
+  insert into public.zamestnanci (osoba_id, priezvisko, meno, email, typ_vztahu, pozicia, nastup, stav, upravil)
+    values (v_id, nullif(trim(p->>'priezvisko'), ''), nullif(trim(p->>'meno'), ''), nullif(lower(trim(p->>'email')), ''),
+            nullif(p->>'typ_vztahu', ''), nullif(p->>'pozicia', ''), nullif(p->>'nastup', '')::date, coalesce(nullif(p->>'stav', ''), 'aktivny'), auth.uid());
+  insert into public.zamestnanci_log (osoba_id, polia) values (v_id, array['novy']);
+  return jsonb_build_object('ok', true, 'osoba_id', v_id, 'text', 'Zamestnanec pridaný');
+end $$;
+
+revoke all on function public.zam_zoznam(), public.zam_detail(bigint), public.zam_uloz(jsonb), public.zam_novy(jsonb), public.zam_citatel() from public, anon;
+grant execute on function public.zam_zoznam(), public.zam_detail(bigint), public.zam_uloz(jsonb), public.zam_novy(jsonb) to authenticated;
