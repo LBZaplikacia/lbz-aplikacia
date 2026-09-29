@@ -736,3 +736,20 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
 .f-zle-adresy { flex: 1 1 100%; margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; color: var(--ink); }
 .f-zle-adresy li { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--bad); border-radius: 8px; padding: 8px 10px; }
 .f-zle-adresy .btn { min-height: 36px; padding: 4px 10px; margin-top: 6px; }
+
+/* Trasa – mapa (Leaflet) */
+.t-mapa-miesto { min-height: 320px; }
+.t-mapa { height: calc(100vh - 290px); min-height: 320px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+.t-mapa-pozn { font-size: 13px; margin: 6px 0 0; }
+.t-pin { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; font: 800 14px var(--font-display); color: #fff; border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+.t-pin-caka { background: var(--gold); color: #2b1d1a; }
+.t-pin-akt { background: #583934; width: 40px; height: 40px; margin: -4px; font-size: 16px; }
+.t-pin-ok { background: #2f7d4f; }
+.t-pin-nie { background: #b3261e; }
+.t-pin-start { background: #fff; width: 30px; height: 30px; font-size: 15px; }
+.t-pin-dob { color: #b3261e; font-weight: 700; }
+.t-pin-tl { display: flex; gap: 6px; margin-top: 8px; }
+.t-pin-tl .btn { min-height: 38px; padding: 4px 10px; font-size: 14px; text-decoration: none; }
+.t-mapa-tl { display: grid; gap: 6px; }
+.t-mapa-tl button { width: 42px; height: 42px; border-radius: 10px; border: 2px solid rgba(0,0,0,.2); background: #fff; font-size: 20px; cursor: pointer; }
+.leaflet-popup-content { font-family: var(--font-body); font-size: 14px; color: #2b1d1a; }
