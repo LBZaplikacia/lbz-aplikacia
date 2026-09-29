@@ -41,6 +41,10 @@
     upravaInfo: null,                         // Správa: nájdený balík / výsledok
     pohyby: null,                             // Správa: posledné pohyby
     vsetkySkeny: null,                        // dnešné skeny zo všetkých zariadení (databáza)
+    produkt: null,                            // detail produktu (kmeňový kód)
+    baliky: null,                             // balíky vybraného produktu
+    ajVydane: false,
+    produktInfo: null,
     furmanka: null,
     filter: "vsetko",
     hladat: "",
@@ -495,14 +499,18 @@
     if (e.key && e.key.length === 1) buffer += e.key;
   });
 
-  window.addEventListener("online", function () { S.siet = "ok"; posliFrontu(); prekresli(); });
+  window.addEventListener("online", function () {
+    S.siet = "ok"; posliFrontu(); prekresli();
+    if (koren && S.pohlad !== "skener") nacitajStav(false);
+    if (S.pohlad === "produkt") nacitajBaliky();
+  });
   window.addEventListener("offline", function () { S.siet = "offline"; prekresli(); });
 
   // ---------- kreslenie ----------
   function prekresli() {
     if (!koren || !document.body.contains(koren)) { koren = null; return; }
     var kameraBezi = kameraStav !== "vyp";
-    var html = hlavickaModulu() + (S.pohlad === "skener" ? pohladSkener() : S.pohlad === "stav" ? pohladStav() : S.pohlad === "sprava" ? pohladSprava() : S.pohlad === "furmanka" ? pohladFurmanka() : pohladFurmanky());
+    var html = hlavickaModulu() + (S.pohlad === "skener" ? pohladSkener() : S.pohlad === "stav" ? pohladStav() : S.pohlad === "sprava" ? pohladSprava() : S.pohlad === "produkt" ? pohladProdukt() : S.pohlad === "furmanka" ? pohladFurmanka() : pohladFurmanky());
     if (kameraBezi && S.pohlad === "skener") {
       // kameru neprekresľujeme, aby sa nevypla – obnovíme len zvyšok
       var zvysok = koren.querySelector("[data-s-obnov]");
@@ -535,16 +543,22 @@
   }
 
   function hlavickaModulu() {
-    var sklad = S.pohlad === "skener" || S.pohlad === "stav" || S.pohlad === "sprava";
+    var sklad = S.pohlad === "skener" || S.pohlad === "stav" || S.pohlad === "sprava" || S.pohlad === "produkt";
     var taby = sklad
       ? '<div class="s-taby" role="tablist"><button data-s-pohlad="skener" aria-selected="' + (S.pohlad === "skener") + '">Skenovanie</button>' +
-        '<button data-s-pohlad="stav" aria-selected="' + (S.pohlad === "stav") + '">Stav skladu</button>' +
+        '<button data-s-pohlad="stav" aria-selected="' + (S.pohlad === "stav" || S.pohlad === "produkt") + '">Stav skladu</button>' +
         (SUPA && spravca() ? '<button data-s-pohlad="sprava" aria-selected="' + (S.pohlad === "sprava") + '">Správa</button>' : "") + "</div>"
       : "";
     var test = SUPA && sklad ? '<p class="s-test">🧪 Testovací sklad appky – skeny sa nezapisujú do starej tabuľky. Ostrá práca zatiaľ v <a href="' + STARY_SKENER + '" target="_blank" rel="noopener">starom skeneri</a>.</p>' : "";
+    var st = S.stav && S.stav.nacitane;
+    var stare = st && Date.now() - st > 15 * 60000;
+    var varovanie = S.siet !== "ok"
+      ? '<p class="s-varovanie" role="alert">⚠️ ' + (S.siet === "offline" ? "Bez signálu" : "Server neodpovedá") + " – zobrazené údaje" + (st ? " sú z " + cas(st) : "") +
+        " a nemusia byť aktuálne. Skeny sa uložia v zariadení a odošlú sa samé, keď bude signál.</p>"
+      : (stare && S.pohlad !== "skener" ? '<p class="s-varovanie s-varovanie-info">Údaje sú z ' + cas(st) + ' – <button class="btn-link" data-s-akcia="obnov-stav">obnoviť</button></p>' : "");
     return '<div class="head"><div><div class="label">' + (sklad ? "Sklad" : "Furmanky") + "</div><h2>" +
-      (S.pohlad === "skener" ? "Skenovanie" : S.pohlad === "stav" ? "Stav skladu" : S.pohlad === "sprava" ? "Správa skladu" : S.pohlad === "furmanka" ? esc(S.furmanka) : "Furmanky") +
-      "</h2></div>" + indikatorSiete() + "</div>" + test + taby;
+      (S.pohlad === "skener" ? "Skenovanie" : S.pohlad === "stav" ? "Stav skladu" : S.pohlad === "sprava" ? "Správa skladu" : S.pohlad === "produkt" ? esc(nazovProduktu(S.produkt)) : S.pohlad === "furmanka" ? esc(S.furmanka) : "Furmanky") +
+      "</h2></div>" + indikatorSiete() + "</div>" + varovanie + test + taby;
   }
 
   function pohladSkener() {
@@ -596,6 +610,15 @@
     if (f && !f._prepojene) {
       f._prepojene = true;
       f.addEventListener("submit", function (e) { e.preventDefault(); var i = document.getElementById("s-rucny"); spracujSken(i.value); i.value = ""; i.blur(); });
+    }
+    var pf = koren && koren.querySelector('[data-s-form="pridaj"]');
+    if (pf && !pf._prepojene) {
+      pf._prepojene = true;
+      pf.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var c = hodnota("s-p-cislo").replace(/\D/g, ""); if (!c) return;
+        upravBalik(S.produkt + "-" + c, { p_stav: "sklad" }, "pridané ručne");
+      });
     }
     var u = koren && koren.querySelector('[data-s-form="uprava"]');
     if (u && !u._prepojene) {
@@ -653,7 +676,7 @@
 
   function riadokProduktu(it) {
     var exp = it.expiracie || [];
-    return '<div class="s-produkt" data-kat="' + kategoria(it.nazov) + '" data-exp="' + (exp.length ? 1 : 0) + '" data-hladaj="' + esc(bezDiakritiky(it.nazov + " " + it.kod)) + '" style="--pf:' + esc(it.farba || "#ffffff") + '">' +
+    return '<div class="s-produkt' + (SUPA ? ' s-klik" data-s-produkt="' + esc(it.kod) + '" role="button" tabindex="0"' : '"') + ' data-kat="' + kategoria(it.nazov) + '" data-exp="' + (exp.length ? 1 : 0) + '" data-hladaj="' + esc(bezDiakritiky(it.nazov + " " + it.kod)) + '" style="--pf:' + esc(it.farba || "#ffffff") + '">' +
       '<div class="s-prow"><span><strong>' + esc(it.nazov) + '</strong><span class="muted s-mono">' + esc(it.kod) + "</span></span>" +
       '<span class="num s-velke">' + esc(it.pocetHlavny) + '</span><span class="num s-velke">' + esc(it.pocetKrcmicka) + "</span></div>" +
       exp.map(function (e) {
@@ -701,6 +724,61 @@
               '<span class="muted">' + esc((MENA[p.kto] || "") + (p.poznamka ? " · " + p.poznamka : "")) + "</span></span>" +
               '<span class="s-stav">' + esc(p.vysledok || "") + "</span></div>";
           }).join("") + "</div>") + "</section>";
+  }
+
+  // ----- detail produktu: balíky, úpravy (IT a CEO) -----
+  var NAZVY_STAVOV = { sklad: "📦 na sklade", krcmicka: "🏪 v Krčmičke", vydany: "📤 vydaný" };
+  function otvorProdukt(kod) {
+    S.produkt = kod; S.pohlad = "produkt"; S.baliky = null; S.produktInfo = null; S.ajVydane = false;
+    prekresli(); window.scrollTo(0, 0); nacitajBaliky();
+  }
+  function nacitajBaliky() {
+    if (!DB || !S.produkt) return;
+    var q = DB.from("baliky").select("kod, stav, prijaty, expiracia, vydany, objednavka").eq("produkt_kod", S.produkt);
+    q = S.ajVydane ? q.order("upraveny", { ascending: false }).limit(200) : q.in("stav", ["sklad", "krcmicka"]).order("expiracia", { ascending: true });
+    q.then(function (r) {
+      if (r.error) { S.siet = navigator.onLine === false ? "offline" : "chyba"; prekresli(); return; }
+      S.siet = "ok"; S.baliky = r.data || []; prekresli();
+    });
+  }
+  function datum(d) { return d ? new Date(d).toLocaleDateString("sk-SK") : "–"; }
+  function pohladProdukt() {
+    var it = ((S.stav && S.stav.skladItems) || []).filter(function (x) { return x.kod === S.produkt; })[0] || {};
+    var sp = spravca();
+    var info = S.produktInfo ? '<div class="s-sprava s-' + S.produktInfo.typ + '" role="status">' + esc(S.produktInfo.text) + "</div>" : "";
+    var dnes0 = new Date(); dnes0.setHours(0, 0, 0, 0);
+    var zoznam = S.baliky === null ? '<p class="muted" style="margin:0">Načítavam balíky…</p>' : !S.baliky.length ? '<p class="muted" style="margin:0">Žiadne balíky.</p>' :
+      '<div class="s-baliky">' + S.baliky.map(function (b) {
+        var dni = b.expiracia ? Math.round((new Date(b.expiracia) - dnes0) / 864e5) : null;
+        var zle = dni !== null && dni <= 7 && b.stav !== "vydany";
+        return '<div class="s-balik' + (b.stav === "vydany" ? " s-balik-vyd" : "") + '">' +
+          '<div class="s-balik-hl"><strong class="s-mono">' + esc(b.kod) + '</strong><span class="pill ' + (b.stav === "vydany" ? "info" : "ok") + '">' + NAZVY_STAVOV[b.stav] + "</span></div>" +
+          '<div class="muted s-balik-info">Prijatý ' + datum(b.prijaty) + ' · <span class="' + (zle ? "s-zle" : "") + '">expirácia ' + datum(b.expiracia) + (dni !== null && b.stav !== "vydany" ? " (" + dni + " dní)" : "") + "</span>" +
+            (b.vydany ? " · vydaný " + datum(b.vydany) : "") + (b.objednavka ? " · obj. " + esc(b.objednavka) : "") + "</div>" +
+          (sp ? '<div class="s-balik-akcie">' +
+            (b.stav !== "sklad" ? '<button class="btn s-mini" data-s-balik="sklad" data-kod="' + esc(b.kod) + '">📦 Na sklad</button>' : "") +
+            (b.stav !== "krcmicka" ? '<button class="btn s-mini" data-s-balik="krcmicka" data-kod="' + esc(b.kod) + '">🏪 Krčmička</button>' : "") +
+            (b.stav !== "vydany" ? '<button class="btn s-mini" data-s-balik="vydany" data-kod="' + esc(b.kod) + '">📤 Vydať</button>' : "") +
+            '<label class="s-mini-exp">Expirácia <input type="date" data-s-exp="' + esc(b.kod) + '" value="' + (b.expiracia ? String(b.expiracia).slice(0, 10) : "") + '"></label>' +
+            '<button class="btn s-mini s-mini-zmaz" data-s-balik="zmazat" data-kod="' + esc(b.kod) + '" aria-label="Zmazať ' + esc(b.kod) + '">🗑️</button></div>' : "") +
+          "</div>";
+      }).join("") + "</div>";
+    return '<div class="s-lista"><button class="btn" data-s-akcia="spat-stav">← Stav skladu</button>' +
+        '<span class="s-lista-tl"><label class="s-prepinac"><input type="checkbox" data-s-ajvydane' + (S.ajVydane ? " checked" : "") + "> aj vydané</label></span></div>" + info +
+      '<div class="s-dlazdice s-dlazdice-2"><div class="s-dlazdica"><span class="label">Hlavný sklad</span><strong class="num">' + esc(it.pocetHlavny || "0") + '</strong></div>' +
+        '<div class="s-dlazdica"><span class="label">Krčmička</span><strong class="num">' + esc(it.pocetKrcmicka || "0") + "</strong></div></div>" +
+      (sp ? '<form class="card s-pridaj" data-s-form="pridaj"><h3>Pridať balík ručne</h3><span class="s-riadok-form"><span class="s-pridaj-kod"><span class="muted s-mono">' + esc(S.produkt) + '-</span><input id="s-p-cislo" inputmode="numeric" autocomplete="off" placeholder="číslo" required></span>' +
+        '<button class="btn btn-primary" type="submit">Pridať na sklad</button></span></form>' : "") +
+      '<section class="card"><h3>' + (S.ajVydane ? "Balíky (aj vydané)" : "Balíky na sklade a v Krčmičke") + ' <span class="pill ok num">' + (S.baliky ? S.baliky.length : "…") + "</span></h3>" + zoznam + "</section>";
+  }
+  function upravBalik(kod, zmena, poznamka) {
+    var args = { p_kod: kod, p_stav: null, p_expiracia: null, p_zmazat: false, p_poznamka: poznamka || "úprava v detaile produktu" };
+    for (var k in zmena) args[k] = zmena[k];
+    S.produktInfo = { typ: "info", text: "Ukladám " + kod + "…" }; prekresli();
+    rpc("uprav_balik", args).then(function (res) {
+      S.produktInfo = { typ: res && res.ok ? "ok" : "chyba", text: kod + " – " + ((res && res.text) || "chyba") };
+      nacitajBaliky(); nacitajStav(true);
+    }).catch(function (e) { S.produktInfo = { typ: "chyba", text: "Neuložené: " + ((e && e.message) || "bez spojenia") }; prekresli(); });
   }
 
   // ----- furmanky -----
@@ -775,6 +853,8 @@
 
   // ---------- udalosti v module ----------
   function klik(e) {
+    var riadok = e.target.closest("[data-s-produkt]");
+    if (riadok && koren.contains(riadok) && !e.target.closest("button")) { otvorProdukt(riadok.getAttribute("data-s-produkt")); return; }
     var t = e.target.closest("button"); if (!t || !koren.contains(t)) return;
     var d = t.dataset;
     if (d.sRezim) { t.blur(); nastavRezim(d.sRezim); return; }
@@ -787,6 +867,13 @@
     }
     if (d.sFilter) { S.filter = d.sFilter; Array.prototype.forEach.call(koren.querySelectorAll("[data-s-filter]"), function (b) { b.setAttribute("aria-pressed", b.dataset.sFilter === S.filter); }); filtrujRiadky(); return; }
     if (d.sFurmanka) { S.furmanka = d.sFurmanka; S.pohlad = "furmanka"; prekresli(); window.scrollTo(0, 0); return; }
+    if (d.sBalik) {
+      var kod = d.kod, a = d.sBalik;
+      if (a === "zmazat") { if (window.confirm("Naozaj zmazať balík " + kod + "? (V histórii ostane záznam.)")) upravBalik(kod, { p_zmazat: true }, "zmazané v detaile produktu"); return; }
+      if (a === "vydany" && !window.confirm("Vydať ručne balík " + kod + "?")) return;
+      upravBalik(kod, { p_stav: a });
+      return;
+    }
     switch (d.sAkcia) {
       case "kamera-zadna": zapniKameru("environment"); break;
       case "kamera-predna": zapniKameru("user"); break;
@@ -797,11 +884,18 @@
       case "tlac-furmanka": tlacFurmanka(); break;
       case "spat": S.pohlad = "furmanky"; prekresli(); break;
       case "export-csv": exportCsv(); break;
+      case "spat-stav": S.pohlad = "stav"; S.produkt = null; prekresli(); filtrujRiadky(); break;
       case "prenos": prenesZoStareho(); break;
       case "najdi-balik": najdiBalik(); break;
       case "obnov-pohyby": nacitajPohyby(); break;
       case "zmaz-chyby": S.skeny = S.skeny.filter(function (s) { return s.stav !== "chyba"; }); ulozSkeny(); S.sprava = null; prekresli(); break;
     }
+  }
+
+  function zmena(e) {
+    var t = e.target;
+    if (t.hasAttribute && t.hasAttribute("data-s-ajvydane")) { S.ajVydane = t.checked; S.baliky = null; prekresli(); nacitajBaliky(); return; }
+    if (t.dataset && t.dataset.sExp && t.value) upravBalik(t.dataset.sExp, { p_expiracia: t.value + "T12:00:00+02:00" }, "zmena expirácie");
   }
 
   // ---------- verejné rozhranie pre app.js ----------
@@ -820,10 +914,16 @@
       koren = el;
       S._fokusHladat = false;
       if (modul === "furmanky") { if (S.pohlad !== "furmanka") S.pohlad = "furmanky"; }
-      else if (S.pohlad !== "stav" && !(S.pohlad === "sprava" && spravca())) S.pohlad = "skener";
+      else if (S.pohlad !== "stav" && S.pohlad !== "produkt" && !(S.pohlad === "sprava" && spravca())) S.pohlad = "skener";
       el.addEventListener("click", klik);
+      el.addEventListener("change", zmena);
+      el.addEventListener("keydown", function (e) {
+        var riadok = e.target.closest && e.target.closest("[data-s-produkt]");
+        if (riadok && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); otvorProdukt(riadok.getAttribute("data-s-produkt")); }
+      });
       prekresli();
-      if (modul === "furmanky" || S.pohlad === "stav") nacitajStav(false);
+      if (modul === "furmanky" || S.pohlad === "stav" || S.pohlad === "produkt") nacitajStav(false);
+      if (S.pohlad === "produkt") nacitajBaliky();
       if (!Object.keys(S.katalog).length) nacitajKatalog();
       if (S.pohlad === "sprava") nacitajPohyby();
       if (S.pohlad === "skener") nacitajDnesne();

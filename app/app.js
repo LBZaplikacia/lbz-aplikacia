@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.7 BETA";
+  var VERZIA = "0.8 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -396,6 +396,19 @@
   }
 
   render();
+
+  // pás „Bez signálu“ nad celou appkou (údaje sa neobnovujú)
+  function pasSignalu() {
+    var el = document.getElementById("offline-pas");
+    if (navigator.onLine === false) {
+      if (!el) { el = document.createElement("div"); el.id = "offline-pas"; el.setAttribute("role", "alert"); document.body.appendChild(el); }
+      el.textContent = "⚠️ Bez signálu – údaje v appke nemusia byť aktuálne.";
+      document.body.classList.add("bez-signalu");
+    } else { if (el) el.remove(); document.body.classList.remove("bez-signalu"); }
+  }
+  window.addEventListener("online", pasSignalu);
+  window.addEventListener("offline", pasSignalu);
+  pasSignalu();
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     // nová verzia appky sa zistí pri otvorení; po jej zapnutí sa stránka raz obnoví

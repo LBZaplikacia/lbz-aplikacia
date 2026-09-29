@@ -249,3 +249,29 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
   .pouz-riadok { grid-template-columns: 1fr auto; }
   .pouz-riadok .pouz-meno { grid-column: 1 / -1; }
 }
+
+/* v0.8 – detail produktu, varovanie bez signálu */
+.s-klik { cursor: pointer; }
+.s-klik:hover .s-prow, .s-klik:focus-visible .s-prow { background: var(--accent-soft); }
+.s-klik .s-prow > span:first-child strong::after { content: " ›"; color: var(--muted); }
+.s-varovanie { margin: 0 0 10px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); border: 1px solid var(--warn); color: var(--ink); font-size: 14px; font-weight: 600; }
+.s-varovanie-info { background: var(--accent-soft); border-color: var(--line); font-weight: 500; }
+.s-varovanie .btn-link { min-height: 0; padding: 0; }
+.s-dlazdice-2 { grid-template-columns: repeat(2, 1fr); max-width: 420px; }
+.s-baliky { display: grid; }
+.s-balik { display: grid; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+.s-balik-vyd { opacity: .6; }
+.s-balik-hl { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.s-balik-info { font-size: 13px; }
+.s-balik-akcie { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.s-balik-akcie .s-mini { margin-left: 0; float: none; }
+.s-mini-exp { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
+.s-mini-exp input { border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; min-height: 32px; background: var(--bg); color: var(--ink); font: inherit; }
+.s-mini-zmaz { margin-left: auto !important; }
+.s-prepinac { display: flex; gap: 6px; align-items: center; font-size: 14px; }
+.s-pridaj { max-width: 560px; }
+.s-pridaj-kod { display: flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 8px; padding: 0 0 0 10px; background: var(--bg); }
+.s-pridaj-kod input { border: 0; background: transparent; min-height: 44px; padding: 8px; font: inherit; color: var(--ink); min-width: 0; width: 100%; }
+#offline-pas { position: fixed; top: 0; left: 0; right: 0; z-index: 50; background: var(--warn); color: #1b120f; text-align: center; font: 700 14px var(--font-display, inherit); padding: 6px 12px calc(6px); padding-top: calc(6px + env(safe-area-inset-top)); }
+.s-pridaj-kod .s-mono { white-space: nowrap; }
+body.bez-signalu { padding-top: 34px; }
