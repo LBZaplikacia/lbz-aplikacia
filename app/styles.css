@@ -126,7 +126,7 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
 /* ---------- modul Sklad / Furmanky ---------- */
 #sklad-root { display: grid; gap: 16px; align-content: start; min-width: 0; }
 .pill.info { color: var(--accent); background: var(--accent-soft); }
-.s-taby { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 10px; max-width: 480px; }
+.s-taby { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; background: var(--surface-2); padding: 4px; border-radius: 10px; max-width: 480px; }
 .s-taby button { border: 0; background: transparent; border-radius: 8px; padding: 10px; font-weight: 700; color: var(--muted); min-height: 44px; }
 .s-taby button[aria-selected="true"] { background: var(--surface); color: var(--ink); }
 .s-rezimy { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
@@ -220,3 +220,17 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
 
 /* označenie testovacej verzie */
 .beta { display: inline-block; vertical-align: middle; font: 800 11px/1 var(--font-display); letter-spacing: .08em; color: #2b1d1a; background: var(--gold); border-radius: 999px; padding: 4px 8px; margin-left: 4px; }
+
+/* v0.6 – prihlásenie a správa skladu */
+.login-sprava { margin: 0; padding: 10px 12px; border-radius: 8px; font-size: 14px; border: 1px solid var(--line); }
+.login-sprava.ok { color: var(--ok); background: var(--accent-soft); }
+.login-sprava.chyba { color: var(--bad); background: var(--warn-soft); }
+.btn-link { border: 0; background: none; color: var(--accent); text-decoration: underline; padding: 6px 0; min-height: 40px; font: inherit; font-size: 14px; cursor: pointer; justify-self: start; }
+.field select { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--bg); min-height: 48px; color: var(--ink); font: inherit; }
+.s-test { margin: 0 0 10px; padding: 8px 12px; border-radius: 8px; background: var(--accent-soft); border: 1px solid var(--gold); font-size: 13px; }
+.s-test a { color: var(--accent); }
+.s-uprava { max-width: 560px; }
+.s-riadok-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.s-riadok-form input { min-width: 0; }
+.s-mini { min-height: 32px; padding: 4px 10px; font-size: 13px; margin-left: auto; }
+.card h3 .s-mini { float: right; }
