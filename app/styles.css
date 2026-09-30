@@ -1231,3 +1231,8 @@ body.pdfv-otvorene { overflow: hidden; }
 .schv-zoz { display: grid; gap: 6px; }
 .schv-pol { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--bg); border-radius: 12px; padding: 10px 12px; font: inherit; color: inherit; cursor: pointer; text-align: left; }
 .schv-pol:hover { border-color: var(--gold); }
+.zm-zdrav-min > summary { display: flex; justify-content: space-between; align-items: center; gap: 8px; cursor: pointer; font-weight: 800; font-size: 17px; list-style: none; }
+.zm-zdrav-min > summary::-webkit-details-marker { display: none; }
+.zm-zdrav-min > summary::after { content: "▾"; color: var(--muted); }
+.zm-zdrav-min[open] > summary::after { content: "▴"; }
+.zm-zdrav-vnutro { display: grid; gap: 12px; margin-top: 10px; }

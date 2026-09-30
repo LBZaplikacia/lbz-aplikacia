@@ -93,7 +93,7 @@
     return '<p class="f-sprava f-' + R.sprava.typ + '" role="status">' + esc(R.sprava.text) + ' <button class="btn-link" data-r="zavri-spravu" aria-label="Zavrieť">✕</button></p>';
   }
   function cip(m) {
-    var o = osoba(m.osoba), cas = m.od ? m.od + (m.do ? "–" + m.do : "") : "";
+    var o = osoba(m.osoba), cas = UKAZ_CAS && m.od ? m.od + (m.do ? "–" + m.do : "") : "";
     if (!o) {
       return '<button class="r-cip r-volne" data-r-miesto="' + m.id + '"><span>voľné</span>' + (cas ? '<small class="num">' + esc(cas) + "</small>" : "") + "</button>";
     }
@@ -169,7 +169,7 @@
     return '<section class="card r-moje"><h3>Moje smeny</h3>' + (moje.length ? '<div class="r-moje-zoznam">' + moje.map(function (m) {
       var d = zIso(m.datum);
       return '<button class="r-moja" data-r-miesto="' + m.id + '"><b>' + DNI[(d.getDay() + 6) % 7] + " " + kratkyDatum(d) + "</b><span>" + esc(pozicia(m.pozicia).nazov) +
-        (m.od ? ' · <span class="num">' + esc(m.od + (m.do ? "–" + m.do : "")) + "</span>" : "") + "</span></button>";
+        (UKAZ_CAS && m.od ? ' · <span class="num">' + esc(m.od + (m.do ? "–" + m.do : "")) + "</span>" : "") + "</span></button>";
     }).join("") + "</div>" : '<p class="muted" style="margin:0">V tomto období nemáte smenu.</p>') + "</section>";
   }
   function poznamkyHtml(mesiac) {
@@ -215,7 +215,7 @@
     var ja = R.data && R.data.ja;
     return ((R.data && R.data.miesta) || []).filter(function (x) { return x.osoba != null && x.osoba === ja && x.id !== okrem && !minule(x.datum); });
   }
-  function smenaText(x) { var d = zIso(x.datum); return DNI[(d.getDay() + 6) % 7] + " " + kratkyDatum(d) + " " + pozicia(x.pozicia).nazov + (x.od ? " " + x.od : ""); }
+  function smenaText(x) { var d = zIso(x.datum); return DNI[(d.getDay() + 6) % 7] + " " + kratkyDatum(d) + " " + pozicia(x.pozicia).nazov + (UKAZ_CAS && x.od ? " " + x.od : ""); }
   function ziadostBlok(m) {       // zamestnanec: cudzia smena → prevziať / vymeniť
     var cz = cakaNa(m.id);
     if (cz) return '<p class="s-varovanie s-varovanie-info" style="margin:0">⏳ Na túto smenu čaká žiadosť: ' + zPopis(cz) + "</p>";
@@ -287,12 +287,14 @@
   }
 
   // ---------- dialóg ----------
+  var UKAZ_CAS = false; // časy smien sa neuvádzajú
   function vyberOsoby(meno, vynechaj) {
     return '<select name="' + meno + '" class="r-select">' + aktivneOsoby().filter(function (o) { return o.id !== vynechaj; }).map(function (o) {
       return '<option value="' + o.id + '">' + esc(o.meno) + "</option>";
     }).join("") + "</select>";
   }
   function casy(m) {
+    if (!UKAZ_CAS) return "";
     return '<div class="f-2"><label class="field"><span class="label">Od</span><input type="time" name="od" value="' + esc(m && m.od || "") + '"></label>' +
       '<label class="field"><span class="label">Do</span><input type="time" name="do" value="' + esc(m && m.do || "") + '"></label></div>';
   }
@@ -303,7 +305,7 @@
       var d = zIso(m.datum), o = osoba(m.osoba), moze = mozemMiesto(m) && !minule(m.datum);
       nadpis = esc(pozicia(m.pozicia).nazov) + " · " + DNI_DLHE[(d.getDay() + 6) % 7].toLowerCase() + " " + kratkyDatum(d);
       if (!o) {
-        obsah = '<p style="margin:0">Voľná smena' + (m.od ? ' <span class="num">' + esc(m.od + (m.do ? "–" + m.do : "")) + "</span>" : "") + ".</p>";
+        obsah = '<p style="margin:0">Voľná smena' + (UKAZ_CAS && m.od ? ' <span class="num">' + esc(m.od + (m.do ? "–" + m.do : "")) + "</span>" : "") + ".</p>";
         if (mozemUpravovat() && !minule(m.datum)) {
           obsah += '<form class="f-form" data-r-akcia="zapisat" data-id="' + m.id + '">' +
             (rola() === "osobny" ? "" : '<label class="field"><span class="label">Kto</span>' + vyberOsoby("osoba") + "</label>") +
@@ -312,7 +314,7 @@
         if (rola() === "sprava") obsah += '<div class="f-akcie"><button class="btn" data-r-akcia-tl="zmazat" data-id="' + m.id + '">Zrušiť toto miesto</button></div>';
       } else {
         obsah = '<p class="r-kto"><span class="r-leg" style="background:' + esc(o.farba) + ";color:" + textNa(o.farba) + '">' + esc(o.meno) + "</span>" +
-          (m.od ? ' <span class="num">' + esc(m.od + (m.do ? "–" + m.do : "")) + "</span>" : "") + (m.vynimka ? ' <span class="pill warn">výnimočne</span>' : "") + "</p>" +
+          (UKAZ_CAS && m.od ? ' <span class="num">' + esc(m.od + (m.do ? "–" + m.do : "")) + "</span>" : "") + (m.vynimka ? ' <span class="pill warn">výnimočne</span>' : "") + "</p>" +
           (m.poznamka ? '<p class="f-pozn" style="margin:0">' + esc(m.poznamka) + "</p>" : "");
         if (!moze && rola() === "osobny" && R.data.ja && m.osoba !== R.data.ja && !minule(m.datum)) obsah += ziadostBlok(m);
         if (moze && rola() === "osobny") {       // vlastná smena zamestnanca – odovzdať / vymeniť ide na schválenie
@@ -500,7 +502,7 @@
           var moje = (k.miesta || []).filter(function (m) { return m.osoba === k.ja; }).slice(0, 4);
           obsah = moje.length ? '<div class="rows">' + moje.map(function (m) {
             var d = zIso(m.datum);
-            return '<div class="row"><span><b>' + (m.datum === dn ? "Dnes" : DNI[(d.getDay() + 6) % 7] + " " + kratkyDatum(d)) + "</b> " + esc(pozK(m.pozicia)) + '</span><span class="num muted">' + esc(m.od ? m.od + (m.do ? "–" + m.do : "") : "") + "</span></div>";
+            return '<div class="row"><span><b>' + (m.datum === dn ? "Dnes" : DNI[(d.getDay() + 6) % 7] + " " + kratkyDatum(d)) + "</b> " + esc(pozK(m.pozicia)) + '</span><span class="num muted">' + esc(UKAZ_CAS && m.od ? m.od + (m.do ? "–" + m.do : "") : "") + "</span></div>";
           }).join("") + "</div>" : '<p class="muted" style="margin:0">Najbližšie 2 týždne nemáte smenu.</p>';
         } else {
           var dnesne = (k.miesta || []).filter(function (m) { return m.datum === dn && m.osoba != null; });

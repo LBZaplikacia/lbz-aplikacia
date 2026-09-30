@@ -132,8 +132,19 @@
     if (!DB) return Promise.resolve();
     return rpc("zdrav_stav").then(function (d) { ZD.stav = d && d.ok ? d : null; kresli(); window.dispatchEvent(new Event("lbz-prekresli")); }).catch(function () { /* */ });
   }
+  // platný a odfotený preukaz sa presunie k dokumentom (zbalený); chýbajúci alebo končiaci (< 30 dní) je hore rozbalený
+  function zdravOk() {
+    var z = (Z.detail && Z.detail.z) || {};
+    return !!(z.zdrav_preukaz_do && z.zdrav_preukaz_do >= plus30() && (z.zdrav_preukaz_foto || z.zdrav_preukaz_foto2));
+  }
   function zdravSekcia() {
     var d = Z.detail; if (!d || !(d.ja || d.spravca)) return "";
+    var html = zdravForm(d);
+    if (!zdravOk()) return html;
+    return '<details class="card zm-sekcia zm-zdrav-min"' + (ZD.foto || ZD.prace ? " open" : "") + '><summary><span>🩺 Zdravotný preukaz</span>' + zdravPill((d.z || {}).zdrav_preukaz_do) + "</summary>" +
+      html.replace('class="card zm-sekcia zm-zdrav"', 'class="zm-zdrav zm-zdrav-vnutro"') + "</details>";
+  }
+  function zdravForm(d) {
     var doD = (d.z || {}).zdrav_preukaz_do, foto = (d.z || {}).zdrav_preukaz_foto || (d.z || {}).zdrav_preukaz_foto2, neurc = doD && doD >= NEURCITO;
     return '<form class="card zm-sekcia zm-zdrav" id="zm-zdrav-form"><div class="zm-s-hl"><h3>🩺 Zdravotný preukaz</h3>' + zdravPill(doD) + "</div>" +
       '<p class="muted" style="margin:0">Odfoť obe strany preukazu a zadaj, do kedy platí. 30 a 7 dní pred koncom ti appka pripomenie obnovu.</p>' +
@@ -259,7 +270,7 @@
       (d.spravca ? ziadostiHtml((d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }), false) :
         (d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }).map(function (z) { return '<div class="card zm-caka">⏳ <b>Žiadosť o zmenu čaká na schválenie</b>' + zmenyHtml(z.zmeny, null) + "</div>"; }).join("") +
         (d.ziadosti || []).filter(function (z) { return z.stav !== "ziadost"; }).slice(0, 2).map(function (z) { return '<p class="muted zm-vybavena">' + (z.stav === "schvalena" ? "✅ Tvoja žiadosť o zmenu bola schválená" : "✖ Tvoja žiadosť o zmenu bola zamietnutá") + " (" + esc(datum(z.kedy)) + ")</p>"; }).join("")) +
-      zdravSekcia() + dkSekcia() + paSekcia() +
+      (zdravOk() ? "" : zdravSekcia()) + dkSekcia() + (zdravOk() ? zdravSekcia() : "") + paSekcia() +
       '<div class="zm-sekcie">' + sekcie.map(sekciaHtml).join("") + "</div>" +
       (citatel() && (d.log || []).length ? '<details class="card zm-log"><summary>🕘 História zmien</summary><div class="rows">' + d.log.map(function (l) {
         return '<div class="row"><span>' + esc(new Date(l.kedy).toLocaleString("sk-SK", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })) + " · " + esc(l.kto || "") + '</span><span class="muted">' + esc((l.polia || []).join(", ")) + "</span></div>";
