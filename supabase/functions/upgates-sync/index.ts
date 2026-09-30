@@ -443,6 +443,118 @@ Deno.serve(async (req) => {
       return odpoved({ ok: true, cislo, text: "Objednávka " + cislo + " načítaná z Upgates", vysledok: res });
     }
 
+    // ================= OBJEDNÁVKY V APPKE (v0.27) =================
+    // číselníky z Upgates: stavy, dopravy, platby (3 požiadavky)
+    if (akcia === "ciselniky") {
+      const nazov = (x: any) => String(x.name || x.title || (x.descriptions && x.descriptions[0] && (x.descriptions[0].name || x.descriptions[0].title)) || "").trim();
+      const stavy = ((await upgatesGet("/order-statuses")).order_statuses || []).map((x: any) => ({ kod: String(x.id), nazov: nazov(x), data: { type: x.type, mark_paid_yn: x.mark_paid_yn, mark_delivered_yn: x.mark_delivered_yn } }));
+      const dopravy = ((await upgatesGet("/shipments")).shipments || []).map((x: any) => ({ kod: String(x.code || x.id), nazov: nazov(x), data: { id: x.id, type: x.type } }));
+      const platby = ((await upgatesGet("/payments")).payments || []).map((x: any) => ({ kod: String(x.code || x.id), nazov: nazov(x), data: { id: x.id, type: x.type } }));
+      const n = [await rpc("obj_ciselnik_uloz", { p_typ: "stav", p: stavy }), await rpc("obj_ciselnik_uloz", { p_typ: "doprava", p: dopravy }), await rpc("obj_ciselnik_uloz", { p_typ: "platba", p: platby })];
+      return odpoved({ ok: true, text: "Z Upgates načítané: " + n[0] + " stavov, " + n[1] + " dopráv, " + n[2] + " platieb" });
+    }
+    // je k objednávke vystavený dobropis? (1 požiadavka)
+    if (akcia === "dobropis") {
+      const cislo = String(body.cislo || "").trim();
+      if (!cislo) return odpoved({ ok: false, text: "Chýba číslo objednávky" });
+      const data = await upgatesGet("/invoices?type=creditNote&order_number=" + encodeURIComponent(cislo));
+      const d = ((data && data.invoices) || []).find((x: any) => String(x.order_number || "").trim() === cislo && /credit/i.test(String(x.type || "creditNote")));
+      const cisloDob = d ? String(d.invoice_number || d.number || "").trim() : "";
+      await rpc("obj_dobropis_uloz", { p_cislo: cislo, p_dobropis: cisloDob });
+      return odpoved({ ok: true, dobropis: cisloDob, text: cisloDob ? "Dobropis " + cisloDob + " nájdený – môžete dať Storno" : "K objednávke " + cislo + " zatiaľ nie je v Upgates dobropis" });
+    }
+    // odoslanie fronty zmien do Upgates (v testovacom režime len náhľad, bez zápisu)
+    if (akcia === "zapis") {
+      const f = await rpc("obj_fronta_na_odoslanie", {});
+      const pol: any[] = (f && f.polozky) || [];
+      if (!pol.length) return odpoved({ ok: true, text: "Nič nečaká na odoslanie" });
+      const podla: Record<string, any[]> = {};
+      for (const x of pol) (podla[x.cislo] = podla[x.cislo] || []).push(x);
+      const rozdel = (meno: string) => { const c = String(meno || "").trim().split(/\s+/); return { first: c.slice(0, -1).join(" ") || c[0] || "", last: c.length > 1 ? c[c.length - 1] : "" }; };
+      const zakaznik = (o: any, d: any) => {
+        const z: any = {};
+        if ("email" in d) z.email = d.email;
+        if ("telefon" in d) z.phone = d.telefon;
+        if ("meno" in d) { const m = rozdel(d.meno); z.firstname_invoice = m.first; z.surname_invoice = m.last; }
+        if ("firma" in d) z.company = d.firma;
+        if ("ulica" in d) z.street_invoice = d.ulica;
+        if ("mesto" in d) z.city_invoice = d.mesto;
+        if ("psc" in d) z.zip_invoice = d.psc;
+        void o; return z;
+      };
+      const produkty = (list: any[]) => list.filter((p: any) => Number(p.mnozstvo) > 0).map((p: any) => {
+        const x: any = { code: p.kod, quantity: Number(p.mnozstvo) }; if (p.nazov) x.title = p.nazov; if (p.cena != null && p.cena !== "") x.price_per_unit = Number(p.cena); return x; });
+      const nove: any[] = [], put: any[] = [], putProd: any[] = [], mapaNove: Record<string, number[]> = {}, mapaPut: Record<string, number[]> = {};
+      for (const cislo of Object.keys(podla)) {
+        const zoz = podla[cislo], o = zoz[0].objednavka || {};
+        const ids = zoz.map((x: any) => x.id);
+        if (zoz.some((x: any) => x.typ === "nova")) {
+          const d = Object.assign({}, ...zoz.filter((x: any) => x.typ === "nova").map((x: any) => x.data));
+          const m = rozdel(o.meno || d.meno || "");
+          const obj: any = { external_order_number: cislo, language_id: "sk",
+            customer: { email: o.email || "", phone: o.telefon || "", firstname_invoice: m.first, surname_invoice: m.last, company: o.firma || "",
+              street_invoice: o.ulica || "", city_invoice: o.mesto || "", zip_invoice: o.psc || "", country_id_invoice: "SK" },
+            products: produkty(zoz[0].produkty || []), shipment: { code: d.doprava_kod }, payment: { code: d.platba_kod } };
+          if (o.poznamka) obj.internal_note = o.poznamka;
+          const st = zoz.filter((x: any) => x.typ === "stav").pop(); if (st) obj.status_id = Number(st.data.status_id);
+          nove.push(obj); mapaNove[cislo] = ids;
+        } else {
+          const d = Object.assign({}, ...zoz.filter((x: any) => x.typ === "uprava").map((x: any) => x.data));
+          const obj: any = { order_number: cislo };
+          const z = zakaznik(o, d); if (Object.keys(z).length) obj.customer = z;
+          if ("poznamka" in d) obj.internal_note = d.poznamka;
+          if (d.doprava_kod) obj.shipment = { code: d.doprava_kod };
+          if (d.platba_kod) obj.payment = { code: d.platba_kod };
+          const st = zoz.filter((x: any) => x.typ === "stav").pop(); if (st) obj.status_id = Number(st.data.status_id);
+          if (d.polozky) { obj.products = produkty(zoz[0].produkty || []); putProd.push(obj); } else put.push(obj);
+          mapaPut[cislo] = ids;
+        }
+      }
+      const vysledky: any[] = [];
+      if (!f.ostry) {
+        for (const o of [...nove, ...put, ...putProd]) {
+          const c = o.order_number || o.external_order_number;
+          for (const id of (mapaNove[c] || mapaPut[c] || [])) vysledky.push({ id, stav: "test", nahlad: o });
+        }
+        await rpc("obj_fronta_vysledok", { p: vysledky });
+        return odpoved({ ok: true, test: true, text: "Testovací režim: " + vysledky.length + " zmien pripravených, do Upgates sa nič nezapísalo", nahlad: { nove, put, putProd } });
+      }
+      const posli = async (metoda: string, telo: any) => {
+        const auth = btoa((Deno.env.get("UPGATES_LOGIN") || "") + ":" + (Deno.env.get("UPGATES_KEY") || ""));
+        const r = await fetch(UPGATES_URL + "/orders", { method: metoda, headers: { Authorization: "Basic " + auth, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(telo) });
+        const t = await r.text(); let j: any = null; try { j = JSON.parse(t); } catch (_) { /* text */ }
+        if (!r.ok) throw new Error("Upgates " + r.status + ": " + t.slice(0, 300));
+        const o = j && j.orders; return Array.isArray(o) ? o : (o ? [o] : []);
+      };
+      const vyhodnot = (odp: any[], mapa: Record<string, number[]>, kluc: string, nova: boolean) => {
+        for (const c of Object.keys(mapa)) {
+          const x = odp.find((y: any) => String(y[kluc] || "") === c);
+          const ok = x && (nova ? x.created_yn : x.updated_yn);
+          const chyba = x ? (x.messages || []).map((m: any) => m.message || m.text || JSON.stringify(m)).join("; ") : "Upgates nevrátil výsledok";
+          for (const id of mapa[c]) vysledky.push({ id, stav: ok ? "odoslane" : "chyba", chyba: ok ? null : chyba });
+        }
+      };
+      const novePrec: Record<string, string> = {};
+      try {
+        if (nove.length) {
+          const odp = await posli("POST", { send_emails_yn: false, send_sms_yn: false, orders: nove });
+          vyhodnot(odp, mapaNove, "external_order_number", true);
+          for (const x of odp) if (x.created_yn && x.order_number) novePrec[String(x.external_order_number)] = String(x.order_number);
+        }
+        const putMapa = (zoz: any[]) => Object.fromEntries(zoz.map((o) => [o.order_number, mapaPut[o.order_number]]));
+        if (put.length) vyhodnot(await posli("PUT", { send_emails_yn: true, send_sms_yn: false, orders: put }), putMapa(put), "order_number", false);
+        if (putProd.length) vyhodnot(await posli("PUT", { send_emails_yn: true, send_sms_yn: false, delete_missing_products_yn: true, orders: putProd }), putMapa(putProd), "order_number", false);
+      } catch (e) {
+        const t = String((e as Error).message || e);
+        const hotove = new Set(vysledky.map((v) => v.id));
+        for (const x of pol) if (!hotove.has(x.id)) vysledky.push({ id: x.id, stav: "chyba", chyba: t.slice(0, 300) });
+      }
+      await rpc("obj_fronta_vysledok", { p: vysledky });
+      for (const [stare, nove2] of Object.entries(novePrec)) await rpc("obj_prepis_cislo", { p_stare: stare, p_nove: nove2 });
+      const ok = vysledky.filter((v) => v.stav === "odoslane").length, zle = vysledky.length - ok;
+      return odpoved({ ok: zle === 0, text: "Do Upgates zapísané: " + ok + (zle ? ", s chybou: " + zle + " (pozri detail objednávky)" : ""), nove: novePrec });
+    }
+
     // --- celé sťahovanie ---
     const teraz = new Date();
     const slot = jeSlot(teraz);
