@@ -1268,3 +1268,36 @@ body.pdfv-otvorene { overflow: hidden; }
 .o-filtre .o-riadok select, .o-filtre .o-riadok select[name=stav] { flex: 1 1 140px; width: auto; }
 .o-filtre .o-riadok .btn { white-space: normal; max-width: 100%; }
 @media (max-width: 520px) { .o-filtre .o-riadok select, .o-filtre .o-riadok select[name=stav] { flex-basis: 100%; } }
+/* v0.28 – zoznam objednávok ako v Upgates: záložky stavov, farebný stav, tabuľka */
+.o-taby { display: flex; gap: 4px; overflow-x: auto; padding: 2px 2px 8px; margin: 0 0 12px; border-bottom: 1px solid var(--line); scrollbar-width: thin; }
+.o-tab { flex: none; border: 0; background: transparent; padding: 8px 10px; border-radius: 8px 8px 0 0; font: inherit; font-weight: 700; color: var(--st, var(--ink)); cursor: pointer; white-space: nowrap; border-bottom: 3px solid transparent; }
+.o-tab.on { border-bottom-color: var(--st, var(--lbz-hneda, #583934)); background: var(--surface); }
+.o-tab:not([style]) { --st: var(--ink); }
+.o-bub { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--surface-2, #F3EBDC); color: var(--ink); font-size: 12px; font-weight: 700; }
+.o-tab-karta { padding: 0; overflow: hidden; }
+.o-tabulka-obal { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.o-tabulka { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 760px; }
+.o-tabulka th { text-align: left; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); font-weight: 700; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface); }
+.o-tabulka td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.o-tabulka tbody tr { cursor: pointer; background: var(--surface); }
+.o-tabulka tbody tr:hover td:not(.o-st), .o-tabulka tbody tr:focus-visible td:not(.o-st) { background: var(--lbz-zlata-svetla, #F5ECD9); }
+.o-tabulka tbody tr:focus-visible { outline: 2px solid var(--lbz-zlata, #CBA75B); outline-offset: -2px; }
+.o-tabulka .o-c { white-space: nowrap; position: sticky; left: 0; background: inherit; z-index: 1; }
+.o-tabulka th:first-child { position: sticky; left: 0; z-index: 2; }
+.o-cislo { font-weight: 700; color: var(--lbz-hneda, #583934); }
+.o-zdroj { font-size: 11px; color: var(--muted); }
+.o-tabulka td.o-st { background: var(--st); color: #fff; font-weight: 700; text-align: center; min-width: 120px; text-shadow: 0 1px 1px rgba(0,0,0,.25); }
+.o-zak { min-width: 220px; }
+.o-link { font-weight: 600; color: var(--lbz-hneda, #583934); }
+.o-pozn { font-size: 12px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+.o-stitky { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.o-dat { white-space: nowrap; }
+.o-suma { font-weight: 700; white-space: nowrap; text-align: right; }
+@media (max-width: 520px) { .o-tabulka { font-size: 13px; } .o-tabulka td, .o-tabulka th { padding: 8px; } .o-tabulka .o-c { box-shadow: 1px 0 0 var(--line); } }
+.o-filtre { padding: 12px; gap: 8px; }
+.o-hl { display: flex; gap: 8px; min-width: 0; }
+.o-hl input[type=search] { flex: 1 1 auto; min-width: 0; width: auto; }
+.o-hl .btn { flex: none; min-height: 44px; }
+.o-viac { margin-top: 8px; }
+.o-viac > summary { cursor: pointer; font-weight: 700; color: var(--lbz-hneda, #583934); padding: 6px 2px; list-style-position: inside; }
+.o-viac[open] > summary { margin-bottom: 8px; }

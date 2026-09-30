@@ -56,29 +56,48 @@
   function rezimPill(ostry) {
     return ostry ? '<span class="pill ok">OSTRÝ zápis do Upgates</span>' : '<span class="pill warn">TEST – do Upgates sa nezapisuje</span>';
   }
+  // farby stavov ako v Upgates (keď Upgates farbu nevráti)
+  var FARBY = { "Prijatá": "#17a2b8", "Platba úspešná": "#6bb568", "Platba zlyhala": "#969696", "Platba zrušena": "#969696", "Nedoriešená": "#ffc107",
+    "Storno": "#dc3545", "Spracované Nerozvezené": "#a3e7ff", "Naplanovane": "#02d9d6", "Rozvezene": "#ffa6f6" };
+  function farbaStavu(s, farby) { var f = (farby && farby[s]) || FARBY[s] || "#7154bc"; return /^#?[0-9a-f]{3,8}$/i.test(f) ? (f[0] === "#" ? f : "#" + f) : "#7154bc"; }
   function zoznamHtml() {
     var Z = O.zoznam || {}, obj = Z.objednavky || [];
     var stavy = (Z.stavy || []).slice().sort();
     function vyber(meno, prazdne, zoz) { return '<select name="' + meno + '" class="r-select"><option value="">' + prazdne + "</option>" + (zoz || []).slice().sort().map(function (s) { return '<option' + (s === O.filter[meno] ? " selected" : "") + ">" + esc(s) + "</option>"; }).join("") + "</select>"; }
     var h = '<div class="head"><div><h2>Objednávky</h2><div class="sub">' + (Z.ok ? rezimPill(Z.ostry) : "") + (O.prace ? " · načítavam…" : "") + "</div></div>" +
       '<span class="head-tl"><button class="btn btn-primary" data-o="nova">+ Nová objednávka</button></span></div>' + spravaHtml();
-    h += '<section class="card o-filtre"><form id="o-hladaj" class="o-riadok"><input name="hladaj" type="search" placeholder="Hľadať: meno, telefón, e-mail, číslo" value="' + esc(O.filter.hladaj) + '">' +
-      '<select name="stav" class="r-select"><option value="">Všetky stavy</option>' + stavy.map(function (s) { return '<option' + (s === O.filter.stav ? " selected" : "") + ">" + esc(s) + "</option>"; }).join("") + "</select>" +
-      vyber("doprava", "Všetky dopravy", Z.dopravy) + vyber("platba", "Všetky platby", Z.platby) +
-      '<label class="f-check"><input type="checkbox" name="osobny"' + (O.filter.osobny ? " checked" : "") + "> len osobný odber</label>" +
-      '<button class="btn" type="submit">Hľadať</button></form>' +
-      '<div class="o-riadok o-akcie"><button class="btn r-mini" data-o="obnovit">🔄 Stiahnuť z Upgates</button>' +
-      (Z.caka ? '<button class="btn r-mini" data-o="odoslat">⬆️ Odoslať zmeny do Upgates (' + Z.caka + ")</button>" : "") +
-      '<button class="btn r-mini" data-o="ciselniky">Načítať stavy, dopravy a platby</button>' +
-      (vedenie() && Z.ok ? '<button class="btn r-mini" data-o="rezim">' + (Z.ostry ? "Prepnúť na TEST" : "Zapnúť ostrý zápis") + "</button>" : "") + "</div></section>";
+    var pocty = Z.pocty || {}, farby = Z.farby || {};
+    var poradie = Object.keys(pocty).sort(function (a, b) { return (pocty[b] - pocty[a]) || a.localeCompare(b, "sk"); });
+    h += '<div class="o-taby" role="tablist"><button class="o-tab' + (!O.filter.stav ? " on" : "") + '" data-o-stav="">Všetko <span class="o-bub">' + (Z.spolu || 0) + "</span></button>" +
+      poradie.map(function (s) {
+        return '<button class="o-tab' + (s === O.filter.stav ? " on" : "") + '" data-o-stav="' + esc(s) + '" style="--st:' + esc(farbaStavu(s, farby)) + '">' + esc(s) + ' <span class="o-bub">' + pocty[s] + "</span></button>";
+      }).join("") + "</div>";
+    var aktivne = !!(O.filter.doprava || O.filter.platba || O.filter.osobny);
+    h += '<section class="card o-filtre"><form id="o-hladaj"><div class="o-hl"><input name="hladaj" type="search" placeholder="Hľadať: meno, telefón, e-mail, číslo" value="' + esc(O.filter.hladaj) + '">' +
+      '<button class="btn" type="submit">Hľadať</button></div>' +
+      '<input type="hidden" name="stav" value="' + esc(O.filter.stav) + '">' +
+      '<details class="o-viac"' + (aktivne || O.viac ? " open" : "") + '><summary>Filtre' + (aktivne ? " (zapnuté)" : "") + " a akcie</summary>" +
+      '<div class="o-riadok">' + vyber("doprava", "Všetky dopravy", Z.dopravy) + vyber("platba", "Všetky platby", Z.platby) +
+      '<label class="f-check"><input type="checkbox" name="osobny"' + (O.filter.osobny ? " checked" : "") + "> len osobný odber</label></div>" +
+      '<div class="o-riadok o-akcie"><button class="btn r-mini" type="button" data-o="obnovit">🔄 Stiahnuť z Upgates</button>' +
+      (Z.caka ? '<button class="btn r-mini" type="button" data-o="odoslat">⬆️ Odoslať zmeny do Upgates (' + Z.caka + ")</button>" : "") +
+      '<button class="btn r-mini" type="button" data-o="ciselniky">Načítať stavy, dopravy a platby</button>' +
+      (vedenie() && Z.ok ? '<button class="btn r-mini" type="button" data-o="rezim">' + (Z.ostry ? "Prepnúť na TEST" : "Zapnúť ostrý zápis") + "</button>" : "") + "</div></details></form></section>";
     if (!Z.ok) return h + '<div class="empty"><strong>' + esc(Z.text || "Načítavam…") + "</strong></div>";
     if (!obj.length) return h + '<div class="empty"><strong>Žiadne objednávky</strong></div>';
-    h += '<section class="card"><div class="o-zoznam">' + obj.map(function (o) {
-      return '<button class="o-pol" data-o-cislo="' + esc(o.cislo) + '"><span class="o-pol-h"><b>' + esc(o.cislo) + "</b> " + esc(o.meno || "") +
-        (o.osobny ? ' <span class="pill">osobný odber</span>' : "") + (o.caka ? ' <span class="pill warn">čaká na Upgates</span>' : "") + "</span>" +
-        '<span class="o-pol-d muted">' + esc([o.status, o.platba, o.doprava, o.furmanka, dat(o.vytvorena)].filter(Boolean).join(" · ")) + "</span>" +
-        '<span class="o-pol-s num">' + esc(eur(o.suma)) + "</span></button>";
-    }).join("") + "</div></section>";
+    h += '<section class="card o-tab-karta"><div class="o-tabulka-obal"><table class="o-tabulka"><thead><tr><th>Číslo obj.</th><th>Stav objednávky</th><th>Zákazník / e-mail</th><th>Doprava, platba</th><th>Vytvorená</th><th class="num">Cena</th><th>Faktúra</th></tr></thead><tbody>' +
+      obj.map(function (o) {
+        var stitky = (o.osobny ? '<span class="pill">osobný odber</span> ' : "") + (o.caka ? '<span class="pill warn">čaká na Upgates</span> ' : "") + (o.furmanka ? '<span class="pill">' + esc(o.furmanka) + "</span>" : "");
+        return '<tr data-o-cislo="' + esc(o.cislo) + '" tabindex="0">' +
+          '<td class="o-c"><span class="o-cislo">' + esc(o.cislo) + '</span> <span class="o-bub">' + (o.poloziek || 0) + "</span>" + (o.zdroj === "appka" ? '<div class="o-zdroj">z appky</div>' : "") + "</td>" +
+          '<td class="o-st" style="--st:' + esc(farbaStavu(o.status, farby)) + '">' + esc(o.status || "–") + "</td>" +
+          '<td class="o-zak"><span class="o-link">' + esc(o.meno || "") + "</span>" + (o.email ? ' <span class="muted">' + esc(o.email) + "</span>" : "") +
+            (o.poznamka ? '<div class="o-pozn">' + esc(o.poznamka) + "</div>" : "") + (stitky ? '<div class="o-stitky">' + stitky + "</div>" : "") + "</td>" +
+          "<td>" + esc([o.doprava, o.platba_nazov || o.platba].filter(Boolean).join(", ")) + "</td>" +
+          '<td class="o-dat">' + esc(dat(o.vytvorena)) + "</td>" +
+          '<td class="num o-suma">' + esc(eur(o.suma)) + "</td>" +
+          "<td>" + esc(o.faktura || "–") + (o.dobropis ? '<div class="muted">' + esc(o.dobropis) + "</div>" : "") + "</td></tr>";
+      }).join("") + "</tbody></table></div></section>";
     return h;
   }
   function detailHtml() {
@@ -154,8 +173,9 @@
 
   // ---------- udalosti ----------
   function klik(e) {
-    var t = e.target.closest("button, [data-o]"); if (!t) return;
+    var t = e.target.closest("button, [data-o], tr[data-o-cislo]"); if (!t) return;
     var d = t.dataset;
+    if (d.oStav !== undefined) { O.filter.stav = d.oStav; nacitaj(); return; }
     if (d.oCislo) { otvor(d.oCislo); return; }
     if (d.oZmaz != null) { var fz = koren.querySelector("#o-form"); citajFormular(fz); formular().polozky.splice(+d.oZmaz, 1); kresli(); return; }
     switch (d.o) {
@@ -267,6 +287,8 @@
     mount: function (el) {
       koren = el;
       el.addEventListener("click", klik); el.addEventListener("submit", odoslanie); el.addEventListener("change", zmena);
+      el.addEventListener("toggle", function (e) { if (e.target.classList && e.target.classList.contains("o-viac")) O.viac = e.target.open; }, true);
+      el.addEventListener("keydown", function (e) { if (e.key === "Enter" && e.target.matches && e.target.matches("tr[data-o-cislo]")) otvor(e.target.dataset.oCislo); });
       if (!O.zoznam) nacitaj(); else kresli();
     },
     kartaOdbery: kartaOdbery,
