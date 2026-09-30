@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.25.0 BETA";
+  var VERZIA = "0.25.1 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -391,6 +391,30 @@
         return '<button class="schv-pol" data-mod="' + x[5] + '"><span>' + x[1] + " <b>" + n + "</b> " + (n === 1 ? x[2] : n < 5 ? x[3] : x[4]) + "</span><span>›</span></button>";
       }).join("") + "</div></section>";
   }
+  // upozornenia do mobilu – stav tohto zariadenia (bez nich neprídu správy, keď je appka zavretá)
+  function pushStavNacitaj() {
+    if (!OSTRY || !window.lbzPush || stav.pushStav !== undefined) return;
+    stav.pushStav = null;
+    lbzPush.stav().then(function (s) { stav.pushStav = s; if (stav.modul === "prehlad" || stav.modul === "nastavenia") render(); });
+  }
+  function pushTlacidlo() {
+    return '<button class="btn btn-primary" data-push-zapni' + (stav.pushPrace ? " disabled" : "") + ">" + (stav.pushPrace ? "Zapínam…" : "🔔 Zapnúť upozornenia") + "</button>";
+  }
+  function kartaPush() {
+    pushStavNacitaj();
+    if (stav.pushStav !== "vypnute" && stav.pushStav !== "zakazane") return "";
+    return '<section class="card schv-karta"><h3>🔕 Upozornenia sú vypnuté</h3><p class="muted" style="margin:0">Zapni ich, aby ti správy z chatu a žiadosti prišli do mobilu aj vtedy, keď je appka zavretá – aj s číslom na ikone.</p>' +
+      (stav.pushStav === "zakazane" ? '<p class="s-varovanie" style="margin:0">Upozornenia sú pre appku zakázané v telefóne. Povoľ ich: podrž prst na ikone appky → Informácie o aplikácii → Upozornenia → zapnúť.</p>' : pushTlacidlo()) + "</section>";
+  }
+  function kartaPushUcet() {
+    pushStavNacitaj();
+    var s = stav.pushStav, text = s === "zapnute" ? "✅ Na tomto zariadení sú zapnuté." : s === "zakazane" ? "🔕 Zakázané v nastaveniach telefónu – podrž prst na ikone appky → Informácie o aplikácii → Upozornenia → zapnúť." :
+      s === "nepodporuje" ? (/iPhone|iPad/.test(navigator.userAgent) ? "Na iPhone fungujú, keď appku pridáš na plochu (Zdieľať → Pridať na plochu) a otvoríš ju z ikony." : "Tento prehliadač upozornenia nepodporuje.") : s ? "Na tomto zariadení sú vypnuté." : "Zisťujem…";
+    return '<section class="card" style="max-width:520px"><h3>🔔 Upozornenia do mobilu</h3><p class="muted" style="margin:0">' + esc(text) + "</p>" +
+      (s === "vypnute" ? pushTlacidlo() : "") + (s === "zapnute" ? '<button class="btn" data-push-test>Poslať skúšobné upozornenie</button>' : "") +
+      (stav.pushSprava ? '<p class="muted" style="margin:0">' + esc(stav.pushSprava) + "</p>" : "") +
+      '<p class="muted r-mala" style="margin:0">Upozornenia chodia na účet, ktorý je na tomto zariadení práve prihlásený. Ak ti na Samsungu/Xiaomi neprichádzajú pri zavretej appke, vypni pre Chrome šetrenie batérie (Nastavenia → Aplikácie → Chrome → Batéria → Bez obmedzení).</p></section>';
+  }
   function kartaSklad() {
     if (skladZapnuty()) return SKLAD.kartaSklad();
     return '<section class="card"><h3>Sklad</h3><p class="muted" style="margin:0">Ukážkový režim.</p></section>';
@@ -431,6 +455,7 @@
       }
       var kh = {};
       kh.schvalenie = kartaSchvalenie();
+      var kPush = kartaPush();
       var moje = mojeModuly(), kody = moje.map(function (m) { return m.kod; });
       if (dochadzkaZapnuta()) kh.dochadzka = DOCH.karta();
       if (ULO) kh.ulohy = ULO.karta();
@@ -444,6 +469,7 @@
       if (zamZapnute() && ZAM.karta) kh.zdrav = ZAM.karta();
       var por = poradieKariet(Object.keys(kh).filter(function (k) { return kh[k]; }));
       var karty = (kh.schvalenie ? ["schvalenie"] : []).concat(por.viditelne.filter(function (k) { return k !== "schvalenie"; })).map(function (k) { return kh[k]; });
+      if (kPush) karty.unshift(kPush);
       var dnes = new Date().toLocaleDateString("sk-SK", { weekday: "long", day: "numeric", month: "numeric" });
       var meno = String(stav.pouzivatel || "").split(" ").pop();
       return hlavicka("Dobrý deň" + (meno ? ", " + meno : "") + "!", "Dnes je " + dnes, true) + '<div class="grid">' + karty.join("") + "</div>" +
@@ -456,6 +482,7 @@
           '<div class="rows"><div class="row"><span>Meno</span><span>' + esc(stav.pouzivatel) + '</span></div>' +
           '<div class="row"><span>E-mail</span><span>' + esc(stav.email || "") + '</span></div>' +
           '<div class="row"><span>Rola</span><span>' + esc((ROLY[r] || {}).nazov || r) + "</span></div></div></section>" +
+        (OSTRY ? kartaPushUcet() : "") +
         (OSTRY ? '<form class="card" id="f-zmena-hesla" style="max-width:520px"><h3>Zmeniť heslo</h3>' +
           '<label class="field"><span class="label">Nové heslo (aspoň 6 znakov)</span><input id="in-heslo1" type="password" autocomplete="new-password" minlength="6" required></label>' +
           '<label class="field"><span class="label">Nové heslo ešte raz</span><input id="in-heslo2" type="password" autocomplete="new-password" minlength="6" required></label>' +
@@ -587,7 +614,19 @@
     }
     if (t.dataset.login) { stav.login = t.dataset.login; stav.sprava = null; render(); return; }
     if (t.dataset.mod) { stav.modul = t.dataset.mod; stav.sprava = null; stav.spravaPouz = null; if (t.dataset.mod === "nastavenia") stav.pouzivatelia = null; render(); window.scrollTo(0, 0); return; }
+    if (t.hasAttribute("data-push-zapni")) {
+      stav.pushPrace = true; stav.pushSprava = null; render();
+      lbzPush.zapni(db).then(function (txt) { stav.pushStav = "zapnute"; stav.pushSprava = txt; })
+        .catch(function (e) { stav.pushSprava = (e && e.message) || "Nepodarilo sa zapnúť"; stav.pushStav = undefined; })
+        .then(function () { stav.pushPrace = false; render(); });
+      return;
+    }
+    if (t.hasAttribute("data-push-test")) {
+      db.functions.invoke("upozornenia", { body: { akcia: "test" } }).then(function () { stav.pushSprava = "Odoslané – o chvíľu by malo prísť. Skús aj so zavretou appkou."; render(); });
+      return;
+    }
     if (t.id === "btn-odhlasit" || t.id === "btn-odhlasit-m") {
+      if (window.lbzPush) lbzPush.odznak(0);
       if (OSTRY) db.auth.signOut({ scope: "local" }); // odhlási len toto zariadenie, ostatné ostanú prihlásené
       if (window.lbzPamat) lbzPamat.zmaz();
       stav.rola = null; stav.pouzivatel = null; stav.modul = "prehlad"; stav.dbModuly = null; stav.login = "prihlasenie"; stav.sprava = null;
@@ -685,6 +724,7 @@
         }, 900);
       }
       if (ZAM) ZAM.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
+      if (window.lbzPush && stav.rola !== "zakaznik") lbzPush.obnov(db);
       if (CHAT) { CHAT.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola); if (START_K) { CHAT.otvorKonv(START_K); START_K = null; } }
       render();
     }).catch(function () { stav.nacitavam = false; stav.sprava = { typ: "chyba", text: "Bez spojenia so serverom." }; render(); });

@@ -42,6 +42,7 @@
 
   // ---------- odznak s počtom neprečítaných (lišta na PC aj v mobile) ----------
   function odznak() {
+    if (window.lbzPush && DB) lbzPush.odznak(C.neprecitane);
     document.querySelectorAll('[data-mod="chat"] .ri-ik').forEach(function (ik) {
       var b = ik.querySelector(".chat-odznak");
       if (!C.neprecitane) { if (b) b.remove(); return; }
