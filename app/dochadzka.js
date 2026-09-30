@@ -1,5 +1,5 @@
 // LBZ aplikácia – modul Dochádzka
-// Zamestnanec (osobný účet): na Prehľade veľká karta PRÍCHOD / ODCHOD (miesto ponúkne podľa smeny v rozpise, GPS pri príchode a odchode),
+// Zamestnanec (osobný účet): na Prehľade veľká karta PRÍCHOD / ODCHOD (miesto ponúkne podľa smeny v rozpise; poloha sa nezaznamenáva),
 // mesiac s hodinami, žiadosť o dovolenku / PN / OČR / lekára. IT a CEO: kto je v práci, kto neprišiel, schvaľovanie žiadostí, úpravy.
 // Mzdy sa nepočítajú. Prestávka 30 min pri šichte ≥ 6 h, stravné podľa miesta (ako stará web appka).
 
@@ -30,7 +30,9 @@
   function spravca() { return ROLA === "it" || ROLA === "ceo"; }
   function citatel() { return spravca() || ROLA === "uctovnicka"; }
   function kresli() { if (koren && koren.isConnected) prekresli(); window.dispatchEvent(new Event("lbz-prekresli")); }
-  function poloha() {
+  // poloha sa pri príchode a odchode nezaznamenáva (rozhodnutie 30. 9. 2026)
+  function poloha() { return Promise.resolve(null); }
+  function polohaGps() {
     return new Promise(function (ok) {
       if (!navigator.geolocation) return ok({ chyba: "bez GPS" });
       navigator.geolocation.getCurrentPosition(function (p) {
@@ -101,10 +103,7 @@
     if (!m.osoba) return "";   // spoločné účty (tablet, furman) – dochádzku si zapisuje každý zo svojho účtu
     var spr = D.sprava && !koren ? '<p class="f-sprava f-' + D.sprava.typ + '">' + esc(D.sprava.text) + "</p>" : "";
     var mes = m.mesiac || {};
-    if (!m.suhlas) {
-      return '<section class="card d-karta ds d-suhlas"><h2 class="ds-h">🕒 Dochádzka</h2><p>' + esc(SUHLAS_TEXT) + "</p>" +
-        '<button class="ds-btn ds-prichod" data-d="suhlas"' + (D.prace ? " disabled" : "") + ">✅ Beriem na vedomie</button></section>";
-    }
+    // poloha sa pri príchode/odchode nezaznamenáva (rozhodnutie 30. 9. 2026) – potvrdenie o oboznámení sa už nepýta
     var info = '<div class="ds-info">' +
       (m.smeny && m.smeny.length ? "📅 Dnes: <b>" + esc(smenaText(m.smeny)) + "</b><br>" : "📅 Dnes nemáš v rozpise smenu.<br>") +
       (m.zajtra && m.zajtra.length ? "Zajtra: " + esc(smenaText(m.zajtra)) + "<br>" : "") +
