@@ -126,6 +126,27 @@
     }
     return out.join("") || '<div class="empty"><strong>V tomto období nie sú smeny.</strong></div>';
   }
+  // mobil – mesiac ako kalendár (mriežka 7 × týždne), ťuknutím na deň sa ukáže detail
+  function mesiacMriezka(mesiac) {
+    var prvy = new Date(mesiac.getFullYear(), mesiac.getMonth(), 1, 12), posl = new Date(mesiac.getFullYear(), mesiac.getMonth() + 1, 0, 12);
+    var od = pondelok(prvy), dn = iso(dnes()), vyb = R.denVyber && R.denVyber.slice(0, 7) === iso(prvy).slice(0, 7) ? R.denVyber : (dn.slice(0, 7) === iso(prvy).slice(0, 7) ? dn : null);
+    var bunky = [];
+    for (var d = new Date(od); d <= posl || (d.getDay() + 6) % 7 !== 0; d = pridaj(d, 1)) {
+      var di = iso(d), mimo = d.getMonth() !== mesiac.getMonth();
+      var ms = ((R.data && R.data.miesta) || []).filter(function (m) { return m.datum === di && m.osoba; });
+      var ludia = [], vid = {};
+      ms.forEach(function (m) { if (!vid[m.osoba]) { vid[m.osoba] = 1; var o = osoba(m.osoba); if (o) ludia.push(o); } });
+      var volne = ((R.data && R.data.miesta) || []).some(function (m) { return m.datum === di && !m.osoba; });
+      var max = 4;
+      bunky.push('<button class="rk-den' + (mimo ? " rk-mimo" : "") + (di === dn ? " rk-dnes" : "") + (di === vyb ? " rk-vyb" : "") + ((d.getDay() + 6) % 7 >= 5 ? " rk-vikend" : "") + '" data-r-den="' + di + '">' +
+        '<span class="rk-cislo">' + d.getDate() + "</span>" +
+        '<span class="rk-ludia">' + ludia.slice(0, max).map(function (o) { return '<i style="background:' + esc(o.farba) + ";color:" + textNa(o.farba) + '">' + esc(String(o.meno).slice(0, 4)) + "</i>"; }).join("") +
+        (ludia.length > max ? '<i class="rk-viac">+' + (ludia.length - max) + "</i>" : "") + "</span>" + (volne ? '<span class="rk-volne" title="Voľná smena"></span>' : "") + "</button>");
+      if (bunky.length > 42) break;
+    }
+    return '<div class="rk"><div class="rk-hl">' + DNI.map(function (x) { return "<span>" + x + "</span>"; }).join("") + '</div><div class="rk-mriezka">' + bunky.join("") + "</div></div>" +
+      (vyb ? '<div class="r-dni rk-detail">' + dniZoznam(zIso(vyb), zIso(vyb)) + "</div>" : '<p class="muted">Ťukni na deň pre detail.</p>');
+  }
   function mojeSmeny() {
     if (!R.data || !R.data.ja) return "";
     var dn = iso(dnes());
@@ -180,7 +201,7 @@
       } else telo = tyzdenTabulka(r.od);
     } else {
       var od = R.pohlad === "mesiac" ? r.mesiac : r.od, dok = R.pohlad === "mesiac" ? new Date(r.mesiac.getFullYear(), r.mesiac.getMonth() + 1, 0, 12) : r.do;
-      telo = '<div class="r-dni">' + dniZoznam(od, dok) + "</div>";
+      telo = R.pohlad === "mesiac" ? mesiacMriezka(r.mesiac) : '<div class="r-dni">' + dniZoznam(od, dok) + "</div>";
     }
     var upoz = rola() === "osobny" && !R.data.ja ? '<p class="s-varovanie">Váš účet ešte nie je spojený s menom v rozpise – vedenie ho spojí v „Ľudia a farby“ (podľa e-mailu).</p>' : "";
     return head + spravaHtml() + poznamkyHtml(r.mesiac) + upoz + mojeSmeny() + telo + legenda() + spravaTl;
@@ -281,6 +302,7 @@
   function klik(e) {
     var t = e.target.closest("button, [data-r]"); if (!t) return;
     var d = t.dataset;
+    if (d.rDen) { R.denVyber = d.rDen; prekresli(); var det = koren && koren.querySelector(".rk-detail"); if (det) det.scrollIntoView({ block: "nearest", behavior: "smooth" }); return; }
     if (d.r === "zavri") { R.dialog = null; prekresli(); return; }
     if (d.r === "zavri-spravu") { R.sprava = null; prekresli(); return; }
     if (d.r === "pozn-upravit") { R.poznEdit = d.m; prekresli(); var ta = document.getElementById("r-pozn-text"); if (ta) ta.focus(); return; }

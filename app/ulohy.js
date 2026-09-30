@@ -35,19 +35,20 @@
   function karta() {
     if (!DB || ROLA === "zakaznik") return "";
     var z = U.moje || [], otv = z.filter(function (x) { return !x.splnene; }), hot = z.filter(function (x) { return x.splnene; });
-    if (!zadavatel() && U.moje && !z.length && ROLA !== "zamestnanec" && ROLA !== "prevadzka") return "";
+    if (!zadavatel() && U.moje && !z.length && !(window.LBZ_VYBAVIT && window.LBZ_VYBAVIT.obsah && window.LBZ_VYBAVIT.obsah())) return "";
     var pol = function (x) {
       return '<li class="v-pol' + (x.splnene ? " v-hotovo" : "") + '"><button class="v-krug" data-u-splnit="' + x.id + '" data-u-stav="' + (x.splnene ? "0" : "1") + '" aria-label="' + (x.splnene ? "Vrátiť" : "Splnené") + '">' + (x.splnene ? "✓" : "") + "</button>" +
         '<span class="v-text">' + esc(x.text) + '<span class="u-meta">' + (x.na_den ? '<span class="u-stitok">celá smena</span>' : "") + termin(x) +
         (x.splnene && x.splnil ? '<span class="muted">splnil/a ' + esc(x.splnil) + "</span>" : "") + (x.datum < dnes() && !x.splnene ? '<span class="muted">od ' + esc(kratko(x.datum)) + "</span>" : "") + "</span></span></li>";
     };
     var p = U.prehlad, zadane = p ? p.ulohy || [] : [];
-    return '<section class="card v-karta u-karta"><h3>✅ Úlohy na dnes' + (otv.length ? ' <span class="pill warn num">' + otv.length + "</span>" : "") +
+    var VYB = window.LBZ_VYBAVIT, poz = VYB && VYB.obsah ? VYB.obsah() : "";
+    return '<section class="card v-karta u-karta"><h3>✅ Úlohy a Vybaviť' + (otv.length + (VYB && VYB.pocet ? VYB.pocet() : 0) ? ' <span class="pill warn num">' + (otv.length + (VYB && VYB.pocet ? VYB.pocet() : 0)) + "</span>" : "") +
       (zadavatel() ? '<button class="btn btn-primary u-zadaj" data-u="zadaj">＋ Zadať</button>' : "") + "</h3>" +
       (U.chyba ? '<p class="muted">' + esc(U.chyba) + "</p>" : U.moje == null ? '<p class="muted">Načítavam…</p>' :
-        (otv.length ? '<ul class="v-zoznam">' + otv.map(pol).join("") + "</ul>" : '<p class="muted v-prazdne">Na dnes nič. 🎉</p>') +
+        (otv.length ? '<div class="u-nad">Úlohy</div><ul class="v-zoznam">' + otv.map(pol).join("") + "</ul>" : "") +
         (hot.length ? '<details class="v-hotove"><summary>Splnené (' + hot.length + ")</summary><ul class=\"v-zoznam\">" + hot.map(pol).join("") + "</ul></details>" : "")) +
-      (!zadavatel() && ROLA !== "prevadzka" ? '<form class="v-nova" id="u-nova"><input id="u-text" maxlength="500" placeholder="Pridať vlastnú úlohu…" autocomplete="off" enterkeyhint="done"><button class="btn btn-primary" type="submit" aria-label="Pridať">＋</button></form>' : "") +
+      (poz ? '<div class="u-nad">Moje poznámky – Vybaviť</div>' + poz : "") +
       (zadavatel() && zadane.length ? '<details class="v-hotove u-zadane"><summary>Zadané úlohy (' + zadane.length + ")</summary><ul class=\"u-zoz\">" + zadane.map(function (x) {
         var komu = x.na_den ? (x.komu || []) : (x.komu || []).map(function (k) { return k.meno + (k.splnene ? " ✓" : ""); });
         var hotovo = x.na_den ? !!x.splnene : (x.komu || []).length && (x.komu || []).every(function (k) { return k.splnene; });

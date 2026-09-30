@@ -86,6 +86,10 @@
   }
 
   // ---------- zoznam ----------
+  function zdravZoznam(id) {
+    var l = ZD.stav && ZD.stav.ludia || [], x = l.filter(function (y) { return y.osoba_id === id; })[0];
+    return x ? zdravPill(x.do) : "";
+  }
   function pohladZoznam() {
     if (Z.zoznam == null) return '<div class="empty"><strong>Načítavam…</strong></div>';
     var q = Z.hladaj.toLowerCase();
@@ -107,9 +111,77 @@
           '<span class="zm-k-txt"><b>' + esc(celeMeno(x)) + "</b>" + (celeMeno(x) !== x.prezyvka ? ' <span class="muted">(' + esc(x.prezyvka) + ")</span>" : "") +
           '<span class="zm-k-pod">' + esc([x.pozicia, x.typ_vztahu].filter(Boolean).join(" · ") || "doplň pracovný pomer") + "</span>" +
           '<span class="zm-k-stitky">' + (x.stav === "uchadzac" ? '<span class="pill info">pred nástupom</span>' : "") +
-          (!x.ucet ? '<span class="pill warn">bez účtu</span>' : "") + (x.dotaznik ? '<span class="pill ok">✓ údaje potvrdené</span>' : "") + "</span></span>" +
+          (!x.ucet ? '<span class="pill warn">bez účtu</span>' : "") + (x.dotaznik ? '<span class="pill ok">✓ údaje potvrdené</span>' : "") + zdravZoznam(x.osoba_id) + "</span></span>" +
           '<span class="zm-k-vypl" title="Vyplnené údaje"><i style="width:' + vypl + '%"></i></span></button>';
       }).join("") + "</div>" : '<div class="empty"><strong>Nikto nezodpovedá filtru</strong></div>');
+  }
+
+  // ---------- zdravotný preukaz (platnosť + fotka) ----------
+  var ZD = { stav: null, foto: null, prace: false };
+  function dnesIso() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
+  function plus30() { var d = new Date(); d.setDate(d.getDate() + 30); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
+  function zdravPill(doD) {
+    if (!doD) return '<span class="pill warn">🩺 preukaz chýba</span>';
+    if (doD < dnesIso()) return '<span class="pill bad">🩺 preukaz prepadnutý ' + esc(datum(doD)) + "</span>";
+    if (doD < plus30()) return '<span class="pill warn">🩺 preukaz končí ' + esc(datum(doD)) + "</span>";
+    return '<span class="pill ok">🩺 preukaz do ' + esc(datum(doD)) + "</span>";
+  }
+  function nacitajZdrav() {
+    if (!DB) return Promise.resolve();
+    return rpc("zdrav_stav").then(function (d) { ZD.stav = d && d.ok ? d : null; kresli(); window.dispatchEvent(new Event("lbz-prekresli")); }).catch(function () { /* */ });
+  }
+  function zdravSekcia() {
+    var d = Z.detail; if (!d || !(d.ja || d.spravca)) return "";
+    var doD = (d.z || {}).zdrav_preukaz_do, foto = (d.z || {}).zdrav_preukaz_foto;
+    return '<form class="card zm-sekcia zm-zdrav" id="zm-zdrav-form"><div class="zm-s-hl"><h3>🩺 Zdravotný preukaz</h3>' + zdravPill(doD) + "</div>" +
+      '<p class="muted" style="margin:0">Odfoť platný preukaz a zadaj dátum, do kedy platí. 30 a 7 dní pred koncom ti appka pripomenie obnovu.</p>' +
+      '<div class="d-riadok"><label class="field"><span class="label">Platí do</span><input type="date" id="zm-zd-do" value="' + esc(doD || "") + '" required></label>' +
+      '<label class="field"><span class="label">Fotka preukazu</span><input type="file" id="zm-zd-foto" accept="image/*" capture="environment"></label></div>' +
+      (ZD.foto ? '<img class="zm-zd-img" src="' + esc(ZD.foto) + '" alt="Zdravotný preukaz">' : foto ? '<button type="button" class="btn-link" data-zm="zd-ukaz">🖼 Zobraziť uloženú fotku</button>' : "") +
+      '<div class="f-akcie"><button class="btn btn-primary" type="submit"' + (ZD.prace ? " disabled" : "") + ">" + (ZD.prace ? "Ukladám…" : "💾 Uložiť preukaz") + "</button></div></form>";
+  }
+  function zmensiFotku(file) {
+    return new Promise(function (ok, chyba) {
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        var k = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement("canvas");
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        c.toBlob(function (b) { b ? ok(b) : chyba(new Error("Fotku sa nepodarilo spracovať")); }, "image/jpeg", 0.82);
+      };
+      img.onerror = function () { chyba(new Error("Súbor nie je obrázok")); };
+      img.src = url;
+    });
+  }
+  function ulozZdrav() {
+    var doD = document.getElementById("zm-zd-do").value, f = document.getElementById("zm-zd-foto").files[0], os = Z.osoba;
+    if (!doD) { lbzInfo("Zadaj dátum platnosti."); return; }
+    ZD.prace = true; prekresli();
+    var nahraj = f ? zmensiFotku(f).then(function (b) {
+      var cesta = os + "/zdrav_" + Date.now() + ".jpg";
+      return DB.storage.from("zamestnanci").upload(cesta, b, { contentType: "image/jpeg" }).then(function (r) { if (r.error) throw r.error; return cesta; });
+    }) : Promise.resolve(null);
+    nahraj.then(function (cesta) { return rpc("zam_zdrav_uloz", { p_osoba: os, p_do: doD, p_foto: cesta }); })
+      .then(function (r) { ZD.prace = false; ZD.foto = null; Z.sprava = { typ: r && r.ok ? "ok" : "chyba", text: (r && r.text) || "Chyba" }; otvor(os); nacitajZdrav(); })
+      .catch(function (x) { ZD.prace = false; Z.sprava = { typ: "chyba", text: chybaText(x) }; prekresli(); });
+  }
+  function kartaZdrav() {
+    var st = ZD.stav; if (!st) return "";
+    var m = st.moj;
+    if (st.spravca) {
+      var l = st.ludia || []; if (!l.length) return "";
+      var zle = l.filter(function (x) { return x.do && x.do < dnesIso(); }).length, chyba = l.filter(function (x) { return !x.do; }).length;
+      return '<section class="card zm-zdrav-karta"><h3>🩺 Zdravotné preukazy <span class="pill warn num">' + l.length + "</span></h3>" +
+        '<div class="rows">' + l.slice(0, 6).map(function (x) { return '<div class="row"><span>' + esc(x.meno) + "</span>" + zdravPill(x.do) + "</div>"; }).join("") + "</div>" +
+        (l.length > 6 ? '<p class="muted" style="margin:0">… a ďalší (' + (l.length - 6) + ")</p>" : "") +
+        '<p class="muted" style="margin:0">' + (zle ? zle + " prepadnutých · " : "") + (chyba ? chyba + " bez zadaného preukazu" : "") + "</p>" +
+        '<button class="btn" data-mod="zamestnanci">Otvoriť Ľudí</button></section>';
+    }
+    if (!m || !m.osoba_id) return "";
+    if (m.do && m.do >= plus30()) return "";
+    return '<section class="card zm-zdrav-karta"><h3>🩺 Zdravotný preukaz</h3>' + zdravPill(m.do) +
+      '<p class="muted" style="margin:0">' + (!m.do ? "Odfoť svoj platný zdravotný preukaz a zadaj dátum platnosti." : m.do < dnesIso() ? "Preukaz je prepadnutý – vybav si nový a nahraj ho." : "Preukaz čoskoro končí – vybav si obnovu.") + "</p>" +
+      '<button class="btn btn-primary" data-mod="zamestnanci">📷 Nahrať preukaz</button></section>';
   }
 
   // ---------- detail ----------
@@ -177,10 +249,88 @@
       (d.spravca ? ziadostiHtml((d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }), false) :
         (d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }).map(function (z) { return '<div class="card zm-caka">⏳ <b>Žiadosť o zmenu čaká na schválenie</b>' + zmenyHtml(z.zmeny, null) + "</div>"; }).join("") +
         (d.ziadosti || []).filter(function (z) { return z.stav !== "ziadost"; }).slice(0, 2).map(function (z) { return '<p class="muted zm-vybavena">' + (z.stav === "schvalena" ? "✅ Tvoja žiadosť o zmenu bola schválená" : "✖ Tvoja žiadosť o zmenu bola zamietnutá") + " (" + esc(datum(z.kedy)) + ")</p>"; }).join("")) +
+      zdravSekcia() + paSekcia() +
       '<div class="zm-sekcie">' + sekcie.map(sekciaHtml).join("") + "</div>" +
       (citatel() && (d.log || []).length ? '<details class="card zm-log"><summary>🕘 História zmien</summary><div class="rows">' + d.log.map(function (l) {
         return '<div class="row"><span>' + esc(new Date(l.kedy).toLocaleString("sk-SK", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })) + " · " + esc(l.kto || "") + '</span><span class="muted">' + esc((l.polia || []).join(", ")) + "</span></div>";
       }).join("") + "</div></details>" : "");
+  }
+
+  // ---------- nástupné dokumenty (skript „Formular prihlasenie“ cez Edge Function personalna) ----------
+  var PA = { osoba: null, stav: null, dialog: false, prace: false, vysledok: null };
+  var PA_TYPY = ["HPP – pracovná zmluva", "DoPČ – dohoda o pracovnej činnosti", "DoVP – dohoda o vykonaní práce", "DoBPŠ – dohoda o brigádnickej práci študentov"];
+  var PA_OKRESY = ["603 - Brezno", "601 - Banská Bystrica", "609 - Rimavská Sobota", "608 - Revúca", "611 - Zvolen", "604 - Detva", "606 - Lučenec", "607 - Poltár", "610 - Veľký Krtíš", "613 - Žiar nad Hronom", "612 - Žarnovica", "602 - Banská Štiavnica", "605 - Krupina"];
+  var PA_DOCHODOK = ["Starobný", "Predčasný starobný", "Invalidný", "Výsluhový", "Iný"];
+  function paTyp(t) { return { "TPP": PA_TYPY[0], "DPČ": PA_TYPY[1], "DoVP": PA_TYPY[2], "DoBPŠ": PA_TYPY[3], "Študent": PA_TYPY[3] }[t] || ""; }
+  function paVolaj(akcia, extra) {
+    return DB.functions.invoke("personalna", { body: { akcia: akcia, osoba_id: Z.osoba, extra: extra || null } }).then(function (r) {
+      if (r.error) { var c = r.error.context; return c && c.json ? c.json().catch(function () { throw r.error; }) : Promise.reject(r.error); }
+      return r.data;
+    });
+  }
+  function paNacitajStav() {
+    var os = Z.osoba; PA.osoba = os; PA.stav = { nacitavam: true };
+    paVolaj("stav").then(function (r) { if (PA.osoba === os) { PA.stav = r || { ok: false, text: "Bez odpovede" }; kresli(); } })
+      .catch(function (x) { if (PA.osoba === os) { PA.stav = { ok: false, text: chybaText(x) }; kresli(); } });
+  }
+  function paSekcia() {
+    var d = Z.detail; if (!d || !d.spravca) return "";
+    if (PA.osoba !== Z.osoba) { PA.vysledok = null; paNacitajStav(); }
+    var st = PA.stav || {}, z = d.z || {}, url = st.priecinok || z.dokumenty_url, v = PA.vysledok;
+    var info = st.nacitavam ? '<span class="muted">Zisťujem stav v tabuľke…</span>'
+      : st.row ? "<span>V tabuľke (riadok " + esc(st.row) + "): <b>" + esc(st.stav || "zatiaľ negenerované") + "</b></span>"
+      : st.ok === false ? '<span class="zm-chyba-pol">' + esc(st.text || "Skript nedostupný") + "</span>"
+      : '<span class="muted">V tabuľke ešte nie je – dokumenty sa zatiaľ negenerovali.</span>';
+    return '<section class="card zm-sekcia zm-pa"><div class="zm-s-hl"><h3>📄 Nástupné dokumenty</h3></div>' +
+      '<p class="muted" style="margin:0">Zmluva / dohoda + prílohy (GDPR, NČZD, výnimka…), MRP XML a PDF pre mzdárku. Vytvára ich skript v Personálnej agende podľa údajov z appky a pošle e-maily.</p>' +
+      '<p style="margin:0">' + info + "</p>" +
+      (v ? '<div class="f-sprava f-' + (v.ok ? "ok" : "chyba") + '">' + esc(v.ok ? "✅ " + (v.stav || "Hotovo") + (v.stav && /^Hotovo/.test(v.stav) ? " – dokumenty sú v priečinku, e-mail s kontrolným zoznamom ti prišiel." : "") : (v.chyby && v.chyby.length ? "Dokumenty sa nevygenerovali, oprav:" : (v.text || v.stav || "Chyba"))) +
+        (v.chyby && v.chyby.length ? '<ul class="zm-zmeny">' + v.chyby.map(function (c) { return "<li>" + esc(c) + "</li>"; }).join("") + "</ul>" : "") + "</div>" : "") +
+      '<div class="f-akcie"><button class="btn btn-primary" type="button" data-zm="pa-dialog"' + (PA.prace ? " disabled" : "") + ">" + (PA.prace ? "Pracujem… (do 1 min)" : "📄 Vygenerovať dokumenty") + "</button>" +
+      (url ? '<a class="btn" href="' + esc(url) + '" target="_blank" rel="noopener">📁 Priečinok</a>' : "") +
+      (st.row && url ? '<button class="btn" type="button" data-zm="pa-mzdarke"' + (PA.prace ? " disabled" : "") + ">📧 Poslať mzdárke</button>" : "") + "</div></section>";
+  }
+  function dialogDok() {
+    if (!PA.dialog || !Z.detail) return "";
+    var z = Z.detail.z || {}, typ = paTyp(z.typ_vztahu), hpp = /^HPP/.test(typ);
+    var opt = function (zoz, sel) { return zoz.map(function (t) { return "<option" + (t === sel ? " selected" : "") + ">" + esc(t) + "</option>"; }).join(""); };
+    return '<div class="f-dialog-pozadie" data-zm="pa-zavri"></div><div class="f-dialog" role="dialog" aria-modal="true"><form class="f-form" id="zm-pa-form"><h3>📄 Vygenerovať nástupné dokumenty</h3>' +
+      '<p class="muted" style="margin:0;font-size:13px">Osobné a pracovné údaje sa vezmú z karty zamestnanca. Tu doplň, čo sa v appke neukladá (mzda sa v appke neukladá – zapíše sa len do tabuľky Personálnej agendy).</p>' +
+      '<div class="d-riadok"><label class="field"><span class="label">Typ vzťahu</span><select id="pa-typ" required><option></option>' + opt(PA_TYPY, typ) + "</select></label>" +
+      '<label class="field"><span class="label">Okres trvalého pobytu</span><input id="pa-okres" list="pa-okresy" placeholder="napr. 603 - Brezno"><datalist id="pa-okresy">' + opt(PA_OKRESY) + "</datalist></label></div>" +
+      '<div class="d-riadok"><label class="field"><span class="label">Mzda / odmena (EUR brutto)</span><input id="pa-mzda" inputmode="decimal" required autocomplete="off"></label>' +
+      '<label class="field"><span class="label">Odmena za</span><select id="pa-jedn">' + opt(["mesačne", "za hodinu"], hpp ? "mesačne" : "za hodinu") + "</select></label></div>" +
+      '<div class="d-riadok"><label class="field"><span class="label">Výplata</span><select id="pa-vyplata">' + opt(["na účet", "v hotovosti"], "na účet") + "</select></label>" +
+      '<label class="field"><span class="label">Pracovný čas</span><select id="pa-prac">' + opt(["pevný pracovný čas", "pružný pracovný čas"], /pruž/i.test(z.pracovny_cas || "") ? "pružný pracovný čas" : "pevný pracovný čas") + "</select></label></div>" +
+      '<div class="d-riadok"><label class="field"><span class="label">Čas od</span><input id="pa-od" value="06.00"></label><label class="field"><span class="label">Čas do</span><input id="pa-do" value="22.00"></label></div>' +
+      '<div class="d-riadok"><label class="field"><span class="label">Dátum podpisu</span><input id="pa-podpis" type="date" value="' + esc(z.nastup && z.nastup >= dnesIso() ? String(z.nastup).slice(0, 10) : dnesIso()) + '"></label>' +
+      '<label class="field"><span class="label">Miesto podpisu</span><input id="pa-miesto" value="Pohronskej Polhore"></label></div>' +
+      (z.dochodca ? '<div class="d-riadok"><label class="field"><span class="label">Druh dôchodku</span><select id="pa-doch">' + opt(PA_DOCHODOK, "Starobný") + '</select></label><label class="field"><span class="label">Dôchodok priznaný od</span><input id="pa-doch-od"></label></div>' : "") +
+      (z.ine_zamestnanie ? '<label class="field"><span class="label">Iné zamestnanie</span><select id="pa-ine">' + opt(["Áno – iné zamestnanie", "Áno – SZČO", "Áno – poistenec štátu (napr. rodičovský príspevok, študent)"]) + "</select></label>" : "") +
+      '<label class="k-prepinac"><input type="checkbox" id="pa-bez"> <span>Zamestnancovi zatiaľ nič neposielať (dokumenty len do Disku)</span></label>' +
+      (z.nastup ? "" : '<p class="zm-chyba-pol" style="margin:0">Chýba deň nástupu v Pracovnom pomere.</p>') + (z.pozicia ? "" : '<p class="zm-chyba-pol" style="margin:0">Chýba pozícia v Pracovnom pomere.</p>') +
+      '<div class="f-akcie"><button class="btn btn-primary" type="submit">📄 Vygenerovať</button><button class="btn" type="button" data-zm="pa-zavri">Zrušiť</button></div></form></div>';
+  }
+  function paGeneruj() {
+    var g = function (id) { var el = document.getElementById(id); return el ? (el.type === "checkbox" ? el.checked : el.value.trim()) : ""; };
+    var x = { TYP_VZTAHU: g("pa-typ"), OKRES: g("pa-okres"), MZDA: g("pa-mzda"), ODMENA_JEDNOTKA: g("pa-jedn"), VYPLATA: g("pa-vyplata"), PRAC_CAS: g("pa-prac"),
+      CAS_OD: g("pa-od"), CAS_DO: g("pa-do"), DATUM_PODPISU: g("pa-podpis"), MIESTO_PODPISU: g("pa-miesto"), DOCHODOK: g("pa-doch"), DOCHODOK_OD: g("pa-doch-od"),
+      INE_ZAMESTNANIE: g("pa-ine"), BEZ_EMAILU: g("pa-bez") };
+    if (!x.TYP_VZTAHU || !x.MZDA) { lbzInfo("Vyplň typ vzťahu a mzdu."); return; }
+    var os = Z.osoba;
+    PA.dialog = false; PA.prace = true; PA.vysledok = null; prekresli();
+    paVolaj("generuj", x).then(function (r) {
+      PA.prace = false; if (PA.osoba !== os) return;
+      PA.vysledok = r || { ok: false, text: "Bez odpovede" };
+      if (r && r.row) PA.stav = r;
+      if (r && r.ok) otvor(os); else kresli();
+    }).catch(function (e) { PA.prace = false; PA.vysledok = { ok: false, text: chybaText(e) }; kresli(); });
+  }
+  function paMzdarke() {
+    if (!lbzPotvrd("Poslať mzdárke MRP XML a PDF podklady e-mailom?")) return;
+    var os = Z.osoba; PA.prace = true; prekresli();
+    paVolaj("mzdarke").then(function (r) { PA.prace = false; if (PA.osoba !== os) return; PA.vysledok = r && r.ok ? { ok: true, stav: "odoslané mzdárke" } : (r || { ok: false, text: "Chyba" }); if (r && r.row) PA.stav = r; kresli(); })
+      .catch(function (e) { PA.prace = false; PA.vysledok = { ok: false, text: chybaText(e) }; kresli(); });
   }
 
   function dialogNovy() {
@@ -201,7 +351,7 @@
     var y = window.scrollY, fok = document.activeElement && document.activeElement.id;
     koren.innerHTML = '<div class="zm-modul">' + (Z.osoba == null ? '<div class="head"><div><h2>Zamestnanci</h2><div class="sub">' + (Z.zoznam ? Z.zoznam.filter(function (x) { return x.stav !== "ukonceny" && x.aktivny; }).length + " aktívnych" : "") + "</div></div></div>" : "") +
       (Z.sprava ? '<p class="f-sprava f-' + Z.sprava.typ + '">' + esc(Z.sprava.text) + ' <button class="btn-link" data-zm="zavri-spravu">✕</button></p>' : "") +
-      (Z.osoba == null ? pohladZoznam() : pohladDetail()) + "</div>" + dialogNovy();
+      (Z.osoba == null ? pohladZoznam() : pohladDetail()) + "</div>" + dialogNovy() + dialogDok();
     if (fok === "zm-hladaj") { var h = document.getElementById("zm-hladaj"); if (h) { h.focus(); h.setSelectionRange(h.value.length, h.value.length); } }
     window.scrollTo(0, y);
   }
@@ -228,6 +378,13 @@
     else if (a === "novy") { Z.novy = true; prekresli(); var m = document.getElementById("zm-n-meno"); if (m) m.focus(); }
     else if (a === "zavri-novy") { Z.novy = false; prekresli(); }
     else if (a === "zavri-spravu") { Z.sprava = null; prekresli(); }
+    else if (a === "pa-dialog") { PA.dialog = true; prekresli(); var m = document.getElementById("pa-mzda"); if (m) m.focus(); }
+    else if (a === "pa-zavri") { PA.dialog = false; prekresli(); }
+    else if (a === "pa-mzdarke") paMzdarke();
+    else if (a === "zd-ukaz") {
+      rpc("zam_zdrav_foto", { p_osoba: Z.osoba }).then(function (c) { if (!c) return; return DB.storage.from("zamestnanci").createSignedUrl(c, 300); })
+        .then(function (r) { if (r && r.data) { ZD.foto = r.data.signedUrl; prekresli(); } }).catch(function (x) { lbzInfo(chybaText(x)); });
+    }
     else if (a === "potvrd") {
       var s = document.getElementById("zm-suhlas");
       if (!s || !s.checked) { lbzInfo("Najprv zaškrtni súhlas so spracúvaním osobných údajov."); return; }
@@ -236,6 +393,8 @@
     }
   }
   function odoslanie(e) {
+    if (e.target.id === "zm-zdrav-form") { e.preventDefault(); ulozZdrav(); return; }
+    if (e.target.id === "zm-pa-form") { e.preventDefault(); paGeneruj(); return; }
     if (e.target.id === "zm-form") {
       e.preventDefault();
       var p = { osoba_id: Z.osoba, z: {}, c: {} };
@@ -262,10 +421,14 @@
         }).catch(function (x) { lbzInfo(chybaText(x)); });
     }
   }
-  function vstupEv(e) { if (e.target.id === "zm-hladaj") { Z.hladaj = e.target.value; prekresli(); } }
+  function vstupEv(e) {
+    if (e.target.id === "zm-hladaj") { Z.hladaj = e.target.value; prekresli(); }
+    if (e.target.id === "pa-typ") { var j = document.getElementById("pa-jedn"); if (j) j.value = /^HPP/.test(e.target.value) ? "mesačne" : "za hodinu"; }
+  }
 
   window.LBZ_ZAMESTNANCI = {
-    nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; Z.zoznam = null; Z.detail = null; Z.osoba = null; },
+    nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; Z.zoznam = null; Z.detail = null; Z.osoba = null; PA.osoba = null; PA.stav = null; PA.vysledok = null; PA.dialog = false; ZD.stav = null; ZD.foto = null; if (DB && this.mozem()) nacitajZdrav(); },
+    karta: function () { return kartaZdrav(); },
     mozem: function () { return !!DB && ["it", "ceo", "uctovnicka", "zamestnanec"].indexOf(ROLA) > -1; },
     mount: function (el) {
       koren = el;

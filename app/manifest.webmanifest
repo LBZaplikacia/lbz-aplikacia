@@ -44,7 +44,7 @@
     {
       "name": "Vybaviť – nová poznámka",
       "short_name": "Vybaviť",
-      "url": "/?m=prehlad&akcia=vybavit",
+      "url": "/vybavit.html",
       "icons": [
         {
           "src": "icons/icon-192.png",

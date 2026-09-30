@@ -28,12 +28,21 @@
       return '<li class="v-pol' + (x.hotovo ? " v-hotovo" : "") + '"><button class="v-krug" data-v-hotovo="' + x.id + '" data-v-stav="' + (x.hotovo ? "0" : "1") + '" aria-label="' + (x.hotovo ? "Vrátiť" : "Hotovo") + '">' + (x.hotovo ? "✓" : "") + "</button>" +
         '<span class="v-text">' + esc(x.text) + '</span><button class="v-zmaz" data-v-zmaz="' + x.id + '" aria-label="Zmazať">✕</button></li>';
     };
-    return '<section class="card v-karta"><h3>📝 Vybaviť' + (otvorene.length ? ' <span class="pill info num">' + otvorene.length + "</span>" : "") + "</h3>" +
-      (V.chyba ? '<p class="muted">' + esc(V.chyba) + "</p>" : z == null ? '<p class="muted">Načítavam…</p>' :
+    return '<section class="card v-karta"><h3>📝 Vybaviť' + (otvorene.length ? ' <span class="pill info num">' + otvorene.length + "</span>" : "") + "</h3>" + obsah() + "</section>";
+  }
+  function pocet() { return (V.zoznam || []).filter(function (x) { return !x.hotovo; }).length; }
+  function obsah() {
+    var z = V.zoznam;
+    var otvorene = (z || []).filter(function (x) { return !x.hotovo; }), hotove = (z || []).filter(function (x) { return x.hotovo; });
+    var polozka = function (x) {
+      return '<li class="v-pol' + (x.hotovo ? " v-hotovo" : "") + '"><button class="v-krug" data-v-hotovo="' + x.id + '" data-v-stav="' + (x.hotovo ? "0" : "1") + '" aria-label="' + (x.hotovo ? "Vrátiť" : "Hotovo") + '">' + (x.hotovo ? "✓" : "") + "</button>" +
+        '<span class="v-text">' + esc(x.text) + '</span><button class="v-zmaz" data-v-zmaz="' + x.id + '" aria-label="Zmazať">✕</button></li>';
+    };
+    return (V.chyba ? '<p class="muted">' + esc(V.chyba) + "</p>" : z == null ? '<p class="muted">Načítavam…</p>' :
         '<ul class="v-zoznam">' + otvorene.map(polozka).join("") + "</ul>" +
         (!otvorene.length ? '<p class="muted v-prazdne">Nič nečaká. 🎉</p>' : "") +
         (hotove.length ? '<details class="v-hotove"><summary>Hotové (' + hotove.length + ")</summary><ul class=\"v-zoznam\">" + hotove.map(polozka).join("") + "</ul></details>" : "")) +
-      '<form class="v-nova" id="v-nova"><input id="v-text" maxlength="500" placeholder="Pridať úlohu alebo poznámku…" autocomplete="off" enterkeyhint="done"><button class="btn btn-primary" type="submit" aria-label="Pridať">＋</button></form></section>';
+      '<form class="v-nova" id="v-nova"><input id="v-text" maxlength="500" placeholder="Pridať úlohu alebo poznámku…" autocomplete="off" enterkeyhint="done"><button class="btn btn-primary" type="submit" aria-label="Pridať">＋</button></form>';
   }
 
   document.addEventListener("click", function (e) {
@@ -50,6 +59,8 @@
 
   window.LBZ_VYBAVIT = {
     nastavDb: function (klient, rola) { DB = klient && rola !== "zakaznik" ? klient : null; ROLA = rola; V.zoznam = null; if (DB) nacitaj(); },
-    karta: karta
+    karta: karta,
+    obsah: function () { return DB ? obsah() : ""; },
+    pocet: pocet
   };
 })();

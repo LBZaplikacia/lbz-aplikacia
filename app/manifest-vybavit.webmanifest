@@ -1,0 +1,38 @@
+{
+  "id": "/vybavit",
+  "name": "Vybaviť – LBZ",
+  "short_name": "Vybaviť",
+  "description": "Úlohy a poznámky Legendárne buchty",
+  "start_url": "/vybavit.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf7f1",
+  "theme_color": "#583934",
+  "lang": "sk",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

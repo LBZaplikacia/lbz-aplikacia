@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.20.0 BETA";
+  var VERZIA = "0.22.0 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -135,21 +135,21 @@
   if (location.search) try { history.replaceState(null, "", location.pathname); } catch (e) {}
   // poradie kariet na Prehľade podľa roly (každý si ho môže upraviť – uloží sa v zariadení)
   var PORADIE = {
-    it: ["dochadzka", "ulohy", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
-    ceo: ["dochadzka", "ulohy", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
+    it: ["dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
+    ceo: ["dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
     prevadzkar: ["dochadzka", "ulohy", "rozpis", "vybavit", "sklad", "balenie", "furmanky", "kniha"],
-    zamestnanec: ["dochadzka", "ulohy", "furmanky", "rozpis", "vybavit"],
+    zamestnanec: ["dochadzka", "zdrav", "ulohy", "furmanky", "rozpis", "vybavit"],
     prevadzka: ["ulohy", "dochadzka", "sklad", "balenie", "furmanky", "vybavit"],
     furman: ["dochadzka", "rozpis", "trasa", "vybavit", "ulohy", "kniha"],
     majitelka_arealu: ["kniha", "vybavit"]
   };
-  var NAZVY_KARIET = { dochadzka: "🕒 Príchod a smeny", ulohy: "✅ Úlohy", vybavit: "📝 Vybaviť", kniha: "🚗 Kniha jázd", rozpis: "📅 Kto je v práci", furmanky: "🚚 Furmanky",
+  var NAZVY_KARIET = { dochadzka: "🕒 Príchod a smeny", ulohy: "✅ Úlohy a Vybaviť", zdrav: "🩺 Zdravotné preukazy", vybavit: "📝 Vybaviť", kniha: "🚗 Kniha jázd", rozpis: "📅 Kto je v práci", furmanky: "🚚 Furmanky",
     sklad: "🧊 Sklad", balenie: "📦 Balenie", trasa: "🗺️ Trasa" };
   var ZAM = window.LBZ_ZAMESTNANCI || null;
 
   var stav = {
     pouzivatel: null, email: null, rola: null,
-    modul: START_M || (window.lbzPamat && lbzPamat.nacitaj("modul")) || "prehlad",
+    modul: window.LBZ_REZIM ? "prehlad" : START_M || (window.lbzPamat && lbzPamat.nacitaj("modul")) || "prehlad",
     dbModuly: null,          // moduly z databázy (ostrý režim)
     login: "prihlasenie",    // prihlasenie | zabudnute | nove_heslo
     sprava: null,            // { typ: ok|chyba, text }
@@ -306,6 +306,12 @@
   }
 
   function renderApp() {
+    if (window.LBZ_REZIM === "vybavit") {   // samostatná mini-appka „Vybaviť“ (vlastná ikona na ploche / okno na PC)
+      document.title = "Vybaviť – LBZ";
+      el('<div class="rezim-vybavit"><main class="main">' + (ULO ? ULO.karta() : VYB ? VYB.karta() : "") +
+        '<a class="btn-link rv-appka" href="./">Otvoriť celú aplikáciu LBZ →</a></main></div>');
+      return;
+    }
     var moduly = mojeModuly();
     // neznámy modul → Prehľad (v ostrom režime až keď sú načítané moduly z databázy, inak by sa pri štarte stratilo, kde bol)
     if ((!OSTRY || stav.dbModuly) && !moduly.some(function (m) { return m.kod === stav.modul; })) stav.modul = "prehlad";
@@ -400,11 +406,12 @@
       if (ULO) kh.ulohy = ULO.karta();
       if (kody.indexOf("sklad") > -1) kh.sklad = kartaSklad();
       if (kody.indexOf("rozpis") > -1 && rozpisZapnuty()) kh.rozpis = ROZ.karta();
-      if (VYB && r !== "majitelka_arealu") kh.vybavit = VYB.karta();
+      if (VYB && !ULO && r !== "majitelka_arealu") kh.vybavit = VYB.karta();   // Vybaviť je súčasťou karty Úlohy
       if (kody.indexOf("furmanky") > -1) kh.furmanky = kartaFurmanky();
       if (kody.indexOf("balenie") > -1 && balenieZapnute()) kh.balenie = BAL.karta();
       if (kody.indexOf("trasa") > -1 && trasaZapnuta()) kh.trasa = TRA.karta();
       if (knihaZapnuta()) kh.kniha = KNIHA.karta();
+      if (zamZapnute() && ZAM.karta) kh.zdrav = ZAM.karta();
       var por = poradieKariet(Object.keys(kh).filter(function (k) { return kh[k]; }));
       var karty = por.viditelne.map(function (k) { return kh[k]; });
       var dnes = new Date().toLocaleDateString("sk-SK", { weekday: "long", day: "numeric", month: "numeric" });
@@ -424,6 +431,8 @@
           '<label class="field"><span class="label">Nové heslo ešte raz</span><input id="in-heslo2" type="password" autocomplete="new-password" minlength="6" required></label>' +
           spravaHtml() +
           '<button class="btn btn-primary" type="submit">Uložiť nové heslo</button></form>' : "") +
+        '<section class="card" style="max-width:520px"><h3>📲 Samostatné appky</h3><p class="muted" style="margin:0">Vybaviť si môžete nainštalovať ako samostatnú malú appku – na PC ako okno, ktoré ostane otvorené, v mobile ako vlastnú ikonu.</p>' +
+          '<a class="btn" href="vybavit.html?instal=1">📝 Otvoriť / nainštalovať Vybaviť</a></section>' +
         (OSTRY && spravca() ? kartaPouzivatelia() : "") +
         '<button class="btn" id="btn-odhlasit-m" style="max-width:520px">Odhlásiť sa</button>';
     }
