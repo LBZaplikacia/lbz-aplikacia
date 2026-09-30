@@ -14,6 +14,7 @@ const START = "Sedlo Zbojská, 976 56 Pohronská Polhora";
 const REGIONY = ["Stredná", "Západná", "Južná", "Prešovská", "Košická", "Severná"];
 const SLOTY = [[6, 0], [11, 30], [14, 0]];          // kedy beží plánované sťahovanie (miestny čas)
 const SLOT_OKNO_MIN = 25;
+const PRIEBEZNE = [6, 21];                        // od–do (hod.) priebežná kontrola zmien každých 30 min
 const PAUZA_MIN = 3;                               // ochrana pred opakovaným klikaním
 const MAX_HODIN = 11.75;
 const DNI_SPAT = 60;
@@ -447,7 +448,7 @@ Deno.serve(async (req) => {
     // číselníky z Upgates: stavy, dopravy, platby (3 požiadavky)
     if (akcia === "ciselniky") {
       const nazov = (x: any) => String(x.name || x.title || (x.descriptions && x.descriptions[0] && (x.descriptions[0].name || x.descriptions[0].title)) || "").trim();
-      const stavy = ((await upgatesGet("/order-statuses")).order_statuses || []).map((x: any) => ({ kod: String(x.id), nazov: nazov(x), data: { type: x.type, mark_paid_yn: x.mark_paid_yn, mark_delivered_yn: x.mark_delivered_yn } }));
+      const stavy = ((await upgatesGet("/order-statuses")).order_statuses || []).map((x: any) => ({ kod: String(x.id), nazov: nazov(x), data: { type: x.type, farba: x.color || null, mark_paid_yn: x.mark_paid_yn, mark_delivered_yn: x.mark_delivered_yn } }));
       const dopravy = ((await upgatesGet("/shipments")).shipments || []).map((x: any) => ({ kod: String(x.code || x.id), nazov: nazov(x), data: { id: x.id, type: x.type } }));
       const platby = ((await upgatesGet("/payments")).payments || []).map((x: any) => ({ kod: String(x.code || x.id), nazov: nazov(x), data: { id: x.id, type: x.type } }));
       const n = [await rpc("obj_ciselnik_uloz", { p_typ: "stav", p: stavy }), await rpc("obj_ciselnik_uloz", { p_typ: "doprava", p: dopravy }), await rpc("obj_ciselnik_uloz", { p_typ: "platba", p: platby })];
@@ -561,7 +562,9 @@ Deno.serve(async (req) => {
     const beh = await rpc("furmanky_posledny_beh", {});
     const posledny = beh && beh.posledny_ok ? new Date(beh.posledny_ok) : null;
     if (typ === "auto") {
-      if (!slot && !body.vzdy) return odpoved({ ok: true, text: "Mimo času sťahovania – nič sa nerobí" });
+      // medzi plánovanými časmi beží každých 30 min len rýchla kontrola ZMENENÝCH objednávok (šetrí API limit Upgates)
+      const hod = miestne(teraz).hod;
+      if (!slot && !body.vzdy && (hod < PRIEBEZNE[0] || hod >= PRIEBEZNE[1])) return odpoved({ ok: true, text: "Mimo času sťahovania – nič sa nerobí" });
       if (posledny && teraz.getTime() - posledny.getTime() < SLOT_OKNO_MIN * 60000 && beh.posledny && beh.posledny.typ === "auto") {
         return odpoved({ ok: true, text: "V tomto čase už stiahnuté" });
       }
