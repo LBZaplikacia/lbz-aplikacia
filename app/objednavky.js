@@ -8,7 +8,7 @@
 (function () {
   "use strict";
   var DB = null, ROLA = null, koren = null;
-  var O = { zoznam: null, filter: { hladaj: "", stav: "", osobny: false }, detail: null, cislo: null, uprava: null, sprava: null, prace: false, produkty: null, nova: null, odbery: null };
+  var O = { zoznam: null, filter: { hladaj: "", stav: "", doprava: "", platba: "", osobny: false }, detail: null, cislo: null, uprava: null, sprava: null, prace: false, produkty: null, nova: null, odbery: null };
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function rpc(n, a) { return DB.rpc(n, a || {}).then(function (r) { if (r.error) throw r.error; return r.data; }); }
@@ -29,7 +29,7 @@
   function nacitaj() {
     if (!DB) return;
     O.prace = true; kresli();
-    rpc("obj_zoznam", { p: { hladaj: O.filter.hladaj, stav: O.filter.stav, osobny: O.filter.osobny } }).then(function (d) {
+    rpc("obj_zoznam", { p: { hladaj: O.filter.hladaj, stav: O.filter.stav, doprava: O.filter.doprava, platba: O.filter.platba, osobny: O.filter.osobny } }).then(function (d) {
       O.prace = false; O.zoznam = d && d.ok ? d : { ok: false, text: (d && d.text) || "Nenačítané" }; kresli();
     }).catch(function (e) { O.prace = false; O.zoznam = { ok: false, text: chyba(e) }; kresli(); });
   }
@@ -59,10 +59,12 @@
   function zoznamHtml() {
     var Z = O.zoznam || {}, obj = Z.objednavky || [];
     var stavy = (Z.stavy || []).slice().sort();
+    function vyber(meno, prazdne, zoz) { return '<select name="' + meno + '" class="r-select"><option value="">' + prazdne + "</option>" + (zoz || []).slice().sort().map(function (s) { return '<option' + (s === O.filter[meno] ? " selected" : "") + ">" + esc(s) + "</option>"; }).join("") + "</select>"; }
     var h = '<div class="head"><div><h2>Objednávky</h2><div class="sub">' + (Z.ok ? rezimPill(Z.ostry) : "") + (O.prace ? " · načítavam…" : "") + "</div></div>" +
       '<span class="head-tl"><button class="btn btn-primary" data-o="nova">+ Nová objednávka</button></span></div>' + spravaHtml();
     h += '<section class="card o-filtre"><form id="o-hladaj" class="o-riadok"><input name="hladaj" type="search" placeholder="Hľadať: meno, telefón, e-mail, číslo" value="' + esc(O.filter.hladaj) + '">' +
       '<select name="stav" class="r-select"><option value="">Všetky stavy</option>' + stavy.map(function (s) { return '<option' + (s === O.filter.stav ? " selected" : "") + ">" + esc(s) + "</option>"; }).join("") + "</select>" +
+      vyber("doprava", "Všetky dopravy", Z.dopravy) + vyber("platba", "Všetky platby", Z.platby) +
       '<label class="f-check"><input type="checkbox" name="osobny"' + (O.filter.osobny ? " checked" : "") + "> len osobný odber</label>" +
       '<button class="btn" type="submit">Hľadať</button></form>' +
       '<div class="o-riadok o-akcie"><button class="btn r-mini" data-o="obnovit">🔄 Stiahnuť z Upgates</button>' +
@@ -198,6 +200,8 @@
     return rpc("obj_ciselniky").then(function (d) { O.cis = { dopravy: (d && d.dopravy) || [], platby: (d && d.platby) || [] }; return O.cis; });
   }
   function zmena(e) {
+    var fh = e.target.form;
+    if (fh && fh.id === "o-hladaj" && (e.target.tagName === "SELECT" || e.target.type === "checkbox")) { odoslanie({ target: fh, preventDefault: function () {} }); return; }
     if (e.target.id === "o-pridaj" && e.target.value) {
       var p = (O.produkty || []).filter(function (x) { return x.kod === e.target.value; })[0];
       var f = koren.querySelector("#o-form"); citajFormular(f);
@@ -210,7 +214,7 @@
     var f = e.target;
     if (f.id === "o-hladaj") {
       e.preventDefault();
-      O.filter = { hladaj: f.elements.hladaj.value.trim(), stav: f.elements.stav.value, osobny: f.elements.osobny.checked };
+      O.filter = { hladaj: f.elements.hladaj.value.trim(), stav: f.elements.stav.value, doprava: f.elements.doprava.value, platba: f.elements.platba.value, osobny: f.elements.osobny.checked };
       nacitaj(); return;
     }
     if (f.id === "o-stav") {
