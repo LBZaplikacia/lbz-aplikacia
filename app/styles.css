@@ -1334,3 +1334,6 @@ body.pdfv-otvorene { overflow: hidden; }
 .chat-pis textarea { min-width: 0; }
 .chat-pis .chat-posli, .chat-pis .chat-priloha-tl { flex: none; }
 @media (max-width: 420px) { .chat-mic { width: 40px; height: 40px; font-size: 18px; } .chat-pis { gap: 6px; padding: 8px; } }
+/* v0.28.2 – zoznam objednávok späť ako karty; doprava farebne v karte */
+.o-pol-h .o-dp { font-size: 12px; padding: 2px 8px; vertical-align: middle; }
+.o-dalsie { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; padding-top: 6px; }
