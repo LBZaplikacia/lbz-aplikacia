@@ -91,6 +91,28 @@ async function stiahniObjednavky(odZmeny: string | null) {
   return vsetky;
 }
 
+// Doklady (faktúry, dobropisy, účtenky) – len čítanie z Upgates
+function prevedDoklad(d: any) {
+  return { cislo: String(d.invoice_number || "").trim(), typ: String(d.type || "invoice"), objednavka: String(d.order_number || "").trim(),
+    suvisiaci: d.related_invoice_number || null, vystavena: d.date_of_issuance || null, splatnost: d.date_of_expiration || null,
+    zaplatena: d.paid_date || null, zaplatene: !!d.paid_yn, suma: d.total_with_vat ?? null, zvysok: d.total_rest ?? null,
+    pdf: d.invoice_pdf_url || null, vytvorene: d.creation_time || null };
+}
+async function stiahniDoklady(od: string, odZmeny: string | null, maxStran = 40) {
+  let q = "creation_time_from=" + encodeURIComponent(od);
+  if (odZmeny) q += "&last_update_time_from=" + encodeURIComponent(odZmeny);
+  const vsetky: any[] = [];
+  for (let page = 1; page <= maxStran; page++) {
+    const data = await upgatesGet("/invoices?" + q + "&page=" + page);
+    const d = (data && data.invoices) || [];
+    vsetky.push(...d);
+    const stran = Number(data && data.number_of_pages) || 0;
+    if (!d.length || (stran && page >= stran)) break;
+    await sleep(500);
+  }
+  return vsetky.map(prevedDoklad).filter((x) => x.cislo);
+}
+
 // Objednávka z Upgates → riadok pre databázu (rovnaké pravidlá ako skript „Objednavky eshop“)
 export function prevedObjednavku(o: any) {
   const c = o.customer || {};
@@ -471,6 +493,35 @@ Deno.serve(async (req) => {
       const res = await rpc("obj_import_historia", { p_obj: vsetky.map(prevedObjednavku) });
       return odpoved({ ok: true, text: "Z Upgates prenesené staršie objednávky: " + (res && res.nove) + " nových (stiahnutých " + vsetky.length + ")" + (strana ? " – pokračuje sa od strany " + strana : ""), dalsia_strana: strana || null });
     }
+    // doklady za obdobie (jednorazovo celý rok) – len čítanie
+    if (akcia === "doklady") {
+      const od = String(body.od || "2026-01-01").slice(0, 10) + "T00:00:00";
+      const d = await stiahniDoklady(od, null, Math.min(Number(body.stran) || 40, 60));
+      const n = d.length ? await rpc("obj_doklady_uloz", { p: d }) : 0;
+      return odpoved({ ok: true, text: "Z Upgates načítané doklady: " + n, pocet: n });
+    }
+    // vystaviť dobropis v Upgates (pred Storno) – len v ostrom režime, 2 požiadavky
+    if (akcia === "vystav_dobropis") {
+      const cislo = String(body.cislo || "").trim();
+      if (!cislo) return odpoved({ ok: false, text: "Chýba číslo objednávky" });
+      if (!(await rpc("obj_ostry", {}))) return odpoved({ ok: false, text: "Testovací režim – dobropis sa v Upgates nevystavil" });
+      const auth = btoa((Deno.env.get("UPGATES_LOGIN") || "") + ":" + (Deno.env.get("UPGATES_KEY") || ""));
+      const r = await fetch(UPGATES_URL + "/orders", { method: "PUT", headers: { Authorization: "Basic " + auth, "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ send_emails_yn: false, send_sms_yn: false, orders: [{ order_number: cislo, credit_note: { generate_yn: true } }] }) });
+      const t = await r.text(); let j: any = null; try { j = JSON.parse(t); } catch (_) { /* text */ }
+      const o = j && (Array.isArray(j.orders) ? j.orders[0] : j.orders);
+      if (!r.ok || !o || !o.updated_yn) {
+        const msg = o && o.messages ? o.messages.map((m: any) => m.message || m.text || JSON.stringify(m)).join("; ") : t.slice(0, 200);
+        return odpoved({ ok: false, text: "Dobropis sa nevystavil: " + msg });
+      }
+      await sleep(800);
+      const data = await upgatesGet("/invoices?order_number=" + encodeURIComponent(cislo));
+      const d = ((data && data.invoices) || []).map(prevedDoklad).filter((x: any) => x.cislo);
+      if (d.length) await rpc("obj_doklady_uloz", { p: d });
+      const dob = d.find((x: any) => /credit/i.test(x.typ));
+      await rpc("obj_zapis_log_s", { p_cislo: cislo, p_text: dob ? "dobropis vystavený v Upgates: " + dob.cislo : "dobropis vyžiadaný v Upgates, číslo zatiaľ nenájdené" }).catch(() => null);
+      return odpoved({ ok: !!dob, dobropis: dob ? dob.cislo : null, text: dob ? "Dobropis " + dob.cislo + " vystavený v Upgates" : "Upgates dobropis nevrátil – skontrolujte v Upgates" });
+    }
     // je k objednávke vystavený dobropis? (1 požiadavka)
     if (akcia === "dobropis") {
       const cislo = String(body.cislo || "").trim();
@@ -609,6 +660,12 @@ Deno.serve(async (req) => {
     let okresy = 0;
     try { okresy = await doplnOkresy(riadky); } catch (_) { /* zaradí sa podľa mesta/PSČ */ }
     const res = await rpc("furmanky_sync", { p_obj: riadky, p_terminy: terminy, p_typ: typ, p_kto: kto, p_reset: [] });
+    let doklady = 0;
+    try {
+      const od = miestne(new Date(Date.now() - DNI_SPAT * 86400000)).upgates;
+      const d = await stiahniDoklady(od, odZmeny, 10);
+      if (d.length) doklady = await rpc("obj_doklady_uloz", { p: d });
+    } catch (_) { /* doklady sa skúsia pri ďalšom behu */ }
     let kapacita: any[] = [];
     try { kapacita = await skontrolujKapacitu(); } catch (e) { kapacita = [{ chyba: String((e as Error).message || e) }]; }
     const zatvorene = [...(res.uzavrete || []), ...kapacita.filter((k) => k.uzavreta).map((k) => k.furmanka + " (kapacita)")];
@@ -617,7 +674,7 @@ Deno.serve(async (req) => {
       text: "Stiahnutých " + objednavky.length + " objednávok" + (cele ? " (všetky za " + DNI_SPAT + " dní)" : " (zmenené od posledného stiahnutia)") +
         (terminy === null ? " · kalendár sa nepodarilo načítať, termíny ostali" : "") +
         (zatvorene.length ? " · uzavreté: " + zatvorene.join(", ") : ""),
-      vysledok: res, kapacita, okresy,
+      vysledok: res, kapacita, okresy, doklady,
     });
   } catch (e) {
     const text = String((e as Error).message || e);
