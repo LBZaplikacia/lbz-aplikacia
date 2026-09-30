@@ -92,9 +92,9 @@ Deno.serve(async (req) => {
         const iso = (d: Date) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
         for (const dni of [30, 7]) {
           const d = new Date(teraz); d.setDate(d.getDate() + dni);
-          const z = await rest("zamestnanci?select=osoba_id,zdrav_preukaz_do,rozpis_osoby(meno,aktivny)&zdrav_preukaz_do=eq." + iso(d));
+          const z = await rest("zamestnanci?select=osoba_id,pozicia,zdrav_preukaz_do,rozpis_osoby(meno,aktivny)&zdrav_preukaz_do=eq." + iso(d));
           for (const x of z || []) {
-            if (!x.rozpis_osoby?.aktivny) continue;
+            if (!x.rozpis_osoby?.aktivny || /^Rozvozár/.test(x.pozicia || "")) continue;   // rozvoz balených potravín preukaz nepotrebuje
             const meno = x.rozpis_osoby?.meno || "Zamestnanec";
             preukazy += await posli(await uidyOsoby(x.osoba_id), { title: "🩺 Zdravotný preukaz končí o " + dni + " dní", body: "Platí do " + datumSk(x.zdrav_preukaz_do) + ". Vybav si obnovu a nahraj nový preukaz v appke (Moje údaje).", url: "/?m=zamestnanci", tag: "zdrav-" + x.osoba_id + "-" + dni });
             preukazy += await posli(ved, { title: "🩺 " + meno + ": preukaz končí o " + dni + " dní", body: "Zdravotný preukaz platí do " + datumSk(x.zdrav_preukaz_do) + ".", url: "/?m=zamestnanci", tag: "zdrav-v-" + x.osoba_id + "-" + dni });
@@ -128,21 +128,27 @@ Deno.serve(async (req) => {
       return odpoved({ ok: true, poslane: n });
     }
     if (akcia === "rozpis") {
-      // žiadosť o zmenu smeny: nová → vedenie; rozhodnutie → žiadateľ a kolega
-      const z = (await rest("rozpis_ziadosti?select=id,typ,stav,ziadatel,osoba_b,miesto_a,miesto_b,kto,vybavil&id=eq." + Number(body.id)))?.[0];
+      // žiadosť o zmenu smeny: nová → kolega (namiesto / výmena) alebo vedenie (nová smena / odhlásenie); rozhodnutie → žiadateľ a kolega
+      const z = (await rest("rozpis_ziadosti?select=id,typ,stav,ziadatel,osoba_b,miesto_a,miesto_b,datum,pozicia,potvrdzuje,kto,vybavil&id=eq." + Number(body.id)))?.[0];
       if (!z) return odpoved({ ok: false, text: "Žiadosť sa nenašla" });
       const meno = async (id: number) => (await rest("rozpis_osoby?select=meno&id=eq." + id))?.[0]?.meno || "?";
       const smena = async (id: number | null) => id ? await rpc("rozpis_miesto_popis", { p_id: id }) : "";
-      const zm = await meno(z.ziadatel), km = await meno(z.osoba_b);
+      const zm = await meno(z.ziadatel), km = z.osoba_b ? await meno(z.osoba_b) : "";
       const popis = z.typ === "prevziat" ? zm + " chce ísť namiesto " + km + " (" + await smena(z.miesto_b) + ")"
+        : z.typ === "pridat" ? zm + " sa chce zapísať na smenu (" + (z.miesto_b ? await smena(z.miesto_b) : datumSk(z.datum) + " " + z.pozicia) + ")"
+        : z.typ === "odhlasit" ? zm + " sa chce odhlásiť zo smeny (" + await smena(z.miesto_a) + ")"
         : z.typ === "odovzdat" ? zm + " odovzdáva smenu " + km + " (" + await smena(z.miesto_a) + ")"
         : zm + " (" + await smena(z.miesto_a) + ") ↔ " + km + " (" + await smena(z.miesto_b) + ")";
       let n = 0;
       if (body.udalost === "nova" && z.kto === pouz.id && z.stav === "caka") {
-        const p = await rest("profily?select=id&aktivny=eq.true&rola=in.(it,ceo,prevadzkar)");
-        n = await posli((p || []).map((x: any) => x.id), { title: "🔄 Žiadosť o zmenu smeny", body: popis + " – ťukni a schváľ", url: "/?m=rozpis", tag: "roz-z-" + z.id });
+        if (z.potvrdzuje === "kolega" && z.osoba_b) {
+          n = await posli(await uidyOsoby(z.osoba_b), { title: "🔄 " + zm + " – zmena smeny", body: popis + " – ťukni a potvrď", url: "/?m=rozpis", tag: "roz-z-" + z.id });
+        } else {
+          const p = await rest("profily?select=id&aktivny=eq.true&rola=in.(it,ceo,prevadzkar)");
+          n = await posli((p || []).map((x: any) => x.id), { title: "🔄 Žiadosť o zmenu smeny", body: popis + " – ťukni a potvrď", url: "/?m=rozpis", tag: "roz-z-" + z.id });
+        }
       } else if (body.udalost === "rozhodnutie" && z.vybavil === pouz.id && z.stav !== "caka") {
-        const vys = z.stav === "schvalena" ? "✅ schválená" : z.stav === "zamietnuta" ? "❌ zamietnutá" : "⚠️ neplatná (smeny sa zmenili)";
+        const vys = z.stav === "schvalena" ? "✅ potvrdená" : z.stav === "zamietnuta" ? "❌ zamietnutá" : "⚠️ neplatná (smeny sa zmenili)";
         const uids = [...await uidyOsoby(z.ziadatel), ...(z.osoba_b ? await uidyOsoby(z.osoba_b) : [])];
         n = await posli(uids, { title: "🔄 Zmena smeny " + vys, body: popis, url: "/?m=rozpis", tag: "roz-z-" + z.id });
       }
