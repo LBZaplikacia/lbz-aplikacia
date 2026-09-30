@@ -6,10 +6,22 @@
   "use strict";
   function moze() { return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window; }
   function b64u(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; var r = atob(s), a = new Uint8Array(r.length); for (var i = 0; i < r.length; i++) a[i] = r.charCodeAt(i); return a; }
+  // service worker – nečakať donekonečna (na iPhone sa ready nemusí nikdy splniť, ak inštalácia zlyhala)
+  function pripraveny() {
+    return Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise(function (ok) { setTimeout(function () { ok(null); }, 4000); })
+    ]).then(function (r) {
+      if (r) return r;
+      return navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(function () {
+        return Promise.race([navigator.serviceWorker.ready, new Promise(function (ok) { setTimeout(function () { ok(null); }, 8000); })]);
+      }).catch(function () { return null; });
+    });
+  }
   function stav() {
     if (!moze()) return Promise.resolve("nepodporuje");
     if (Notification.permission === "denied") return Promise.resolve("zakazane");
-    return navigator.serviceWorker.ready.then(function (r) { return r.pushManager.getSubscription(); })
+    return pripraveny().then(function (r) { return r ? r.pushManager.getSubscription() : null; })
       .then(function (s) { return s && Notification.permission === "granted" ? "zapnute" : "vypnute"; }).catch(function () { return "vypnute"; });
   }
   function zapni(db) {
@@ -18,7 +30,8 @@
       return db.functions.invoke("upozornenia", { body: { akcia: "kluc" } });
     }).then(function (k) {
       var kl = k && k.data && k.data.kluc; if (!kl) throw new Error("Upozornenia ešte nie sú nastavené na serveri");
-      return navigator.serviceWorker.ready.then(function (r) {
+      return pripraveny().then(function (r) {
+        if (!r) throw new Error("Appka sa ešte nenainštalovala – zavri ju úplne, otvor znova z ikony a skús to ešte raz.");
         return r.pushManager.getSubscription().then(function (s) { return s || r.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(kl) }); });
       });
     }).then(function (sub) {
