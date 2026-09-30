@@ -1286,7 +1286,7 @@ body.pdfv-otvorene { overflow: hidden; }
 .o-tabulka th:first-child { position: sticky; left: 0; z-index: 2; }
 .o-cislo { font-weight: 700; color: var(--lbz-hneda, #583934); }
 .o-zdroj { font-size: 11px; color: var(--muted); }
-.o-tabulka td.o-st { background: var(--st); color: #fff; font-weight: 700; text-align: center; min-width: 120px; text-shadow: 0 1px 1px rgba(0,0,0,.25); }
+.o-tabulka td.o-st { background: var(--st); color: #fff; font-weight: 700; text-align: center; min-width: 104px; text-shadow: 0 1px 1px rgba(0,0,0,.25); }
 .o-zak { min-width: 220px; }
 .o-link { font-weight: 600; color: var(--lbz-hneda, #583934); }
 .o-pozn { font-size: 12px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
@@ -1301,3 +1301,36 @@ body.pdfv-otvorene { overflow: hidden; }
 .o-viac { margin-top: 8px; }
 .o-viac > summary { cursor: pointer; font-weight: 700; color: var(--lbz-hneda, #583934); padding: 6px 2px; list-style-position: inside; }
 .o-viac[open] > summary { margin-bottom: 8px; }
+/* v0.28.1 – hlasové správy v chate */
+.chat-mic { flex: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); font-size: 20px; cursor: pointer; display: grid; place-items: center; }
+.chat-mic:hover { background: var(--surface-2); }
+.chat-rec { display: none; flex: 1 1 auto; align-items: center; gap: 10px; min-width: 0; }
+.chat-pis.chat-nahrava .chat-rec { display: flex; }
+.chat-pis.chat-nahrava > textarea, .chat-pis.chat-nahrava > .chat-priloha-tl, .chat-pis.chat-nahrava > .chat-mic, .chat-pis.chat-nahrava > .chat-posli { display: none; }
+.chat-rec-x { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); font-size: 16px; cursor: pointer; }
+.chat-rec-bod { flex: none; width: 12px; height: 12px; border-radius: 50%; background: #d93025; animation: chatRec 1s ease-in-out infinite; }
+@keyframes chatRec { 50% { opacity: .25; } }
+#chat-rec-cas { font-weight: 700; }
+.chat-rec-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-rec-posli { flex: none; }
+.chat-audio { display: grid; gap: 2px; min-width: 0; }
+.chat-audio audio { width: 240px; max-width: 100%; height: 40px; }
+.chat-audio-t { font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .chat-rec-bod { animation: none; } }
+/* v0.28.1 – objednávky: nevybavené riadky ako v Upgates, poznámka zákazníka, zvýraznená doprava */
+.o-tabulka tbody tr.o-nova td:not(.o-st) { background: #f2fdf8; }
+.o-bodka { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ffa500; margin-left: 4px; vertical-align: top; }
+.o-dop { min-width: 170px; }
+.o-dp { display: inline-block; padding: 4px 10px; border-radius: 999px; font-weight: 700; font-size: 13px; white-space: nowrap; border: 1px solid transparent; }
+.o-dp-furmanka { background: #CBA75B; color: #2b1d1a; }
+.o-dp-osobny { background: #583934; color: #fff; }
+.o-dp-vo { background: #2C5167; color: #fff; }
+.o-dp-kurier { background: #F5ECD9; color: #583934; border-color: #CBA75B; }
+.o-dp-ina { background: var(--surface-2, #F3EBDC); color: var(--ink); }
+.o-plat { font-size: 12px; color: var(--muted); margin-top: 4px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .o-tabulka tbody tr.o-nova td:not(.o-st) { background: rgba(107, 181, 104, .12); } }
+:root[data-theme="dark"] .o-tabulka tbody tr.o-nova td:not(.o-st) { background: rgba(107, 181, 104, .12); }
+.chat-pis { min-width: 0; }
+.chat-pis textarea { min-width: 0; }
+.chat-pis .chat-posli, .chat-pis .chat-priloha-tl { flex: none; }
+@media (max-width: 420px) { .chat-mic { width: 40px; height: 40px; font-size: 18px; } .chat-pis { gap: 6px; padding: 8px; } }

@@ -137,7 +137,7 @@
     koren.innerHTML = '<div class="chat' + (w ? " chat-siroky" : "") + (vo ? " chat-vo" : "") + '">' +
       (w || !vo ? '<section class="chat-zoznam" id="chat-zoznam"></section>' : "") +
       (w || vo ? '<section class="chat-vlakno" id="chat-vlakno">' + vlaknoKostra() + "</section>" : "") + "</div>" + '<div id="chat-dialog-obal">' + dialogHtml() + "</div>";
-    kresliZoznam(); kresliHlavicku(); kresliSpravy();
+    kresliZoznam(); kresliHlavicku(); kresliSpravy(); hlasUI();
     if (draft != null && C.konv != null) { var t = document.getElementById("chat-text"); if (t) { t.value = draft; vyska(t); } }
   }
   function kresliZoznam() {
@@ -166,6 +166,10 @@
       (k.archiv ? '<p class="muted chat-pozn">Skupina je archivovaná – písať sa do nej nedá.</p>' :
       '<form class="chat-pis" id="chat-pis"><label class="chat-priloha-tl" title="Fotka alebo PDF"><input type="file" id="chat-subor" accept="image/*,application/pdf" hidden>📎</label>' +
       '<textarea id="chat-text" rows="1" maxlength="4000" placeholder="Správa…" enterkeyhint="send"></textarea>' +
+      (hlasMozna() ? '<button type="button" class="chat-mic" data-ch="hlas" aria-label="Nahrať hlasovú správu" title="Hlasová správa">🎤</button>' : "") +
+      '<div class="chat-rec" id="chat-rec"><button type="button" class="chat-rec-x" data-ch="hlas-zrus" aria-label="Zahodiť nahrávku">✕</button>' +
+      '<span class="chat-rec-bod" aria-hidden="true"></span><span id="chat-rec-cas" class="num">0:00</span><span class="muted chat-rec-t">Nahrávam…</span>' +
+      '<button type="button" class="btn btn-primary chat-rec-posli" data-ch="hlas-posli" aria-label="Odoslať hlasovú správu">➤</button></div>' +
       '<button class="btn btn-primary chat-posli" type="submit" aria-label="Odoslať"' + (C.prace ? " disabled" : "") + ">➤</button></form>");
   }
   function kresliHlavicku() {
@@ -205,12 +209,16 @@
         '<span class="chat-cas">' + (s.pripnute ? "📌 " : "") + esc(cas(s.kedy)) + esc(videli) + "</span></div>" +
         (!s.zmazane ? '<button class="chat-menu-tl" data-ch-menu="' + s.id + '" aria-label="Možnosti správy">⋮</button>' : "") + "</div>");
     });
+    if ([].some.call(box.querySelectorAll("audio"), function (a) { return !a.paused; })) { C.odlozKresli = true; return; }   // nerušiť prehrávanie hlasovky
     box.innerHTML = out.join("");
     box.querySelectorAll("img[data-ch-img]").forEach(nacitajObrazok);
+    box.querySelectorAll("audio[data-ch-aud]").forEach(function (a) { if (!a.getAttribute("src")) podpisanaUrl(a.dataset.chAud).then(function (u) { a.src = u; }).catch(function () { /* */ }); });
   }
   function priloha(p) {
     if (!p || !p.cesta) return "";
     if (/^image\//.test(p.typ || "")) return '<button class="chat-obr" data-ch-obr="' + esc(p.cesta) + '"><img data-ch-img="' + esc(p.cesta) + '" alt="' + esc(p.nazov || "fotka") + '"' + (C.url[p.cesta] ? ' src="' + esc(C.url[p.cesta].u) + '"' : "") + "></button>";
+    if (/^audio\//.test(p.typ || "")) return '<div class="chat-audio"><audio controls preload="none" data-ch-aud="' + esc(p.cesta) + '"' + (C.url[p.cesta] ? ' src="' + esc(C.url[p.cesta].u) + '"' : "") + "></audio>" +
+      (p.trvanie ? '<span class="chat-audio-t muted">🎤 ' + esc(mmss(p.trvanie)) + "</span>" : "") + "</div>";
     return '<button class="chat-subor" data-ch-subor="' + esc(p.cesta) + '" data-nazov="' + esc(p.nazov || "subor") + '" data-typ="' + esc(p.typ || "") + '">📄 <span>' + esc(p.nazov || "Súbor") + "</span></button>";
   }
   function podpisanaUrl(cesta) {
@@ -306,8 +314,8 @@
     });
   }
   function bezDiak(t) { return String(t).normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9._-]+/g, "_").slice(-60); }
-  function posli(text, subor) {
-    var id = C.konv; if (id == null || C.prace) return;
+  function posli(text, subor, extra) {
+    var id = extra && extra.konv != null ? extra.konv : C.konv; if (id == null || C.prace) return;
     text = String(text || "").trim();
     if (!text && !subor) return;
     C.prace = true; nastavTl();
@@ -316,7 +324,9 @@
       var cesta = id + "/" + Date.now() + "_" + bezDiak(f.name || "subor");
       return DB.storage.from("chat").upload(cesta, f, { contentType: f.type || "application/octet-stream" }).then(function (r) {
         if (r.error) throw r.error;
-        return { cesta: cesta, nazov: f.name || subor.name, typ: f.type || "", velkost: f.size };
+        var pr = { cesta: cesta, nazov: (extra && extra.nazov) || f.name || subor.name, typ: f.type || "", velkost: f.size };
+        if (extra && extra.trvanie) pr.trvanie = extra.trvanie;
+        return pr;
       });
     }) : Promise.resolve(null);
     nahraj.then(function (pr) { return rpc("chat_posli", { p_konv: id, p_text: text, p_priloha: pr }); }).then(function (r) {
@@ -329,13 +339,65 @@
         if (subor) rpc("chat_spravy", { p_konv: id }).then(function (d) { if (d && d.ok && C.konv === id) { C.spravy = d.spravy; kresliSpravy(); dole(); } });
       }
       var kk = (C.zoznam || []).filter(function (x) { return x.id === id; })[0];
-      if (kk) { kk.posledna = new Date().toISOString(); kk.sprava = { text: text || "📎 " + (subor ? subor.name : "príloha"), ja: true, kedy: kk.posledna }; C.zoznam.sort(function (a, b) { return String(b.posledna).localeCompare(String(a.posledna)); }); kresliZoznam(); }
+      if (kk) { kk.posledna = new Date().toISOString(); kk.sprava = { text: text || (extra && extra.nazov) || "📎 " + (subor ? subor.name : "príloha"), ja: true, kedy: kk.posledna }; C.zoznam.sort(function (a, b) { return String(b.posledna).localeCompare(String(a.posledna)); }); kresliZoznam(); }
       DB.functions.invoke("upozornenia", { body: { akcia: "chat", id: r.id } }).catch(function () { /* */ });
     }).catch(function (e) { C.prace = false; nastavTl(); lbzInfo("Správa neodišla: " + chybaText(e)); });
   }
   function nastavTl() { var b = document.querySelector(".chat-posli"); if (b) { b.disabled = C.prace; b.textContent = C.prace ? "…" : "➤"; } }
 
   // ---------- udalosti ----------
+  // ---------- hlasové správy ----------
+  var NAHR = null;
+  function mmss(s) { s = Math.max(0, Math.round(+s || 0)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+  function hlasMozna() { return !!(window.MediaRecorder && navigator.mediaDevices && navigator.mediaDevices.getUserMedia); }
+  function hlasTyp() {
+    var t = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"];
+    for (var i = 0; i < t.length; i++) if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t[i])) return t[i];
+    return "";
+  }
+  function hlasUI() {
+    var f = document.getElementById("chat-pis"); if (f) f.classList.toggle("chat-nahrava", !!NAHR);
+    var c = document.getElementById("chat-rec-cas"); if (c && NAHR) c.textContent = mmss((Date.now() - NAHR.start) / 1000);
+  }
+  function hlasStart() {
+    if (NAHR || C.konv == null || C.prace) return;
+    if (!hlasMozna()) { lbzInfo("Tento prehliadač nevie nahrávať zvuk"); return; }
+    var konv = C.konv;
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function (stream) {
+      var typ = hlasTyp(), rec;
+      try { rec = typ ? new MediaRecorder(stream, { mimeType: typ, audioBitsPerSecond: 32000 }) : new MediaRecorder(stream); }
+      catch (_) { rec = new MediaRecorder(stream); }
+      var n = NAHR = { rec: rec, chunks: [], start: Date.now(), stream: stream, konv: konv, poslat: false };
+      rec.ondataavailable = function (e) { if (e.data && e.data.size) n.chunks.push(e.data); };
+      rec.onstop = function () { hlasHotovo(n); };
+      rec.start(1000);
+      n.timer = setInterval(hlasUI, 500);
+      n.max = setTimeout(function () { hlasStop(true); }, 5 * 60e3);   // najviac 5 minút
+      if (navigator.vibrate) navigator.vibrate(30);
+      hlasUI();
+    }).catch(function () { lbzInfo("Mikrofón nie je povolený. Povoľ ho v nastaveniach telefónu / prehliadača pre appku LBZ."); });
+  }
+  function hlasStop(poslat) {
+    var n = NAHR; if (!n) return;
+    n.poslat = poslat; n.sek = Math.round((Date.now() - n.start) / 1000);
+    clearInterval(n.timer); clearTimeout(n.max);
+    if (n.rec.state === "inactive") hlasHotovo(n); else { try { n.rec.stop(); } catch (_) { hlasHotovo(n); } }
+  }
+  function hlasHotovo(n) {
+    if (n.hotovo) return; n.hotovo = true;
+    n.stream.getTracks().forEach(function (t) { t.stop(); });
+    if (NAHR === n) NAHR = null;
+    hlasUI();
+    if (!n.poslat) return;
+    if (!n.chunks.length || n.sek < 1) { lbzInfo("Hlasová správa je príliš krátka – podrž aspoň sekundu"); return; }
+    var typ = String(n.rec.mimeType || n.chunks[0].type || "audio/webm").split(";")[0];
+    var ext = /mp4|aac|m4a/.test(typ) ? "m4a" : /ogg/.test(typ) ? "ogg" : "webm";
+    var f = new File(n.chunks, "hlasovka_" + Date.now() + "." + ext, { type: typ });
+    posli("", f, { konv: n.konv, nazov: "🎤 Hlasová správa " + mmss(n.sek), trvanie: n.sek });
+  }
+  document.addEventListener("pause", function (e) { if (e.target && e.target.tagName === "AUDIO" && C.odlozKresli) { C.odlozKresli = false; setTimeout(kresliSpravy, 50); } }, true);
+  document.addEventListener("ended", function (e) { if (e.target && e.target.tagName === "AUDIO" && C.odlozKresli) { C.odlozKresli = false; setTimeout(kresliSpravy, 50); } }, true);
+
   function klik(e) {
     var t = e.target.closest("button, [data-ch]"); if (!t || !koren.contains(t)) return;
     var d = t.dataset;
@@ -364,6 +426,9 @@
     if (d.chSkoc) { var m = document.getElementById("chat-m-" + d.chSkoc); if (m) { m.scrollIntoView({ block: "center", behavior: "smooth" }); m.classList.add("chat-blik"); setTimeout(function () { m.classList.remove("chat-blik"); }, 1600); } else lbzInfo("Pripnutá správa je staršia – načítaj staršie správy."); return; }
     if (d.chOdopni) { rpc("chat_sprava_uprav", { p_id: +d.chOdopni, p_akcia: "odopni" }).then(function () { obnovPripnute(); C.dialog = null; kresliDialog(); }); return; }
     switch (d.ch) {
+      case "hlas": hlasStart(); return;
+      case "hlas-zrus": hlasStop(false); return;
+      case "hlas-posli": hlasStop(true); return;
       case "zavri": if (e.target !== t && t.classList.contains("chat-obr-full") && e.target.closest("a")) return; C.dialog = null; kresliDialog(); return;
       case "spat": C.konv = null; C.data = null; if (window.lbzPamat) lbzPamat.uloz("chat", {}); kresli(); nacitajZoznam(); return;
       case "nova": otvorDialog({ typ: "nova", fokus: true }); nacitajLudi(); return;

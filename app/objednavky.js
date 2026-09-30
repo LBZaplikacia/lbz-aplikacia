@@ -60,6 +60,18 @@
   var FARBY = { "Prijatá": "#17a2b8", "Platba úspešná": "#6bb568", "Platba zlyhala": "#969696", "Platba zrušena": "#969696", "Nedoriešená": "#ffc107",
     "Storno": "#dc3545", "Spracované Nerozvezené": "#a3e7ff", "Naplanovane": "#02d9d6", "Rozvezene": "#ffa6f6" };
   function farbaStavu(s, farby) { var f = (farby && farby[s]) || FARBY[s] || "#7154bc"; return /^#?[0-9a-f]{3,8}$/i.test(f) ? (f[0] === "#" ? f : "#" + f) : "#7154bc"; }
+  var OTVORENE = /^(Prijatá|Platba úspešná|Platba prebieha|Nedoriešená|Doriešiť)/i;   // ako „nevybavené“ riadky v Upgates
+  // typ dopravy – farebne zvýraznený
+  function dopravaTyp(d) {
+    d = String(d || "");
+    var m = d.match(/(?:furmank[ay]|rozvoz)\s+([^\s(,]+)/i);
+    if (m) return { t: "furmanka", n: "🚐 Furmanka " + m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase() };
+    if (/osobn|vyzdvihnut|odber/i.test(d)) return { t: "osobny", n: "🏠 Osobný odber" };
+    if (/veľko|velko|b2b/i.test(d)) return { t: "vo", n: "🏪 Veľkoobchod" };
+    if (/kuri|packet|zásiel|zasiel|balík|balik|sps|gls|dpd|pošt|post/i.test(d)) return { t: "kurier", n: "📦 " + d.split(/[(,]/)[0].trim() };
+    return { t: "ina", n: d.split("(")[0].trim() || "–" };
+  }
+  function dopravaPill(d) { var x = dopravaTyp(d); return '<span class="o-dp o-dp-' + x.t + '" title="' + esc(d || "") + '">' + esc(x.n) + "</span>"; }
   function zoznamHtml() {
     var Z = O.zoznam || {}, obj = Z.objednavky || [];
     var stavy = (Z.stavy || []).slice().sort();
@@ -85,15 +97,15 @@
       (vedenie() && Z.ok ? '<button class="btn r-mini" type="button" data-o="rezim">' + (Z.ostry ? "Prepnúť na TEST" : "Zapnúť ostrý zápis") + "</button>" : "") + "</div></details></form></section>";
     if (!Z.ok) return h + '<div class="empty"><strong>' + esc(Z.text || "Načítavam…") + "</strong></div>";
     if (!obj.length) return h + '<div class="empty"><strong>Žiadne objednávky</strong></div>';
-    h += '<section class="card o-tab-karta"><div class="o-tabulka-obal"><table class="o-tabulka"><thead><tr><th>Číslo obj.</th><th>Stav objednávky</th><th>Zákazník / e-mail</th><th>Doprava, platba</th><th>Vytvorená</th><th class="num">Cena</th><th>Faktúra</th></tr></thead><tbody>' +
+    h += '<section class="card o-tab-karta"><div class="o-tabulka-obal"><table class="o-tabulka"><thead><tr><th>Číslo obj.</th><th>Stav objednávky</th><th>Doprava, platba</th><th>Zákazník / e-mail</th><th>Vytvorená</th><th class="num">Cena</th><th>Faktúra</th></tr></thead><tbody>' +
       obj.map(function (o) {
         var stitky = (o.osobny ? '<span class="pill">osobný odber</span> ' : "") + (o.caka ? '<span class="pill warn">čaká na Upgates</span> ' : "") + (o.furmanka ? '<span class="pill">' + esc(o.furmanka) + "</span>" : "");
-        return '<tr data-o-cislo="' + esc(o.cislo) + '" tabindex="0">' +
-          '<td class="o-c"><span class="o-cislo">' + esc(o.cislo) + '</span> <span class="o-bub">' + (o.poloziek || 0) + "</span>" + (o.zdroj === "appka" ? '<div class="o-zdroj">z appky</div>' : "") + "</td>" +
+        return '<tr data-o-cislo="' + esc(o.cislo) + '" tabindex="0"' + (OTVORENE.test(o.status || "") ? ' class="o-nova"' : "") + ">" +
+          '<td class="o-c"><span class="o-cislo">' + esc(o.cislo) + '</span> <span class="o-bub">' + (o.poloziek || 0) + "</span>" + (o.poznamka ? '<span class="o-bodka" title="Poznámka zákazníka"></span>' : "") + (o.zdroj === "appka" ? '<div class="o-zdroj">z appky</div>' : "") + "</td>" +
           '<td class="o-st" style="--st:' + esc(farbaStavu(o.status, farby)) + '">' + esc(o.status || "–") + "</td>" +
+          '<td class="o-dop">' + dopravaPill(o.doprava) + (o.platba_nazov || o.platba ? '<div class="o-plat">' + esc(o.platba_nazov || o.platba) + "</div>" : "") + "</td>" +
           '<td class="o-zak"><span class="o-link">' + esc(o.meno || "") + "</span>" + (o.email ? ' <span class="muted">' + esc(o.email) + "</span>" : "") +
             (o.poznamka ? '<div class="o-pozn">' + esc(o.poznamka) + "</div>" : "") + (stitky ? '<div class="o-stitky">' + stitky + "</div>" : "") + "</td>" +
-          "<td>" + esc([o.doprava, o.platba_nazov || o.platba].filter(Boolean).join(", ")) + "</td>" +
           '<td class="o-dat">' + esc(dat(o.vytvorena)) + "</td>" +
           '<td class="num o-suma">' + esc(eur(o.suma)) + "</td>" +
           "<td>" + esc(o.faktura || "–") + (o.dobropis ? '<div class="muted">' + esc(o.dobropis) + "</div>" : "") + "</td></tr>";
