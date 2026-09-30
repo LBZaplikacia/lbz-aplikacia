@@ -1,4 +1,4 @@
-// LBZ aplikácia – modul Kniha jázd (IT, CEO)
+// LBZ aplikácia – modul Kniha jázd (IT, CEO, prevádzkár, majiteľka areálu – všetci vidia všetky jazdy)
 // Zápis ako stará web appka: stav tachometra → najazdené → polovica tam, polovica späť („návrat na prevádzku“).
 // Návrh miesta podľa histórie (priemerné km jednej cesty) a podľa zoznamu miest; mesiac s počiatočným stavom, súčtami, úpravou, tlačou a CSV.
 
@@ -33,7 +33,7 @@
     if (!DB) return Promise.resolve();
     return rpc("jazdy_stav", { p_vozidlo: K.stav && K.stav.vozidlo_id || null }).then(function (d) {
       K.stav = d && d.ok ? d : { chyba: (d && d.text) || "Nenačítané" };
-      if (K.stav.vodic && !K.form.vodic) K.form.vodic = K.stav.vodic;
+      if (!K.form.vodic) { var pv = window.lbzPamat && lbzPamat.nacitaj("kniha_vodic"); if (pv && (K.stav.vodici || []).indexOf(pv.meno) >= 0) K.form.vodic = pv.meno; }
       kresli();
     }).catch(function (e) { K.stav = { chyba: chybaText(e) }; kresli(); });
   }
@@ -69,6 +69,11 @@
       (K.sprava ? '<p class="f-sprava f-' + K.sprava.typ + '">' + esc(K.sprava.text) + ' <button class="btn-link" data-k="zavri-spravu">✕</button></p>' : "");
   }
 
+  function chybaFormu() {
+    var f = K.form, s = K.stav || {}, t = cislo(f.tach), ok = t != null && s.tach != null && t > s.tach;
+    return !f.vodic ? "Vyber šoféra" : !ok ? "Zadaj stav tachometra" : !f.miesto ? "Vyber alebo napíš, kam si išiel/išla" : !f.ucel ? "Vyber alebo napíš účel jazdy" : "";
+  }
+  function tankText(x) { return x.tankovanie || x.litre ? [x.tankovanie ? eur(x.tankovanie) : "", x.litre ? km(x.litre, 1) + " l" : "", x.palivo || ""].filter(Boolean).join(" · ") : ""; }
   function pohladNova() {
     var s = K.stav;
     if (!s) return '<div class="empty"><strong>Načítavam…</strong></div>';
@@ -77,30 +82,36 @@
     var ok = naj != null && naj > 0, jedna = ok ? (f.navrat ? Math.round(naj * 5) / 10 : naj) : null;
     var nav = ok ? navrhy(jedna) : [];
     var ucely = s.ucely || [];
-    return '<form class="card k-nova" id="k-form" autocomplete="off">' +
-      '<div class="k-tach-hl"><span class="label">Posledný stav</span><span class="k-tach-posl num">' + km(s.tach) + ' km</span></div>' +
+    var ine = (s.ucely_ine || []).filter(function (u) { return ucely.indexOf(u) === -1; });
+    var vlastny = f.ucel && ucely.indexOf(f.ucel) === -1 && ine.indexOf(f.ucel) === -1 || f.ineUcel;
+    return '<form class="k-nova" id="k-form" autocomplete="off">' +
+      '<section class="k-krok"><div class="k-krok-hl"><span class="k-cislo">1</span>Šofér</div><div class="k-vodici">' +
+      (s.vodici || []).map(function (v) { return '<button type="button" class="k-vodic" data-k-vodic="' + esc(v) + '" aria-pressed="' + (f.vodic === v) + '"><span class="k-avatar">' + esc(v.charAt(0)) + "</span>" + esc(v) + "</button>"; }).join("") + "</div></section>" +
+      '<section class="k-krok"><div class="k-krok-hl"><span class="k-cislo">2</span>Tachometer<span class="k-tach-posl">posledný <b class="num">' + km(s.tach) + ' km</b></span></div>' +
       '<label class="field"><span class="label">Stav tachometra teraz</span>' +
       '<input id="k-tach" class="k-tach" inputmode="decimal" enterkeyhint="next" placeholder="napr. ' + esc(km(Math.ceil((s.tach || 0) + 50))) + '" value="' + esc(f.tach || "") + '"></label>' +
       '<div class="k-vysledok' + (t != null && !ok ? " k-zle" : "") + '" aria-live="polite">' +
       (ok ? '<b class="num">' + km(naj, 0) + " km</b>" + (f.navrat ? ' <span class="muted">→ ' + km(jedna) + " km tam + " + km(naj - jedna) + " km späť</span>" : "") :
         t != null ? "Musí byť viac ako " + km(s.tach) + " km" : '<span class="muted">Zadaj, čo ukazuje tachometer po návrate</span>') + "</div>" +
-      '<label class="k-prepinac"><input type="checkbox" id="k-navrat"' + (f.navrat ? " checked" : "") + '> <span>Cesta tam aj späť (návrat na prevádzku ' + esc(((s.vozidla || [])[0] || {}).domov || "Zbojská") + ")</span></label>" +
-      '<div class="field"><span class="label">Kam</span>' +
+      '<label class="k-prepinac"><input type="checkbox" id="k-navrat"' + (f.navrat ? " checked" : "") + '> <span>Cesta tam aj späť (návrat na prevádzku ' + esc(((s.vozidla || [])[0] || {}).domov || "Zbojská") + ")</span></label></section>" +
+      '<section class="k-krok"><div class="k-krok-hl"><span class="k-cislo">3</span>Kam</div><div class="field">' +
       (nav.length ? '<div class="chips k-navrhy">' + nav.map(function (x) {
         return '<button type="button" class="chip' + (norm(f.miesto) === norm(x.n) ? " k-vybrane" : "") + '" data-k-miesto="' + esc(x.n) + '">' + esc(x.n) + ' <span class="muted num">~' + km(x.km) + " km</span></button>";
       }).join("") + "</div>" : "") +
       '<input id="k-miesto" list="k-miesta" placeholder="mesto / firma" value="' + esc(f.miesto || "") + '">' +
-      '<datalist id="k-miesta">' + (s.miesta || []).map(function (m) { return '<option value="' + esc(m.miesto) + '">'; }).join("") + "</datalist></div>" +
-      '<div class="field"><span class="label">Účel jazdy</span><div class="chips k-ucely">' + ucely.map(function (u) {
-        return '<button type="button" class="chip" data-k-ucel="' + esc(u) + '" aria-pressed="' + (f.ucel === u) + '">' + (IKONY_UCEL[u] || "") + " " + esc(u) + "</button>";
-      }).join("") + "</div></div>" +
-      '<details class="k-viac"' + (f.tank || f.datum || f.pozn ? " open" : "") + '><summary>⛽ Tankovanie, dátum, vodič, poznámka</summary>' +
-      '<div class="d-riadok"><label class="field"><span class="label">Tankovanie €</span><input id="k-tank" inputmode="decimal" value="' + esc(f.tank || "") + '"></label>' +
-      '<label class="field"><span class="label">Dátum</span><input id="k-datum" type="date" value="' + esc(f.datum || s.dnes || "") + '"></label></div>' +
-      '<div class="d-riadok"><label class="field"><span class="label">Vodič</span><input id="k-vodic" value="' + esc(f.vodic || "") + '"></label>' +
+      '<datalist id="k-miesta">' + (s.miesta || []).map(function (m) { return '<option value="' + esc(m.miesto) + '">'; }).join("") + "</datalist></div></section>" +
+      '<section class="k-krok"><div class="k-krok-hl"><span class="k-cislo">4</span>Účel jazdy</div><div class="chips k-ucely">' + ucely.concat(ine).map(function (u) {
+        return '<button type="button" class="chip" data-k-ucel="' + esc(u) + '" aria-pressed="' + (f.ucel === u && !f.ineUcel) + '">' + (IKONY_UCEL[u] || "") + " " + esc(u) + "</button>";
+      }).join("") + '<button type="button" class="chip" data-k="ine-ucel" aria-pressed="' + !!vlastny + '">✏️ Iný…</button></div>' +
+      (vlastny ? '<label class="field"><span class="label">Vlastný účel</span><input id="k-ucel-text" class="k-ucel-text" placeholder="napíš účel jazdy" maxlength="120" value="' + esc(f.ucel || "") + '"></label>' : "") + "</section>" +
+      '<details class="k-viac k-krok"' + (f.tank || f.litre || (f.datum && f.datum !== s.dnes) || f.pozn ? " open" : "") + '><summary>⛽ Tankovanie · dátum · poznámka</summary>' +
+      '<div class="d-riadok k-riadok3"><label class="field"><span class="label">Suma €</span><input id="k-tank" inputmode="decimal" value="' + esc(f.tank || "") + '"></label>' +
+      '<label class="field"><span class="label">Litre</span><input id="k-litre" inputmode="decimal" value="' + esc(f.litre || "") + '"></label>' +
+      '<label class="field"><span class="label">Palivo</span><select id="k-palivo"><option value=""></option>' + (s.paliva || []).map(function (p) { return "<option" + ((f.palivo || (f.tank || f.litre ? "Nafta" : "")) === p ? " selected" : "") + ">" + esc(p) + "</option>"; }).join("") + "</select></label></div>" +
+      '<div class="d-riadok"><label class="field"><span class="label">Dátum</span><input id="k-datum" type="date" value="' + esc(f.datum || s.dnes || "") + '"></label>' +
       '<label class="field"><span class="label">Poznámka</span><input id="k-pozn" value="' + esc(f.pozn || "") + '"></label></div></details>' +
-      '<button class="btn btn-primary k-ulozit" type="submit"' + (ok && K.form.miesto && K.form.ucel && !K.prace ? "" : " disabled") + ">" + (K.prace ? "Ukladám…" : "💾 Zapísať jazdu") + "</button>" +
-      '<p class="muted k-chyba"' + (ok && f.miesto && f.ucel ? " hidden" : "") + ">" + (!ok ? "Zadaj stav tachometra" : !f.miesto ? "Vyber alebo napíš, kam si išla" : !f.ucel ? "Vyber účel jazdy" : "") + "</p>" +
+      '<button class="btn btn-primary k-ulozit" type="submit"' + (ok && f.vodic && f.miesto && f.ucel && !K.prace ? "" : " disabled") + ">" + (K.prace ? "Ukladám…" : "💾 Zapísať jazdu") + "</button>" +
+      '<p class="muted k-chyba"' + (chybaFormu() ? "" : " hidden") + ">" + esc(chybaFormu()) + "</p>" +
       "</form>" +
       '<p class="muted k-mes">Tento mesiac zatiaľ <b class="num">' + km(s.km_mesiac) + " km</b>.</p>";
   }
@@ -144,7 +155,7 @@
           var poc = x.miesto === "Počiatočný stav";
           return '<tr class="' + (poc ? "k-poc" : x.navrat ? "k-navrat" : "") + '"><td>' + esc(denKratko(x.datum)) + "</td><td>" + esc(x.miesto) + (x.poznamka ? ' <span class="muted">· ' + esc(x.poznamka) + "</span>" : "") + "</td>" +
             '<td class="t-r num">' + km(x.tach, 0) + '</td><td class="t-r num">' + km(x.km) + (x.nesedi != null ? ' <span class="k-nesedi" title="Podľa tachometra ' + km(x.nesedi) + ' km">⚠</span>' : "") + "</td>" +
-            "<td>" + esc(x.vodic || "") + "</td><td>" + esc(x.ucel || "") + '</td><td class="t-r num">' + (x.tankovanie ? eur(x.tankovanie) : "") + "</td>" +
+            "<td>" + esc(x.vodic || "") + "</td><td>" + esc(x.ucel || "") + '</td><td class="t-r num">' + esc(tankText(x)) + "</td>" +
             "<td>" + (x.virt ? "" : '<button class="btn-link" data-k-upr="' + x.id + '">Upraviť</button>') + "</td></tr>";
         }).join("") + "</tbody></table></div>" : '<div class="empty"><strong>V tomto mesiaci nie sú jazdy</strong></div>') +
       (chyby ? '<p class="muted k-pozn">⚠ = najazdené km nesedia s rozdielom tachometrov (napr. prehodené riadky alebo chýbajúci zápis). Oprav cez „Upraviť“.</p>' : "");
@@ -159,7 +170,7 @@
       var zle = x.nesedi != null || (sp && sp.nesedi != null);
       return '<div class="k-pol' + (zle ? " k-pol-zle" : "") + '"><div class="k-pol-hl"><b>' + esc(x.miesto) + '</b><b class="num">' + km(spolu) + " km</b></div>" +
         '<div class="k-pol-det muted">' + esc(denKratko(x.datum)) + " · " + (IKONY_UCEL[x.ucel] || "") + " " + esc(x.navrat ? "návrat" : x.ucel || "") +
-        (sp ? " · tam " + km(x.km) + " / späť " + km(sp.km) : "") + " · tach. " + km(sp ? sp.tach : x.tach, 0) + (x.tankovanie ? " · ⛽ " + eur(x.tankovanie) : "") + (zle ? ' · <span class="k-nesedi">⚠ km nesedia</span>' : "") + "</div>" +
+        (sp ? " · tam " + km(x.km) + " / späť " + km(sp.km) : "") + " · tach. " + km(sp ? sp.tach : x.tach, 0) + (tankText(x) ? " · ⛽ " + esc(tankText(x)) : "") + (zle ? ' · <span class="k-nesedi">⚠ km nesedia</span>' : "") + "</div>" +
         '<div class="k-pol-tl"><button class="btn-link" data-k-upr="' + x.id + '">Upraviť' + (sp ? " tam" : "") + "</button>" + (sp ? '<button class="btn-link" data-k-upr="' + sp.id + '">Upraviť späť</button>' : "") + "</div></div>";
     }).join("") + "</div>";
   }
@@ -167,6 +178,7 @@
   function dialogHtml() {
     var x = K.dialog; if (!x) return "";
     var ucely = (K.stav && K.stav.ucely || []).concat(["návrat na prevádzku"]);
+    (K.stav && K.stav.ucely_ine || []).forEach(function (u) { if (ucely.indexOf(u) === -1) ucely.push(u); });
     if (x.ucel && ucely.indexOf(x.ucel) === -1) ucely.push(x.ucel);
     return '<div class="f-dialog-pozadie" data-k="zavri"></div><div class="f-dialog" role="dialog" aria-modal="true"><form class="f-form" id="k-upr-form"><h3>Upraviť jazdu</h3>' +
       '<div class="d-riadok"><label class="field"><span class="label">Dátum</span><input type="date" id="k-u-dat" value="' + esc(x.datum) + '" required></label>' +
@@ -174,8 +186,11 @@
       '<div class="d-riadok"><label class="field"><span class="label">Tachometer</span><input id="k-u-tach" inputmode="decimal" value="' + esc(x.tach) + '" required></label>' +
       '<label class="field"><span class="label">Najazdené km</span><input id="k-u-km" inputmode="decimal" value="' + esc(x.km == null ? "" : x.km) + '"></label></div>' +
       '<div class="d-riadok"><label class="field"><span class="label">Účel</span><select id="k-u-ucel"><option value=""></option>' + ucely.map(function (u) { return "<option" + (x.ucel === u ? " selected" : "") + ">" + esc(u) + "</option>"; }).join("") + "</select></label>" +
-      '<label class="field"><span class="label">Tankovanie €</span><input id="k-u-tank" inputmode="decimal" value="' + esc(x.tankovanie == null ? "" : x.tankovanie) + '"></label></div>' +
-      '<div class="d-riadok"><label class="field"><span class="label">Vodič</span><input id="k-u-vodic" value="' + esc(x.vodic || "") + '"></label>' +
+      '<label class="field"><span class="label">Šofér</span><select id="k-u-vodic"><option value=""></option>' + (function () { var v = (K.stav && K.stav.vodici || []).slice(); if (x.vodic && v.indexOf(x.vodic) === -1) v.push(x.vodic); return v; })().map(function (v) { return "<option" + (x.vodic === v ? " selected" : "") + ">" + esc(v) + "</option>"; }).join("") + "</select></label></div>" +
+      '<div class="d-riadok k-riadok3"><label class="field"><span class="label">Tankovanie €</span><input id="k-u-tank" inputmode="decimal" value="' + esc(x.tankovanie == null ? "" : x.tankovanie) + '"></label>' +
+      '<label class="field"><span class="label">Litre</span><input id="k-u-litre" inputmode="decimal" value="' + esc(x.litre == null ? "" : x.litre) + '"></label>' +
+      '<label class="field"><span class="label">Palivo</span><select id="k-u-palivo"><option value=""></option>' + (K.stav && K.stav.paliva || []).map(function (p) { return "<option" + (x.palivo === p ? " selected" : "") + ">" + esc(p) + "</option>"; }).join("") + "</select></label></div>" +
+      '<div class="d-riadok">' +
       '<label class="field"><span class="label">Poznámka</span><input id="k-u-pozn" value="' + esc(x.poznamka || "") + '"></label></div>' +
       '<div class="f-akcie"><button class="btn btn-primary" type="submit">Uložiť</button><button class="btn" type="button" data-k="zavri">Zrušiť</button>' +
       '<button class="btn k-zmaz" type="button" data-k="zmaz">🗑 Zmazať riadok</button></div></form></div>';
@@ -194,10 +209,10 @@
     var spolu = 0, tank = 0;
     r.forEach(function (x) { if (x.miesto !== "Počiatočný stav") { spolu += Number(x.km || 0); tank += Number(x.tankovanie || 0); } });
     var html = '<div class="k-tlac"><h2>Kniha jázd – ' + esc(voz.nazov || "") + (voz.spz ? " (" + esc(voz.spz) + ")" : "") + "</h2><p>" + esc(mesiacNazov(K.mesiac)) + "</p>" +
-      '<table><thead><tr><th>DÁTUM</th><th>MIESTO</th><th>STAV TACHOMETRA</th><th>NAJAZDENÉ</th><th>MENO</th><th>ÚČEL JAZDY</th><th>Tankovanie €</th></tr></thead><tbody>' +
+      '<table><thead><tr><th>DÁTUM</th><th>MIESTO</th><th>STAV TACHOMETRA</th><th>NAJAZDENÉ</th><th>MENO</th><th>ÚČEL JAZDY</th><th>Tankovanie €</th><th>Litre</th></tr></thead><tbody>' +
       r.map(function (x) {
-        return "<tr><td>" + esc(denSk(x.datum)) + "</td><td>" + esc(x.miesto) + '</td><td class="t-r">' + km(x.tach, 0) + '</td><td class="t-r">' + km(x.km) + "</td><td>" + esc(x.vodic || "") + "</td><td>" + esc(x.ucel || "") + '</td><td class="t-r">' + (x.tankovanie ? km(x.tankovanie, 2) : "") + "</td></tr>";
-      }).join("") + '</tbody><tfoot><tr><td colspan="3">Spolu</td><td class="t-r">' + km(spolu) + ' km</td><td colspan="2"></td><td class="t-r">' + (tank ? km(tank, 2) : "") + "</td></tr></tfoot></table></div>";
+        return "<tr><td>" + esc(denSk(x.datum)) + "</td><td>" + esc(x.miesto) + '</td><td class="t-r">' + km(x.tach, 0) + '</td><td class="t-r">' + km(x.km) + "</td><td>" + esc(x.vodic || "") + "</td><td>" + esc(x.ucel || "") + '</td><td class="t-r">' + (x.tankovanie ? km(x.tankovanie, 2) : "") + '</td><td class="t-r">' + (x.litre ? km(x.litre, 1) + (x.palivo ? " " + esc(x.palivo) : "") : "") + "</td></tr>";
+      }).join("") + '</tbody><tfoot><tr><td colspan="3">Spolu</td><td class="t-r">' + km(spolu) + ' km</td><td colspan="2"></td><td class="t-r">' + (tank ? km(tank, 2) : "") + "</td><td></td></tr></tfoot></table></div>";
     var obal = document.getElementById("tlac-oblast");
     if (!obal) { obal = document.createElement("div"); obal.id = "tlac-oblast"; document.body.appendChild(obal); }
     obal.innerHTML = html; document.body.classList.add("tlaci");
@@ -207,8 +222,8 @@
   }
   function csv() {
     var r = riadkyMesiaca(), q = function (s) { return '"' + String(s == null ? "" : s).replace(/"/g, '""') + '"'; };
-    var t = "﻿" + ["Dátum", "Miesto", "Stav tachometra", "Najazdené", "Meno", "Účel jazdy", "Tankovanie €"].map(q).join(";") + "\n" +
-      r.map(function (x) { return [denSk(x.datum), x.miesto, String(x.tach).replace(".", ","), x.km == null ? "" : String(x.km).replace(".", ","), x.vodic, x.ucel, x.tankovanie == null ? "" : String(x.tankovanie).replace(".", ",")].map(q).join(";"); }).join("\n");
+    var t = "﻿" + ["Dátum", "Miesto", "Stav tachometra", "Najazdené", "Meno", "Účel jazdy", "Tankovanie €", "Litre", "Palivo"].map(q).join(";") + "\n" +
+      r.map(function (x) { return [denSk(x.datum), x.miesto, String(x.tach).replace(".", ","), x.km == null ? "" : String(x.km).replace(".", ","), x.vodic, x.ucel, x.tankovanie == null ? "" : String(x.tankovanie).replace(".", ","), x.litre == null ? "" : String(x.litre).replace(".", ","), x.palivo || ""].map(q).join(";"); }).join("\n");
     var a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([t], { type: "text/csv;charset=utf-8" }));
     a.download = "Kniha_jazd_" + String(K.mesiac).slice(0, 7) + ".csv";
@@ -219,18 +234,21 @@
   function citajForm() {
     var g = function (id) { var e = document.getElementById(id); return e ? e.value : undefined; };
     var f = K.form;
-    ["tach", "miesto", "tank", "datum", "vodic", "pozn"].forEach(function (k) { var v = g("k-" + k); if (v !== undefined) f[k] = v; });
+    ["tach", "miesto", "tank", "litre", "palivo", "datum", "pozn"].forEach(function (k) { var v = g("k-" + k); if (v !== undefined) f[k] = v; });
+    var ut = g("k-ucel-text"); if (ut !== undefined) f.ucel = ut.trim();
     var n = document.getElementById("k-navrat"); if (n) f.navrat = n.checked;
   }
   function klik(e) {
     var t = e.target.closest("button, [data-k]"); if (!t || !koren.contains(t)) return;
     if (t.dataset.kZal) { K.zalozka = t.dataset.kZal; if (window.lbzPamat) lbzPamat.uloz("kniha", { zalozka: K.zalozka }); K.sprava = null; if (K.zalozka === "mesiac") { K.data = null; nacitajMesiac(); } prekresli(); return; }
     if (t.dataset.kMiesto) { citajForm(); K.form.miesto = t.dataset.kMiesto; prekresli(); return; }
-    if (t.dataset.kUcel) { citajForm(); K.form.ucel = K.form.ucel === t.dataset.kUcel ? "" : t.dataset.kUcel; prekresli(); return; }
+    if (t.dataset.kUcel) { citajForm(); K.form.ineUcel = false; K.form.ucel = K.form.ucel === t.dataset.kUcel ? "" : t.dataset.kUcel; prekresli(); return; }
+    if (t.dataset.kVodic) { citajForm(); K.form.vodic = t.dataset.kVodic; if (window.lbzPamat) lbzPamat.uloz("kniha_vodic", { meno: K.form.vodic }); prekresli(); return; }
     if (t.dataset.kUpr) { var x = (K.data.riadky || []).filter(function (y) { return String(y.id) === t.dataset.kUpr; })[0]; if (x) { K.dialog = Object.assign({}, x); prekresli(); } return; }
     var a = t.dataset.k;
     if (a === "zavri-spravu") { K.sprava = null; prekresli(); }
     else if (a === "zavri") { K.dialog = null; prekresli(); }
+    else if (a === "ine-ucel") { citajForm(); K.form.ineUcel = true; K.form.ucel = ""; prekresli(); var ie = document.getElementById("k-ucel-text"); if (ie) ie.focus(); }
     else if (a === "mes-" || a === "mes+") { var p = K.mesiac.split("-"); K.mesiac = prvyDen(new Date(+p[0], +p[1] - 1 + (a === "mes+" ? 1 : -1), 1)); K.data = null; prekresli(); nacitajMesiac(); }
     else if (a === "tlac") tlac();
     else if (a === "csv") csv();
@@ -242,16 +260,16 @@
   }
   function stavTlacidla() {
     var b = koren.querySelector(".k-ulozit"), f = K.form, s = K.stav, t = cislo(f.tach), ok = t != null && s && s.tach != null && t > s.tach;
-    if (b) b.disabled = !(ok && f.miesto && f.ucel && !K.prace);
+    if (b) b.disabled = !(ok && f.vodic && f.miesto && f.ucel && !K.prace);
     var h = koren.querySelector(".k-chyba");
-    var txt = !ok ? "Zadaj stav tachometra" : !f.miesto ? "Vyber alebo napíš, kam si išla" : !f.ucel ? "Vyber účel jazdy" : "";
+    var txt = chybaFormu();
     if (h) { h.textContent = txt; h.hidden = !txt; }
     koren.querySelectorAll("[data-k-miesto]").forEach(function (c) { c.classList.toggle("k-vybrane", norm(c.dataset.kMiesto) === norm(f.miesto)); });
   }
   function vstup(e) {
     var id = e.target.id;
     if (id === "k-tach") { citajForm(); prekresli(); }
-    else if (id === "k-miesto") { citajForm(); stavTlacidla(); }
+    else if (id === "k-miesto" || id === "k-ucel-text") { citajForm(); stavTlacidla(); }
   }
   function zmena(e) {
     if (e.target.id === "k-voz") { K.stav.vozidlo_id = +e.target.value; K.form = { navrat: true, ucel: "" }; obnov(); }
@@ -262,7 +280,7 @@
       e.preventDefault(); citajForm();
       var f = K.form; if (K.prace) return;
       K.prace = true; prekresli();
-      rpc("jazdy_zapis", { p: { vozidlo_id: K.stav.vozidlo_id, tach: cislo(f.tach), miesto: f.miesto, ucel: f.ucel, navrat: f.navrat, tankovanie: cislo(f.tank), datum: f.datum || null, vodic: f.vodic || null, poznamka: f.pozn || null } })
+      rpc("jazdy_zapis", { p: { vozidlo_id: K.stav.vozidlo_id, tach: cislo(f.tach), miesto: f.miesto, ucel: f.ucel, navrat: f.navrat, tankovanie: cislo(f.tank), litre: cislo(f.litre), palivo: (f.tank || f.litre) ? f.palivo || null : null, datum: f.datum || null, vodic: f.vodic || null, poznamka: f.pozn || null } })
         .then(function (r) {
           K.prace = false;
           if (r && r.ok) { K.sprava = { typ: "ok", text: "✅ " + r.text }; var vod = f.vodic; K.form = { navrat: true, ucel: "", vodic: vod }; }
@@ -272,7 +290,7 @@
     } else if (e.target.id === "k-upr-form") {
       e.preventDefault();
       var g = function (id) { return document.getElementById(id).value; };
-      rpc("jazdy_uprav", { p: { id: K.dialog.id, datum: g("k-u-dat"), miesto: g("k-u-miesto"), tach: cislo(g("k-u-tach")), km: cislo(g("k-u-km")), ucel: g("k-u-ucel"), tankovanie: cislo(g("k-u-tank")), vodic: g("k-u-vodic"), poznamka: g("k-u-pozn") } })
+      rpc("jazdy_uprav", { p: { id: K.dialog.id, datum: g("k-u-dat"), miesto: g("k-u-miesto"), tach: cislo(g("k-u-tach")), km: cislo(g("k-u-km")), ucel: g("k-u-ucel"), tankovanie: cislo(g("k-u-tank")), litre: cislo(g("k-u-litre")), palivo: g("k-u-palivo"), vodic: g("k-u-vodic"), poznamka: g("k-u-pozn") } })
         .then(function (r) { if (r && r.ok) K.dialog = null; K.sprava = { typ: r && r.ok ? "ok" : "chyba", text: (r && r.text) || "Chyba" }; obnov(); })
         .catch(function (x) { lbzInfo(chybaText(x)); });
     }
@@ -289,7 +307,7 @@
 
   window.LBZ_KNIHA = {
     nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; K.stav = null; K.data = null; if (DB && this.mozem()) nacitajStav(); },
-    mozem: function () { return !!DB && (ROLA === "it" || ROLA === "ceo"); },
+    mozem: function () { return !!DB && ["it", "ceo", "prevadzkar", "majitelka_arealu"].indexOf(ROLA) >= 0; },
     mount: function (el) {
       koren = el;
       el.addEventListener("click", klik); el.addEventListener("input", vstup); el.addEventListener("change", zmena); el.addEventListener("submit", odoslanie);

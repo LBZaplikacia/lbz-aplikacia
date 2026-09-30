@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.18.1 BETA";
+  var VERZIA = "0.19.0 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -16,6 +16,8 @@
     zamestnanec:       { nazov: "Zamestnanec (osobný účet)" },
     furman:            { nazov: "Furman (vodič)" },
     zakaznicky_servis: { nazov: "Zákaznícky servis" },
+    prevadzkar:        { nazov: "Prevádzkár" },
+    majitelka_arealu:  { nazov: "Majiteľka areálu" },
     zakaznik:          { nazov: "Zákazník" }
   };
 
@@ -52,7 +54,9 @@
     zamestnanec: ["prehlad", "dochadzka", "nastavenia"],
     furman: ["prehlad", "trasa", "dochadzka", "kniha_jazd", "nastavenia"],
     zakaznicky_servis: ["prehlad", "objednavky", "furmanky", "balenie", "trasa", "sklad", "komentare", "nastavenia"],
-    uctovnicka: ["prehlad", "dochadzka", "zamestnanci", "exporty", "nastavenia"],
+    uctovnicka: ["prehlad", "dochadzka", "zamestnanci", "nastavenia"],
+    prevadzkar: ["prehlad", "dochadzka", "rozpis", "sklad", "balenie", "furmanky", "kniha_jazd", "zamestnanci", "nastavenia"],
+    majitelka_arealu: ["prehlad", "kniha_jazd", "nastavenia"],
     zakaznik: ["prehlad", "moje_objednavky", "sledovanie", "nastavenia"]
   };
 
@@ -77,11 +81,27 @@
   var DOCH = window.LBZ_DOCHADZKA || null;
   var KNIHA = window.LBZ_KNIHA || null;
   var VYB = window.LBZ_VYBAVIT || null;
+  var ULO = window.LBZ_ULOHY || null;
+  var AKCIA = new URLSearchParams(location.search).get("akcia"); // skratka z ikony, spracuje sa po prihlásení
+  var START_M = new URLSearchParams(location.search).get("m");
+  if (location.search) try { history.replaceState(null, "", location.pathname); } catch (e) {}
+  // poradie kariet na Prehľade podľa roly (každý si ho môže upraviť – uloží sa v zariadení)
+  var PORADIE = {
+    it: ["dochadzka", "ulohy", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
+    ceo: ["dochadzka", "ulohy", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
+    prevadzkar: ["dochadzka", "ulohy", "rozpis", "vybavit", "sklad", "balenie", "furmanky", "kniha"],
+    zamestnanec: ["dochadzka", "ulohy", "furmanky", "rozpis", "vybavit"],
+    prevadzka: ["ulohy", "dochadzka", "sklad", "balenie", "furmanky", "vybavit"],
+    furman: ["dochadzka", "rozpis", "trasa", "vybavit", "ulohy", "kniha"],
+    majitelka_arealu: ["kniha", "vybavit"]
+  };
+  var NAZVY_KARIET = { dochadzka: "🕒 Príchod a smeny", ulohy: "✅ Úlohy", vybavit: "📝 Vybaviť", kniha: "🚗 Kniha jázd", rozpis: "📅 Kto je v práci", furmanky: "🚚 Furmanky",
+    sklad: "🧊 Sklad", balenie: "📦 Balenie", trasa: "🗺️ Trasa" };
   var ZAM = window.LBZ_ZAMESTNANCI || null;
 
   var stav = {
     pouzivatel: null, email: null, rola: null,
-    modul: new URLSearchParams(location.search).get("m") || (window.lbzPamat && lbzPamat.nacitaj("modul")) || "prehlad",
+    modul: START_M || (window.lbzPamat && lbzPamat.nacitaj("modul")) || "prehlad",
     dbModuly: null,          // moduly z databázy (ostrý režim)
     login: "prihlasenie",    // prihlasenie | zabudnute | nove_heslo
     sprava: null,            // { typ: ok|chyba, text }
@@ -281,6 +301,24 @@
     if (skladZapnuty()) return SKLAD.kartaSklad();
     return '<section class="card"><h3>Sklad</h3><p class="muted" style="margin:0">Ukážkový režim.</p></section>';
   }
+  function poradieKariet(dostupne) {
+    var ul = (window.lbzPamat && lbzPamat.nacitaj("prehlad_karty")) || {};
+    var zaklad = PORADIE[stav.rola] || PORADIE.it;
+    var poradie = (ul.poradie || []).concat(zaklad).concat(dostupne).filter(function (k, i, a) { return a.indexOf(k) === i && dostupne.indexOf(k) > -1; });
+    var skryte = ul.skryte || [];
+    return { vsetky: poradie, skryte: skryte, viditelne: poradie.filter(function (k) { return skryte.indexOf(k) === -1; }) };
+  }
+  function ulozPoradie(por) { if (window.lbzPamat) lbzPamat.uloz("prehlad_karty", { poradie: por.vsetky, skryte: por.skryte }); }
+  function kartaPrisposobit(por) {
+    if (por.vsetky.length < 2) return "";
+    return '<details class="prisposobit"' + (stav.prisposobit ? " open" : "") + '><summary data-prisp="1">⚙️ Prispôsobiť prehľad</summary><ul class="prisp-zoz">' + por.vsetky.map(function (k, i) {
+      var skr = por.skryte.indexOf(k) > -1;
+      return '<li class="' + (skr ? "prisp-skr" : "") + '"><span>' + esc(NAZVY_KARIET[k] || k) + "</span>" +
+        '<button class="btn-ikona btn" data-prisp-hore="' + k + '"' + (i === 0 ? " disabled" : "") + ' aria-label="Vyššie">↑</button>' +
+        '<button class="btn-ikona btn" data-prisp-dole="' + k + '"' + (i === por.vsetky.length - 1 ? " disabled" : "") + ' aria-label="Nižšie">↓</button>' +
+        '<button class="btn" data-prisp-skry="' + k + '">' + (skr ? "Zobraziť" : "Skryť") + "</button></li>";
+    }).join("") + '</ul><button class="btn-link" data-prisp-reset="1">Pôvodné poradie</button></details>';
+  }
   function kartaPripravujeme(zoznam) {
     if (!zoznam.length) return "";
     return '<section class="card pripravujeme"><h3>Pripravujeme</h3><div class="prip-zoznam">' + zoznam.map(function (m) {
@@ -297,19 +335,23 @@
           '<span class="muted">Zatiaľ nakupujte v e-shope.</span>' +
           '<a class="btn btn-primary" href="https://www.legendarnebuchty.sk" target="_blank" rel="noopener">Otvoriť e-shop</a></div>';
       }
-      var karty = [];
+      var kh = {};
       var moje = mojeModuly(), kody = moje.map(function (m) { return m.kod; });
-      if (dochadzkaZapnuta()) { var dk = DOCH.karta(); if (dk) karty.push(dk); }
-      if (kody.indexOf("sklad") > -1) karty.push(kartaSklad());
-      if (kody.indexOf("rozpis") > -1 && rozpisZapnuty()) karty.push(ROZ.karta());
-      if (VYB) { var vk = VYB.karta(); if (vk) karty.push(vk); }
-      if (kody.indexOf("furmanky") > -1) karty.push(kartaFurmanky());
-      if (kody.indexOf("balenie") > -1 && balenieZapnute()) karty.push(BAL.karta());
-      if (kody.indexOf("trasa") > -1 && trasaZapnuta()) karty.push(TRA.karta());
-      if (knihaZapnuta()) { var kk = KNIHA.karta(); if (kk) karty.push(kk); }
+      if (dochadzkaZapnuta()) kh.dochadzka = DOCH.karta();
+      if (ULO) kh.ulohy = ULO.karta();
+      if (kody.indexOf("sklad") > -1) kh.sklad = kartaSklad();
+      if (kody.indexOf("rozpis") > -1 && rozpisZapnuty()) kh.rozpis = ROZ.karta();
+      if (VYB && r !== "majitelka_arealu") kh.vybavit = VYB.karta();
+      if (kody.indexOf("furmanky") > -1) kh.furmanky = kartaFurmanky();
+      if (kody.indexOf("balenie") > -1 && balenieZapnute()) kh.balenie = BAL.karta();
+      if (kody.indexOf("trasa") > -1 && trasaZapnuta()) kh.trasa = TRA.karta();
+      if (knihaZapnuta()) kh.kniha = KNIHA.karta();
+      var por = poradieKariet(Object.keys(kh).filter(function (k) { return kh[k]; }));
+      var karty = por.viditelne.map(function (k) { return kh[k]; });
       var dnes = new Date().toLocaleDateString("sk-SK", { weekday: "long", day: "numeric", month: "numeric" });
       var meno = String(stav.pouzivatel || "").split(" ").pop();
       return hlavicka("Dobrý deň" + (meno ? ", " + meno : "") + "!", "Dnes je " + dnes) + '<div class="grid">' + karty.join("") + "</div>" +
+        kartaPrisposobit(por) +
         kartaPripravujeme(moje.filter(function (m) { return !m.aktivny && m.kod !== "nastavenia"; }));
     }
     if (stav.modul === "nastavenia") {
@@ -418,6 +460,19 @@
   root.addEventListener("click", function (e) {
     var t = e.target.closest("button");
     if (!t) return;
+    if (t.dataset.prispHore || t.dataset.prispDole || t.dataset.prispSkry || t.dataset.prispReset) {
+      var kl = [];
+      root.querySelectorAll("[data-prisp-skry]").forEach(function (b) { kl.push(b.dataset.prispSkry); });
+      var por = poradieKariet(kl);
+      if (t.dataset.prispReset) { if (window.lbzPamat) lbzPamat.uloz("prehlad_karty", {}); }
+      else {
+        var k = t.dataset.prispHore || t.dataset.prispDole || t.dataset.prispSkry, ix = por.vsetky.indexOf(k);
+        if (t.dataset.prispSkry) { var si = por.skryte.indexOf(k); if (si > -1) por.skryte.splice(si, 1); else por.skryte.push(k); }
+        else { var nx = ix + (t.dataset.prispHore ? -1 : 1); if (nx >= 0 && nx < por.vsetky.length) { por.vsetky.splice(ix, 1); por.vsetky.splice(nx, 0, k); } }
+        ulozPoradie(por);
+      }
+      stav.prisposobit = true; render(); return;
+    }
     if (t.dataset.demo) { stav.rola = t.dataset.demo; stav.pouzivatel = "Ukážka – " + ROLY[t.dataset.demo].nazov; stav.modul = "prehlad"; render(); return; }
     if (t.dataset.login === "google") {
       // Google vráti používateľa späť na túto adresu; reláciu z adresy prevezme knižnica sama
@@ -440,6 +495,7 @@
       if (DOCH) DOCH.nastavDb(null, null);
       if (KNIHA) KNIHA.nastavDb(null, null);
       if (VYB) VYB.nastavDb(null, null);
+      if (ULO) ULO.nastavDb(null, null);
       if (ZAM) ZAM.nastavDb(null, null);
       render();
     }
@@ -491,6 +547,7 @@
       if (DOCH) DOCH.nastavDb(null, null);
       if (KNIHA) KNIHA.nastavDb(null, null);
       if (VYB) VYB.nastavDb(null, null);
+      if (ULO) ULO.nastavDb(null, null);
       if (ZAM) ZAM.nastavDb(null, null);
       render(); return;
     }
@@ -512,6 +569,15 @@
       if (DOCH) DOCH.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
       if (KNIHA) KNIHA.nastavDb(db, stav.rola);
       if (VYB) VYB.nastavDb(db, stav.rola);
+      if (ULO) ULO.nastavDb(db, stav.rola);
+      // skratky z ikony appky (dlhé podržanie): ?akcia=vybavit / ?akcia=uloha
+      var akcia = AKCIA; AKCIA = null;
+      if (akcia) {
+        setTimeout(function () {
+          if (akcia === "uloha" && ULO) ULO.zadaj();
+          if (akcia === "vybavit") { var vt = document.getElementById("v-text"); if (vt) { vt.scrollIntoView({ block: "center" }); vt.focus(); } }
+        }, 900);
+      }
       if (ZAM) ZAM.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
       render();
     }).catch(function () { stav.nacitavam = false; stav.sprava = { typ: "chyba", text: "Bez spojenia so serverom." }; render(); });
@@ -535,6 +601,7 @@
   }
 
   // moduly si dotiahli údaje pre kartu na Prehľade
+  root.addEventListener("toggle", function (e) { if (e.target.classList && e.target.classList.contains("prisposobit")) stav.prisposobit = e.target.open; }, true);
   window.addEventListener("lbz-prekresli", function () { if (stav.rola && stav.modul === "prehlad") render(); });
 
   render();

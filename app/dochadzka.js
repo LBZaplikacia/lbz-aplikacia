@@ -353,7 +353,7 @@
     var p = window.lbzPamat && lbzPamat.nacitaj("dochadzka"); if (p) { D.zalozka = p.zalozka || "mesiac"; D.osoba = p.osoba || null; D.mesiac = p.mesiac || null; }
     var q = new URLSearchParams(location.search);
     if (q.get("m") === "dochadzka" && q.get("z")) { D.zalozka = q.get("z"); D.osoba = null; D.mesiac = null; }
-    if (q.get("m")) try { history.replaceState(null, "", location.pathname); } catch (e) {}
+    // adresu (?m=…) vyčistí app.js, až keď si z nej prečíta modul a akciu
   })();
 
   // ---------- upozornenia do mobilu ----------
