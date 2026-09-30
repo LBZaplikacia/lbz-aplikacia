@@ -1362,3 +1362,6 @@ body.pdfv-otvorene { overflow: hidden; }
 .o-db { color: #c62828; font-size: 12px; font-weight: 600; }
 .o-dok-r > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .o-dok-r .num { display: inline-flex; gap: 8px; align-items: center; }
+/* v0.29.4 – úvodný návod */
+.start-karta { border: 2px solid var(--lbz-zlata, #CBA75B); background: var(--lbz-zlata-svetla, #F5ECD9); grid-column: 1 / -1; }
+.start-kroky { margin: 0; padding-left: 20px; display: grid; gap: 8px; line-height: 1.45; }

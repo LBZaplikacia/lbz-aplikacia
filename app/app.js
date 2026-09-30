@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.29.3 BETA";
+  var VERZIA = "0.29.4 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -403,6 +403,20 @@
   function pushTlacidlo() {
     return '<button class="btn btn-primary" data-push-zapni' + (stav.pushPrace ? " disabled" : "") + ">" + (stav.pushPrace ? "Zapínam…" : "🔔 Zapnúť upozornenia") + "</button>";
   }
+  // úvodný návod (1. 10. 2026): najprv príchod do práce, potom nainštalovať appku – kým nie je nainštalovaná alebo skrytá
+  function kartaStart() {
+    if (jeNainstalovana() || !/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) return "";
+    try { if (localStorage.getItem("lbz_start_skryte")) return ""; } catch (x) { /* */ }
+    var ios = /iPhone|iPad/i.test(navigator.userAgent);
+    return '<section class="card start-karta"><h3>👋 Vitaj v novej appke LBZ</h3><ol class="start-kroky">' +
+      (dochadzkaZapnuta() ? "<li><b>Najprv sa prihlás do práce</b> – v karte „🕒 Príchod a smeny“ nižšie ťukni <b>Príchod</b>.</li>" : "") +
+      "<li><b>Nainštaluj si appku na plochu</b> – " + (ios
+        ? "otvor túto stránku v <b>Safari</b> → ťukni <b>Zdieľať</b> (štvorček so šípkou ⬆️) → <b>Pridať na plochu</b> → <b>Pridať</b>."
+        : "v Chrome ťukni vpravo hore <b>⋮</b> → <b>Pridať na plochu</b> (alebo „Inštalovať aplikáciu“) → <b>Inštalovať</b>.") + "</li>" +
+      "<li>Odteraz appku otváraj <b>len z ikony LBZ</b> na ploche a zapni si <b>🔔 upozornenia</b>.</li></ol>" +
+      '<div class="f-akcie">' + (instalPrompt ? '<button class="btn btn-primary" data-start-instal>📲 Nainštalovať</button>' : "") +
+      '<button class="btn" data-start-skry>Hotovo, skryť</button></div></section>';
+  }
   function kartaPush() {
     pushStavNacitaj();
     if (stav.pushStav !== "vypnute" && stav.pushStav !== "zakazane") return "";
@@ -475,6 +489,7 @@
       var kOdb = OBJ && OBJ.mozemOdbery() && OSTRY ? OBJ.kartaOdbery() : "";
       if (kOdb) karty.splice(kh.schvalenie ? 1 : 0, 0, kOdb);
       if (kPush) karty.unshift(kPush);
+      var kStart = OSTRY ? kartaStart() : ""; if (kStart) karty.unshift(kStart);
       var akt = window.lbzAktivita && lbzAktivita.dnes();
       if (akt != null) karty.unshift('<section class="card akt-karta"><h3>⏱ Pracovný čas sa ráta automaticky</h3><p style="margin:0">Dnes: <b class="num">' + Math.floor(akt / 60) + " h " + (akt % 60) + " min</b></p>" +
         '<p class="muted" style="margin:0">Ráta sa, kým máš appku otvorenú a pracuješ v nej. Po 5 min nečinnosti, minimalizovaní alebo zavretí sa zastaví.</p></section>');
@@ -645,6 +660,8 @@
     }
     if (t.dataset.login) { stav.login = t.dataset.login; stav.sprava = null; render(); return; }
     if (t.dataset.mod) { stav.modul = t.dataset.mod; stav.sprava = null; stav.spravaPouz = null; if (t.dataset.mod === "nastavenia") stav.pouzivatelia = null; render(); window.scrollTo(0, 0); return; }
+    if (t.hasAttribute("data-start-skry")) { try { localStorage.setItem("lbz_start_skryte", "1"); } catch (x) { /* */ } render(); return; }
+    if (t.hasAttribute("data-start-instal") && instalPrompt) { instalPrompt.prompt(); instalPrompt.userChoice.then(function () { instalPrompt = null; render(); }); return; }
     if (t.hasAttribute("data-push-zapni")) {
       stav.pushPrace = true; stav.pushSprava = null; render();
       lbzPush.zapni(db).then(function (txt) { stav.pushStav = "zapnute"; stav.pushSprava = txt; })
