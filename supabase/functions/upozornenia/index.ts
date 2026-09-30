@@ -85,6 +85,13 @@ Deno.serve(async (req) => {
         n += await posli(ved, { title: "⏰ " + meno + " – 14 h v práci", body: "Stále nemá zapísaný odchod (" + (d.miesto || "") + "). Skontroluj v Dochádzke → Tím.", url: "/?m=dochadzka&z=tim", tag: "doch-v-" + d.id });
         await rest("dochadzka?id=eq." + d.id, { method: "PATCH", body: JSON.stringify({ upozornene: new Date().toISOString() }), headers: { Prefer: "return=minimal" } });
       }
+      // nové osobné odbery → prevádzka + ľudia so smenou dnes
+      try {
+        const od = await rpc("odbery_na_oznamenie", {});
+        for (const o of (od && od.odbery) || []) {
+          n += await posli(od.uids || [], { title: "🛍️ Osobný odber – " + (o.meno || o.cislo), body: (o.polozky || "") + (o.suma ? " · " + String(o.suma).replace(".", ",") + " €" : ""), url: "/", tag: "odber-" + o.cislo + "-" });
+        }
+      } catch (_) { /* nič */ }
       // zdravotné preukazy – raz denne ráno (plánovač beží každých 30 min)
       const teraz = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Bratislava" }));
       let preukazy = 0;
