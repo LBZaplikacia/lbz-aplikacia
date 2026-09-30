@@ -247,3 +247,6 @@ do $$ begin
 end $$;
 -- IT a CEO vidia všetky moduly
 insert into public.pristupy (rola, modul, uprava) select r, m.kod, true from public.moduly m cross join unnest(array['it','ceo']) r on conflict do nothing;
+-- s28b: práva k tabuľkám (Edge Function = service_role; Realtime číta cez politiku)
+grant select, insert, update, delete on public.chat_konv, public.chat_clen, public.chat_sprava to service_role;
+grant select on public.chat_sprava to authenticated;
