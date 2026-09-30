@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.22.2 BETA";
+  var VERZIA = "0.23.0 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -23,6 +23,7 @@
 
   var MODULY = [
     { kod: "prehlad",         nazov: "Prehľad",                 aktivny: true },
+    { kod: "chat",            nazov: "Chat" },
     { kod: "sklad",           nazov: "Sklad" },
     { kod: "furmanky",        nazov: "Furmanky" },
     { kod: "balenie",         nazov: "Balenie a štítky" },
@@ -41,12 +42,13 @@
 
   // ikony modulov (bočná lišta na PC, spodná lišta v mobile)
   var IKONY = {
-    prehlad: "🏠", sklad: "🧊", furmanky: "🚚", balenie: "📦", trasa: "🗺️", rozpis: "📅", dochadzka: "🕒", kniha_jazd: "🚗",
+    prehlad: "🏠", chat: "💬", sklad: "🧊", furmanky: "🚚", balenie: "📦", trasa: "🗺️", rozpis: "📅", dochadzka: "🕒", kniha_jazd: "🚗",
     objednavky: "🧾", komentare: "💬", zamestnanci: "👥", exporty: "📊", moje_objednavky: "🛍️", sledovanie: "📍", nastavenia: "⚙️"
   };
   // jednotné čiarové ikony (SVG) – lišta na PC aj v mobile
   var P = {
     prehlad: '<path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/>',
+    chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12.5h5"/>',
     sklad: '<path d="M3 7l9-4 9 4v13H3z"/><path d="M7 20v-7h10v7M7 16h10"/>',
     furmanky: '<path d="M2 6h11v10H2zM13 10h4l4 4v2h-8z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
     balenie: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>',
@@ -66,10 +68,10 @@
   function ikona(k) { return '<svg class="ik" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (P[k] || P.viac) + "</svg>"; }
   // čo je v spodnej lište v mobile (max 4 + Viac)
   var LISTA = {
-    it: ["prehlad", "dochadzka", "kniha_jazd", "rozpis"], ceo: ["prehlad", "dochadzka", "kniha_jazd", "rozpis"],
-    prevadzkar: ["prehlad", "dochadzka", "rozpis", "sklad"], prevadzka: ["prehlad", "sklad", "balenie", "dochadzka"],
-    zamestnanec: ["prehlad", "dochadzka", "rozpis", "zamestnanci"], furman: ["prehlad", "trasa", "dochadzka", "rozpis"],
-    zakaznicky_servis: ["prehlad", "dochadzka", "objednavky", "furmanky"], uctovnicka: ["prehlad", "dochadzka", "zamestnanci"],
+    it: ["prehlad", "chat", "dochadzka", "kniha_jazd"], ceo: ["prehlad", "chat", "dochadzka", "kniha_jazd"],
+    prevadzkar: ["prehlad", "chat", "dochadzka", "rozpis"], prevadzka: ["prehlad", "chat", "sklad", "balenie"],
+    zamestnanec: ["prehlad", "chat", "dochadzka", "rozpis"], furman: ["prehlad", "chat", "trasa", "dochadzka"],
+    zakaznicky_servis: ["prehlad", "chat", "dochadzka", "objednavky"], uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci"],
     majitelka_arealu: ["prehlad", "kniha_jazd"], zakaznik: ["prehlad", "moje_objednavky", "sledovanie"]
   };
   var KRATKO = { rozpis: "Rozpis", balenie: "Balenie", trasa: "Trasa", dochadzka: "Dochádzka", kniha_jazd: "Jazdy", zamestnanci: "Ľudia", komentare: "Komentáre",
@@ -78,12 +80,12 @@
   var PRISTUPY = {
     it: MODULY.map(function (m) { return m.kod; }),
     ceo: MODULY.map(function (m) { return m.kod; }),
-    prevadzka: ["prehlad", "sklad", "balenie", "dochadzka", "kniha_jazd", "nastavenia"],
-    zamestnanec: ["prehlad", "dochadzka", "nastavenia"],
-    furman: ["prehlad", "trasa", "dochadzka", "kniha_jazd", "nastavenia"],
-    zakaznicky_servis: ["prehlad", "dochadzka", "objednavky", "furmanky", "balenie", "trasa", "sklad", "komentare", "zamestnanci", "nastavenia"],
-    uctovnicka: ["prehlad", "dochadzka", "zamestnanci", "nastavenia"],
-    prevadzkar: ["prehlad", "dochadzka", "rozpis", "sklad", "balenie", "furmanky", "kniha_jazd", "zamestnanci", "nastavenia"],
+    prevadzka: ["prehlad", "chat", "sklad", "balenie", "dochadzka", "kniha_jazd", "nastavenia"],
+    zamestnanec: ["prehlad", "chat", "dochadzka", "nastavenia"],
+    furman: ["prehlad", "chat", "trasa", "dochadzka", "kniha_jazd", "nastavenia"],
+    zakaznicky_servis: ["prehlad", "chat", "dochadzka", "objednavky", "furmanky", "balenie", "trasa", "sklad", "komentare", "zamestnanci", "nastavenia"],
+    uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci", "nastavenia"],
+    prevadzkar: ["prehlad", "chat", "dochadzka", "rozpis", "sklad", "balenie", "furmanky", "kniha_jazd", "zamestnanci", "nastavenia"],
     majitelka_arealu: ["prehlad", "kniha_jazd", "nastavenia"],
     zakaznik: ["prehlad", "moje_objednavky", "sledovanie", "nastavenia"]
   };
@@ -110,8 +112,10 @@
   var KNIHA = window.LBZ_KNIHA || null;
   var VYB = window.LBZ_VYBAVIT || null;
   var ULO = window.LBZ_ULOHY || null;
+  var CHAT = window.LBZ_CHAT || null;
   var AKCIA = new URLSearchParams(location.search).get("akcia"); // skratka z ikony, spracuje sa po prihlásení
   var START_M = new URLSearchParams(location.search).get("m");
+  var START_K = new URLSearchParams(location.search).get("k");   // konverzácia v chate (odkaz z upozornenia)
   // inštalácia appky (QR kód vedie na ?instal=1)
   var INSTAL = new URLSearchParams(location.search).get("instal") === "1", instalPrompt = null;
   window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); instalPrompt = e; ukazInstal(); });
@@ -230,6 +234,7 @@
   function dochadzkaZapnuta() { return !!(DOCH && DOCH.mozem()); }
   function knihaZapnuta() { return !!(KNIHA && KNIHA.mozem()); }
   function zamZapnute() { return !!(ZAM && ZAM.mozem()); }
+  function chatZapnuty() { return !!(CHAT && CHAT.mozem()); }
 
   // ---------- prihlásenie ----------
   var GOOGLE_IKONA = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.3 6.9-17.7z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.1 1.4-4.9 2.3-8.2 2.3-6.2 0-11.5-4.2-13.4-9.9l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
@@ -301,6 +306,7 @@
       if (m.kod === "trasa") m.aktivny = trasaZapnuta();
       if (m.kod === "dochadzka") m.aktivny = dochadzkaZapnuta();
       if (m.kod === "kniha_jazd") m.aktivny = knihaZapnuta();
+      if (m.kod === "chat") m.aktivny = chatZapnuty();
       if (m.kod === "zamestnanci") { m.aktivny = zamZapnute(); KRATKO.zamestnanci = stav.rola === "zamestnanec" ? "Údaje" : "Ľudia"; if (stav.rola === "zamestnanec") m.nazov = "Moje údaje"; }
     });
     return zoznam;
@@ -444,6 +450,7 @@
     if (dochadzkaZapnuta() && stav.modul === "dochadzka") return '<div id="doch-root"></div>';
     if (knihaZapnuta() && stav.modul === "kniha_jazd") return '<div id="kniha-root"></div>';
     if (zamZapnute() && stav.modul === "zamestnanci") return '<div id="zam-root"></div>';
+    if (chatZapnuty() && stav.modul === "chat") return '<div id="chat-root" class="chat-root"></div>';
     if (skladZapnuty() && stav.modul === "sklad") {
       return '<div id="sklad-root" data-modul="' + stav.modul + '"></div>';
     }
@@ -523,6 +530,9 @@
     if (kn && KNIHA) KNIHA.mount(kn);
     var zr = document.getElementById("zam-root");
     if (zr && ZAM) ZAM.mount(zr);
+    var ch = document.getElementById("chat-root");
+    if (ch && CHAT) CHAT.mount(ch);
+    if (CHAT && CHAT.odznak) CHAT.odznak();
   }
 
   // ---------- udalosti ----------
@@ -568,6 +578,7 @@
       if (VYB) VYB.nastavDb(null, null);
       if (ULO) ULO.nastavDb(null, null);
       if (ZAM) ZAM.nastavDb(null, null);
+      if (CHAT) CHAT.nastavDb(null, null);
       render();
     }
   });
@@ -620,6 +631,7 @@
       if (VYB) VYB.nastavDb(null, null);
       if (ULO) ULO.nastavDb(null, null);
       if (ZAM) ZAM.nastavDb(null, null);
+      if (CHAT) CHAT.nastavDb(null, null);
       render(); return;
     }
     stav.email = session.user.email; stav.uid = session.user.id;
@@ -650,6 +662,7 @@
         }, 900);
       }
       if (ZAM) ZAM.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
+      if (CHAT) { CHAT.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola); if (START_K) { CHAT.otvorKonv(START_K); START_K = null; } }
       render();
     }).catch(function () { stav.nacitavam = false; stav.sprava = { typ: "chyba", text: "Bez spojenia so serverom." }; render(); });
   }

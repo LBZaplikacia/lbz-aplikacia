@@ -134,13 +134,16 @@
   }
   function zdravSekcia() {
     var d = Z.detail; if (!d || !(d.ja || d.spravca)) return "";
-    var doD = (d.z || {}).zdrav_preukaz_do, foto = (d.z || {}).zdrav_preukaz_foto, neurc = doD && doD >= NEURCITO;
+    var doD = (d.z || {}).zdrav_preukaz_do, foto = (d.z || {}).zdrav_preukaz_foto || (d.z || {}).zdrav_preukaz_foto2, neurc = doD && doD >= NEURCITO;
     return '<form class="card zm-sekcia zm-zdrav" id="zm-zdrav-form"><div class="zm-s-hl"><h3>🩺 Zdravotný preukaz</h3>' + zdravPill(doD) + "</div>" +
-      '<p class="muted" style="margin:0">Odfoť platný preukaz a zadaj dátum, do kedy platí. 30 a 7 dní pred koncom ti appka pripomenie obnovu.</p>' +
+      '<p class="muted" style="margin:0">Odfoť obe strany preukazu a zadaj, do kedy platí. 30 a 7 dní pred koncom ti appka pripomenie obnovu.</p>' +
       '<label class="zm-zd-neurc"><input type="checkbox" id="zm-zd-neurc"' + (neurc ? " checked" : "") + '> Platí na dobu neurčitú</label>' +
       '<div class="d-riadok"><label class="field"' + (neurc ? " hidden" : "") + ' id="zm-zd-do-pole"><span class="label">Platí do</span><input type="date" id="zm-zd-do" value="' + esc(neurc ? "" : doD || "") + '"></label>' +
-      '<label class="field"><span class="label">Fotka preukazu</span><input type="file" id="zm-zd-foto" accept="image/*" capture="environment"></label></div>' +
-      (ZD.foto ? '<img class="zm-zd-img" src="' + esc(ZD.foto) + '" alt="Zdravotný preukaz">' : foto ? '<button type="button" class="btn-link" data-zm="zd-ukaz">🖼 Zobraziť uloženú fotku</button>' : "") +
+      "</div>" +
+      '<div class="d-riadok"><label class="field"><span class="label">📷 Predná strana</span><input type="file" id="zm-zd-foto" accept="image/*" capture="environment"></label>' +
+      '<label class="field"><span class="label">📷 Zadná strana</span><input type="file" id="zm-zd-foto2" accept="image/*" capture="environment"></label></div>' +
+      (ZD.foto ? '<div class="zm-zd-fotky">' + ZD.foto.map(function (u) { return u ? '<img class="zm-zd-img" src="' + esc(u) + '" alt="Zdravotný preukaz">' : ""; }).join("") + "</div>"
+        : foto ? '<button type="button" class="btn-link" data-zm="zd-ukaz">🖼 Zobraziť uložené fotky</button>' : "") +
       '<div class="f-akcie"><button class="btn btn-primary" type="submit"' + (ZD.prace ? " disabled" : "") + ">" + (ZD.prace ? "Ukladám…" : "💾 Uložiť preukaz") + "</button></div></form>";
   }
   function zmensiFotku(file) {
@@ -158,14 +161,17 @@
   }
   function ulozZdrav() {
     var neurc = document.getElementById("zm-zd-neurc").checked;
-    var doD = neurc ? NEURCITO : document.getElementById("zm-zd-do").value, f = document.getElementById("zm-zd-foto").files[0], os = Z.osoba;
+    var doD = neurc ? NEURCITO : document.getElementById("zm-zd-do").value, os = Z.osoba;
+    var f = document.getElementById("zm-zd-foto").files[0], f2 = document.getElementById("zm-zd-foto2").files[0];
     if (!doD) { lbzInfo("Zadaj dátum platnosti alebo zaškrtni „Platí na dobu neurčitú“."); return; }
     ZD.prace = true; prekresli();
-    var nahraj = f ? zmensiFotku(f).then(function (b) {
-      var cesta = os + "/zdrav_" + Date.now() + ".jpg";
-      return DB.storage.from("zamestnanci").upload(cesta, b, { contentType: "image/jpeg" }).then(function (r) { if (r.error) throw r.error; return cesta; });
-    }) : Promise.resolve(null);
-    nahraj.then(function (cesta) { return rpc("zam_zdrav_uloz", { p_osoba: os, p_do: doD, p_foto: cesta }); })
+    var nahraj = function (file, strana) {
+      return file ? zmensiFotku(file).then(function (b) {
+        var cesta = os + "/zdrav_" + strana + "_" + Date.now() + ".jpg";
+        return DB.storage.from("zamestnanci").upload(cesta, b, { contentType: "image/jpeg" }).then(function (r) { if (r.error) throw r.error; return cesta; });
+      }) : Promise.resolve(null);
+    };
+    Promise.all([nahraj(f, "a"), nahraj(f2, "b")]).then(function (c) { return rpc("zam_zdrav_uloz", { p_osoba: os, p_do: doD, p_foto: c[0], p_foto2: c[1] }); })
       .then(function (r) { ZD.prace = false; ZD.foto = null; Z.sprava = { typ: r && r.ok ? "ok" : "chyba", text: (r && r.text) || "Chyba" }; otvor(os); nacitajZdrav(); })
       .catch(function (x) { ZD.prace = false; Z.sprava = { typ: "chyba", text: chybaText(x) }; prekresli(); });
   }
@@ -430,8 +436,9 @@
     else if (a === "pa-mzdarke") paMzdarke();
     else if (a === "pa-dok") paNacitajDok();
     else if (a === "zd-ukaz") {
-      rpc("zam_zdrav_foto", { p_osoba: Z.osoba }).then(function (c) { if (!c) return; return DB.storage.from("zamestnanci").createSignedUrl(c, 300); })
-        .then(function (r) { if (r && r.data) { ZD.foto = r.data.signedUrl; prekresli(); } }).catch(function (x) { lbzInfo(chybaText(x)); });
+      rpc("zam_zdrav_fotky", { p_osoba: Z.osoba }).then(function (c) {
+        return Promise.all((c || []).map(function (x) { return x ? DB.storage.from("zamestnanci").createSignedUrl(x, 300).then(function (r) { return r && r.data ? r.data.signedUrl : null; }) : null; }));
+      }).then(function (u) { ZD.foto = (u || []).filter(Boolean); prekresli(); }).catch(function (x) { lbzInfo(chybaText(x)); });
     }
     else if (a === "potvrd") {
       var s = document.getElementById("zm-suhlas");
