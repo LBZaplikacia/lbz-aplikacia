@@ -1236,3 +1236,28 @@ body.pdfv-otvorene { overflow: hidden; }
 .zm-zdrav-min > summary::after { content: "▾"; color: var(--muted); }
 .zm-zdrav-min[open] > summary::after { content: "▴"; }
 .zm-zdrav-vnutro { display: grid; gap: 12px; margin-top: 10px; }
+
+/* ---------- Objednávky (v0.27) ---------- */
+.o-riadok { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.o-riadok input[type=search] { flex: 1 1 220px; min-width: 0; }
+.o-riadok select { max-width: 100%; }
+.o-akcie { margin-top: 10px; }
+.o-zoznam { display: flex; flex-direction: column; gap: 6px; }
+.o-pol { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "h s" "d s"; gap: 2px 10px; text-align: left; width: 100%;
+  padding: 10px 12px; border: 1px solid var(--line, #eadfca); border-radius: 12px; background: var(--card, #fff); color: inherit; font: inherit; cursor: pointer; }
+.o-pol:hover { border-color: var(--lbz-zlata, #CBA75B); }
+.o-pol-h { grid-area: h; min-width: 0; overflow-wrap: anywhere; }
+.o-pol-d { grid-area: d; font-size: .85em; min-width: 0; overflow-wrap: anywhere; }
+.o-pol-s { grid-area: s; align-self: center; font-weight: 700; white-space: nowrap; }
+.o-pol-riadok { padding: 6px 0; border-bottom: 1px solid var(--line, #eadfca); }
+.o-pol-riadok .o-pol-n { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.o-pol-riadok input { width: 84px; }
+.o-odber { align-items: flex-start; }
+.o-odber > span:last-child { text-align: right; }
+.o-filtre input[type=search], .o-riadok select, .o-pol-riadok input, #o-form select, #o-form textarea {
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--bg); min-height: 44px; color: var(--ink); font: inherit; min-width: 0; max-width: 100%; }
+#o-form { min-width: 0; overflow: hidden; }
+#o-form select, #o-pridaj { width: 100%; }
+#o-form .field { min-width: 0; }
+.o-riadok select[name=stav] { flex: 1 1 180px; }
+.o-pol { background: var(--surface); border-color: var(--line); }

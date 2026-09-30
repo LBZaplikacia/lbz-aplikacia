@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.26.3 BETA";
+  var VERZIA = "0.27.0 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -106,6 +106,7 @@
   var SKLAD = window.LBZ_SKLAD || null;
   var FURM = window.LBZ_FURMANKY || null;
   var ROZ = window.LBZ_ROZPIS || null;
+  var OBJ = window.LBZ_OBJEDNAVKY || null;
   var BAL = window.LBZ_BALENIE || null;
   var TRA = window.LBZ_TRASA || null;
   var DOCH = window.LBZ_DOCHADZKA || null;
@@ -229,6 +230,7 @@
   function skladZapnuty() { return !!(SKLAD && SKLAD.zapnute()); }
   function furmankyZapnute() { return !!(FURM && FURM.mozem()); }
   function rozpisZapnuty() { return !!(ROZ && ROZ.mozem()); }
+  function objednavkyZapnute() { return !!(OBJ && OBJ.mozem()); }
   function balenieZapnute() { return !!(BAL && BAL.mozem()); }
   function trasaZapnuta() { return !!(TRA && TRA.mozem()); }
   function dochadzkaZapnuta() { return !!(DOCH && DOCH.mozem()); }
@@ -302,6 +304,7 @@
       if (m.kod === "sklad") m.aktivny = skladZapnuty();
       if (m.kod === "furmanky") m.aktivny = furmankyZapnute();
       if (m.kod === "rozpis") m.aktivny = rozpisZapnuty();
+      if (m.kod === "objednavky") m.aktivny = objednavkyZapnute();
       if (m.kod === "balenie") m.aktivny = balenieZapnute();
       if (m.kod === "trasa") m.aktivny = trasaZapnuta();
       if (m.kod === "dochadzka") m.aktivny = dochadzkaZapnuta();
@@ -469,6 +472,8 @@
       if (zamZapnute() && ZAM.karta) kh.zdrav = ZAM.karta();
       var por = poradieKariet(Object.keys(kh).filter(function (k) { return kh[k]; }));
       var karty = (kh.schvalenie ? ["schvalenie"] : []).concat(por.viditelne.filter(function (k) { return k !== "schvalenie"; })).map(function (k) { return kh[k]; });
+      var kOdb = OBJ && OBJ.mozemOdbery() && OSTRY ? OBJ.kartaOdbery() : "";
+      if (kOdb) karty.splice(kh.schvalenie ? 1 : 0, 0, kOdb);
       if (kPush) karty.unshift(kPush);
       var akt = window.lbzAktivita && lbzAktivita.dnes();
       if (akt != null) karty.unshift('<section class="card akt-karta"><h3>⏱ Pracovný čas sa ráta automaticky</h3><p style="margin:0">Dnes: <b class="num">' + Math.floor(akt / 60) + " h " + (akt % 60) + " min</b></p>" +
@@ -498,6 +503,7 @@
     }
     if (furmankyZapnute() && stav.modul === "furmanky") return '<div id="furm-root"></div>';
     if (rozpisZapnuty() && stav.modul === "rozpis") return '<div id="rozpis-root"></div>';
+    if (objednavkyZapnute() && stav.modul === "objednavky") return '<div id="obj-root"></div>';
     if (balenieZapnute() && stav.modul === "balenie") return '<div id="balenie-root"></div>';
     if (trasaZapnuta() && stav.modul === "trasa") return '<div id="trasa-root"></div>';
     if (dochadzkaZapnuta() && stav.modul === "dochadzka") return '<div id="doch-root"></div>';
@@ -591,6 +597,8 @@
     if (sk && SKLAD) SKLAD.mount(sk, sk.getAttribute("data-modul"));
     var fu = document.getElementById("furm-root");
     if (fu && FURM) FURM.mount(fu);
+    var oo = document.getElementById("obj-root");
+    if (oo && OBJ) OBJ.mount(oo);
     var ro = document.getElementById("rozpis-root");
     if (ro && ROZ) ROZ.mount(ro);
     var ba = document.getElementById("balenie-root");
@@ -657,6 +665,7 @@
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(null, null);
       if (FURM) FURM.nastavDb(null, null);
       if (ROZ) ROZ.nastavDb(null, null);
+      if (OBJ) OBJ.nastavDb(null, null);
       if (BAL) BAL.nastavDb(null, null);
       if (TRA) TRA.nastavDb(null, null);
       if (DOCH) DOCH.nastavDb(null, null);
@@ -710,6 +719,7 @@
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(null, null);
       if (FURM) FURM.nastavDb(null, null);
       if (ROZ) ROZ.nastavDb(null, null);
+      if (OBJ) OBJ.nastavDb(null, null);
       if (BAL) BAL.nastavDb(null, null);
       if (TRA) TRA.nastavDb(null, null);
       if (DOCH) DOCH.nastavDb(null, null);
@@ -733,6 +743,7 @@
       if (SKLAD && SKLAD.nastavDb) SKLAD.nastavDb(interny() ? db : null, stav.rola);
       if (FURM) FURM.nastavDb(interny() ? db : null, stav.rola);
       if (ROZ) ROZ.nastavDb(db, stav.rola);
+      if (OBJ) OBJ.nastavDb(db, stav.rola);
       if (BAL) BAL.nastavDb(interny() ? db : null, stav.rola);
       if (TRA) TRA.nastavDb(interny() ? db : null, stav.rola);
       if (DOCH) DOCH.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
