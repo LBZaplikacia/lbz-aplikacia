@@ -366,10 +366,11 @@
     if (!d) return '<section class="card st-karta"><h3>📊 Denný prehľad</h3><p class="muted" style="margin:0">' + (O.stat.nacitava ? "Načítavam…" : "Nenačítané") + "</p></section>";
     var ob = d.obdobia || {}, dnes = ob["1"] || {}, t = d.tyzden_spat || {};
     var dni = d.dni || [], max = Math.max.apply(null, dni.map(function (x) { return Number(x.trzba) || 0; }).concat([1]));
-    var graf = '<div class="st-graf" role="img" aria-label="Tržby za 14 dní">' + dni.map(function (x) {
+    var graf = '<div class="st-graf" role="img" aria-label="Tržby za ' + dni.length + ' dní">' + dni.map(function (x, i) {
       var h = Math.round((Number(x.trzba) || 0) / max * 100), dt = new Date(x.d + "T12:00:00");
-      return '<span class="st-stlpec" title="' + esc(dt.toLocaleDateString("sk-SK") + ": " + x.pocet + " obj. · " + eur(x.trzba)) + '"><i style="height:' + Math.max(h, 2) + '%"></i><small>' + dt.getDate() + "</small></span>";
-    }).join("") + "</div>";
+      var popis = (dni.length - 1 - i) % 5 === 0 ? dt.getDate() + "." : "";
+      return '<span class="st-stlpec" title="' + esc(dt.toLocaleDateString("sk-SK") + ": " + x.pocet + " obj. · " + eur(x.trzba)) + '"><i style="height:' + Math.max(h, 2) + '%"></i><small>' + popis + "</small></span>";
+    }).join("") + '</div><p class="muted st-pozn">Tržby za posledných ' + dni.length + " dní</p>";
     var obd = function (k, nazov) {
       var x = ob[k] || {};
       return '<div class="st-obd"><span class="muted">' + nazov + '</span><b class="num">' + esc(eur(x.trzba || 0)) + "</b>" +

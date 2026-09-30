@@ -1394,3 +1394,4 @@ body.pdfv-otvorene { overflow: hidden; }
 .f-sms-odp { margin: 2px 0 4px; padding: 4px 8px; border-left: 3px solid var(--lbz-zlata, #CBA75B); background: var(--lbz-zlata-svetla, #F5ECD9); border-radius: 6px; font-size: 13px; }
 .t-sms-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 :root[data-theme="dark"] .t-sms-odp, :root[data-theme="dark"] .f-sms-odp { background: rgba(203, 167, 91, .12); }
+.st-graf { gap: 2px; } .st-stlpec small { white-space: nowrap; }

@@ -307,15 +307,22 @@
       T.prace--;
       if (!r || r.ok === false) { T.sprava = { typ: "chyba", text: (r && r.text) || "Neuložené" }; prekresli(); return r; }
       T.sprava = okText ? { typ: "ok", text: okText } : null; T.dialog = null;
-      if (args.p_stav === "dorucene" || args.p_stav === "nedorucene") smsDalsiemu();
+      if (args.p_stav === "dorucene" || args.p_stav === "nedorucene") smsDalsiemu(args.p_cislo);
       return nacitajTrasu(true).then(function () { return r; });
     }).catch(function (e) { T.prace--; T.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
   }
   // po vybavení zastávky: SMS ďalšiemu zákazníkovi „furman je na ceste“ s presnejším časom (Edge Function gosms)
-  function smsDalsiemu() {
+  function smsDalsiemu(poCisle) {
     var id = T.id;
     if (!DB || !DB.functions || id == null) return;
-    DB.functions.invoke("gosms", { body: { akcia: "cestou", furmanka_id: id } }).then(function (res) {
+    // ďalšia nevybavená zastávka v poradí (bez tej, ktorú furman práve vybavil); čas príchodu sa vypočíta z GPS polohy
+    var z = zastavky(), i0 = -1, dal = null;
+    z.forEach(function (x, i) { if (x.cislo === poCisle) i0 = i; });
+    for (var k = 1; k <= z.length && !dal; k++) { var x = z[(i0 + k + z.length) % z.length]; if (x && x.stav === "caka" && x.cislo !== poCisle) dal = x; }
+    var telo = { akcia: "cestou", furmanka_id: id };
+    if (dal) telo.cislo = dal.cislo;
+    if (T.gps) { telo.lat = T.gps.lat; telo.lng = T.gps.lng; }
+    DB.functions.invoke("gosms", { body: telo }).then(function (res) {
       var d = res && res.data;
       if (d && d.ok && /odoslan/i.test(d.text || "") && T.id === id) {
         T.sprava = { typ: "ok", text: (T.sprava && T.sprava.text ? T.sprava.text + " · " : "") + "📱 " + d.text };
