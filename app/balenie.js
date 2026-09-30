@@ -33,7 +33,7 @@
     return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "#1b120f" : "#ffffff";
   }
   function upravKod(t) {
-    t = String(t || "").replace(/[´'’\/]/g, "-").trim();
+    t = String(t || "").replace(/[´'’\/=]/g, "-").trim();
     var v = ""; for (var i = 0; i < t.length; i++) { var z = t.charAt(i); v += MAPA_SK[z] !== undefined ? MAPA_SK[z] : z; }
     return v.toUpperCase();
   }
@@ -249,7 +249,7 @@
     var head = '<div class="head"><div><button class="btn-link spat" data-b="spat-furmanka">← ' + esc((B.fData && B.fData.furmanka && B.fData.furmanka.nazov) || "Furmanka") + "</button>" +
       "<h2>" + esc(o.meno || o.firma || "-") + "</h2>" +
       '<div class="sub">obj. ' + esc(o.cislo) + " · " + esc(o.mesto || "") + " · " + esc(o.platba || "DOBIERKA") + " " + esc(suma(o.suma)) + "</div></div>" +
-      '<span class="head-tl">' + stavPill(o.stav, o.dovod) + "</span></div>";
+      '<span class="head-tl"><button class="btn" data-b="stitok-jeden" title="Vytlačiť štítok len tejto objednávky">🖨️ Štítok</button>' + stavPill(o.stav, o.dovod) + "</span></div>";
     var info = [o.poznamka, o.upozornenie].filter(Boolean).join(" | ");
     var posl = B.posledny ? '<div class="b-posledny b-posledny-' + B.posledny.typ + '" role="status">' + esc(B.posledny.text) + "</div>" : "";
     var pol = (o.polozky || []).map(function (p) {
@@ -275,8 +275,35 @@
       '<p class="b-znova"><button class="btn-link" data-b="znova">Začať odznova (vráti všetky balíky na sklad)</button></p>';
   }
 
+  // štítky: ktoré objednávky už boli na tomto zariadení vytlačené (aby sa dali tlačiť len nové)
+  function tlacKluc() { return "lbz_stitky_" + ((B.fData && B.fData.furmanka && B.fData.furmanka.id) || ""); }
+  function vytlacene() { try { return JSON.parse(localStorage.getItem(tlacKluc()) || "[]"); } catch (e) { return []; } }
+  function oznacVytlacene(cisla) {
+    try { var v = vytlacene(); cisla.forEach(function (c) { if (v.indexOf(c) === -1) v.push(c); }); localStorage.setItem(tlacKluc(), JSON.stringify(v)); } catch (e) {}
+  }
+  function tlacStitkyPre(cisla) {
+    if (!window.LBZ_FURMANKY || !window.LBZ_FURMANKY.tlacStitkyZ) { B.sprava = { typ: "chyba", text: "Tlač štítkov nie je dostupná – obnovte appku." }; prekresli(); return; }
+    var zoz = (B.fData.stitky || []).filter(function (o) { return cisla.indexOf(o.cislo) > -1; });
+    if (!zoz.length) { B.sprava = { typ: "chyba", text: "Nie je vybraná žiadna objednávka" }; prekresli(); return; }
+    oznacVytlacene(cisla);
+    window.LBZ_FURMANKY.tlacStitkyZ(B.fData.furmanka, zoz).catch(function (er) { B.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+  }
   function dialogHtml() {
     if (!B.dialog) return "";
+    if (B.dialog.typ === "stitky") {
+      var v = vytlacene(), st = (B.fData && B.fData.stitky) || [];
+      var nove = st.filter(function (o) { return v.indexOf(o.cislo) === -1; }).length;
+      return '<div class="f-dialog-pozadie" data-b="zavri"></div><div class="f-dialog" role="dialog" aria-modal="true" aria-label="Tlač štítkov">' +
+        '<div class="f-lista"><h3>🖨️ Štítky</h3><button class="btn-link" data-b="zavri" aria-label="Zavrieť">✕</button></div>' +
+        '<p class="muted" style="margin:0">Vyznačené sú objednávky, ktorých štítok sa na tomto zariadení ešte netlačil (nové: ' + nove + ').</p>' +
+        '<div class="b-st-vyber"><button class="btn r-mini" data-b="stitky-vsetky">Všetky</button><button class="btn r-mini" data-b="stitky-nove">Len nové</button><button class="btn r-mini" data-b="stitky-ziadne">Nič</button></div>' +
+        '<div class="rows b-st-zoz">' + st.map(function (o) {
+          var bol = v.indexOf(o.cislo) > -1;
+          return '<label class="row b-st-riadok"><span><input type="checkbox" data-b-st="' + esc(o.cislo) + '"' + (bol ? "" : " checked") + "> <b>" + esc(o.meno || o.firma || "-") + '</b> <span class="muted">· ' + esc(o.cislo) + "</span></span>" +
+            (bol ? '<span class="muted">vytlačený</span>' : '<span class="pill ok">nový</span>') + "</label>";
+        }).join("") + "</div>" +
+        '<button class="btn btn-primary" data-b="stitky-tlac">🖨️ Tlačiť vybrané</button></div>';
+    }
     if (B.dialog.typ === "lupa") {
       var D = B.dialog;
       var zoz = D.baliky == null ? '<p class="muted" style="margin:0">Načítavam…</p>' : !D.baliky.length ? '<p class="muted" style="margin:0">Na sklade ani v Krčmičke nie je žiadny balík tohto produktu.</p>' :
@@ -353,10 +380,15 @@
       case "spat-furmanka": B.pohlad = "furmanka"; B.cislo = null; B.obj = null; B.sprava = null; B.posledny = null; prekresli(); nacitajFurmanku(true); obal(); break;
       case "kamera": zapniKameru(d.smer); break;
       case "kamera-stop": vypniKameru(); break;
-      case "stitky":
-        if (!window.LBZ_FURMANKY || !window.LBZ_FURMANKY.tlacStitkyZ) { B.sprava = { typ: "chyba", text: "Tlač štítkov nie je dostupná – obnovte appku." }; prekresli(); break; }
-        window.LBZ_FURMANKY.tlacStitkyZ(B.fData.furmanka, B.fData.stitky || []).catch(function (er) { B.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+      case "stitky": B.dialog = { typ: "stitky" }; prekresli(); break;
+      case "stitky-vsetky": case "stitky-ziadne": case "stitky-nove":
+        var vyt = vytlacene();
+        koren.querySelectorAll("[data-b-st]").forEach(function (c) { c.checked = d.b === "stitky-vsetky" || (d.b === "stitky-nove" && vyt.indexOf(c.dataset.bSt) === -1); });
         break;
+      case "stitky-tlac":
+        var vyb = [].map.call(koren.querySelectorAll("[data-b-st]:checked"), function (c) { return c.dataset.bSt; });
+        B.dialog = null; prekresli(); tlacStitkyPre(vyb); break;
+      case "stitok-jeden": if (B.obj) tlacStitkyPre([B.obj.cislo]); break;
       case "hotovo":
         po(rpc("balenie_stav", { p_cislo: B.obj.cislo, p_stav: "zabalena" }), "Zabalené: " + (B.obj.meno || B.obj.cislo)).then(function (r) {
           if (r && r.ok) { pip(true); B.pohlad = "furmanka"; B.cislo = null; B.obj = null; B.posledny = null; prekresli(); nacitajFurmanku(true); obal(); }

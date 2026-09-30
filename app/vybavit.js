@@ -42,7 +42,9 @@
         '<ul class="v-zoznam">' + otvorene.map(polozka).join("") + "</ul>" +
         (!otvorene.length ? '<p class="muted v-prazdne">Nič nečaká. 🎉</p>' : "") +
         (hotove.length ? '<details class="v-hotove"><summary>Hotové (' + hotove.length + ")</summary><ul class=\"v-zoznam\">" + hotove.map(polozka).join("") + "</ul></details>" : "")) +
-      '<form class="v-nova" id="v-nova"><input id="v-text" maxlength="500" placeholder="Pridať úlohu alebo poznámku…" autocomplete="off" enterkeyhint="done"><button class="btn btn-primary" type="submit" aria-label="Pridať">＋</button></form>';
+      '<form class="v-nova" id="v-nova"><input id="v-text" maxlength="500" placeholder="Pridať úlohu alebo poznámku…" autocomplete="off" enterkeyhint="done">' +
+        (window.lbzDiktatPodpora ? '<button class="btn diktat-tl" type="button" data-diktat="v-text" aria-label="Diktovať hlasom" title="Diktovať hlasom">🎤</button>' : "") +
+        '<button class="btn btn-primary" type="submit" aria-label="Pridať">＋</button></form>';
   }
 
   document.addEventListener("click", function (e) {

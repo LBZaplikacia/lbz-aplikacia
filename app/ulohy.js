@@ -66,7 +66,7 @@
     if (!obal) { obal = document.createElement("div"); obal.id = "u-dialog"; document.body.appendChild(obal); }
     var d = U.dialog, osoby = (U.prehlad && U.prehlad.osoby) || [];
     obal.innerHTML = '<div class="f-dialog-pozadie" data-u="zavri"></div><div class="f-dialog" role="dialog" aria-modal="true"><form class="f-form" id="u-form"><h3>Zadať úlohu</h3>' +
-      '<label class="field"><span class="label">Úloha</span><textarea id="u-f-text" rows="3" maxlength="1000" required placeholder="Čo treba urobiť">' + esc(d.text || "") + "</textarea></label>" +
+      '<label class="field"><span class="label">Úloha' + (window.lbzDiktatPodpora ? ' <button class="btn diktat-tl diktat-male" type="button" data-diktat="u-f-text" aria-label="Diktovať hlasom">🎤 Diktovať</button>' : "") + '</span><textarea id="u-f-text" rows="3" maxlength="1000" required placeholder="Čo treba urobiť (alebo ťuknite 🎤 a nadiktujte)">' + esc(d.text || "") + "</textarea></label>" +
       '<div class="d-riadok"><label class="field"><span class="label">Kedy (deň)</span><input type="date" id="u-f-datum" value="' + esc(d.datum || dnes()) + '"></label>' +
       '<label class="field"><span class="label">Do kedy (nepovinné)</span><input type="date" id="u-f-termin" value="' + esc(d.termin || "") + '"></label></div>' +
       '<div class="field"><span class="label">Komu</span><div class="f-seg" role="group"><button type="button" data-u-komu="den" aria-pressed="' + (d.komu !== "ludia") + '">👥 Všetci na smene</button>' +

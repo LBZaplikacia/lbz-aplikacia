@@ -99,7 +99,7 @@
   // ---------- skenovanie ----------
   var MAPA_SK = { "+": "1", "ľ": "2", "š": "3", "č": "4", "ť": "5", "ž": "6", "ý": "7", "á": "8", "í": "9", "é": "0" };
   function upravKod(t) {
-    t = String(t || "").replace(/[´'’\/]/g, "-").trim();
+    t = String(t || "").replace(/[´'’\/=]/g, "-").trim();
     var v = "";
     for (var i = 0; i < t.length; i++) { var z = t.charAt(i); v += MAPA_SK[z] !== undefined ? MAPA_SK[z] : z; }
     return v.toUpperCase();
@@ -122,7 +122,7 @@
     if (/^(OUT|VYDAJ|VÝDAJ)$/.test(kod)) return nastavRezim("Výdaj");
     if (/^(KRC|KRCMICKA|PREDAJNA)$/.test(kod)) return nastavRezim("Krčmička");
     if (kod.indexOf("QQQ") > -1) {
-      S.sprava = { typ: "chyba", text: "Objednávky a balenie zatiaľ skenujte v starej appke." };
+      S.sprava = { typ: "chyba", text: "Toto je štítok objednávky – skenujte ho v module Balenie." };
       pip("chyba"); prekresli(); return;
     }
     if (!/^[A-Z0-9]+(-[A-Z0-9]+)+$/.test(kod)) {
