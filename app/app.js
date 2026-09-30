@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.23.0 BETA";
+  var VERZIA = "0.24.0 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -139,16 +139,16 @@
   if (location.search) try { history.replaceState(null, "", location.pathname); } catch (e) {}
   // poradie kariet na Prehľade podľa roly (každý si ho môže upraviť – uloží sa v zariadení)
   var PORADIE = {
-    it: ["dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
-    ceo: ["dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
-    prevadzkar: ["dochadzka", "ulohy", "rozpis", "vybavit", "sklad", "balenie", "furmanky", "kniha"],
+    it: ["schvalenie", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
+    ceo: ["schvalenie", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
+    prevadzkar: ["schvalenie", "dochadzka", "ulohy", "rozpis", "vybavit", "sklad", "balenie", "furmanky", "kniha"],
     zamestnanec: ["dochadzka", "zdrav", "ulohy", "furmanky", "rozpis", "vybavit"],
     prevadzka: ["ulohy", "dochadzka", "sklad", "balenie", "furmanky", "vybavit"],
     furman: ["dochadzka", "rozpis", "trasa", "vybavit", "ulohy", "kniha"],
     zakaznicky_servis: ["dochadzka", "ulohy", "zdrav", "furmanky", "balenie", "rozpis", "vybavit"],
     majitelka_arealu: ["kniha", "vybavit"]
   };
-  var NAZVY_KARIET = { dochadzka: "🕒 Príchod a smeny", ulohy: "✅ Úlohy a Vybaviť", zdrav: "🩺 Zdravotné preukazy", vybavit: "📝 Vybaviť", kniha: "🚗 Kniha jázd", rozpis: "📅 Kto je v práci", furmanky: "🚚 Furmanky",
+  var NAZVY_KARIET = { schvalenie: "🔔 Na schválenie", dochadzka: "🕒 Príchod a smeny", ulohy: "✅ Úlohy a Vybaviť", zdrav: "🩺 Zdravotné preukazy", vybavit: "📝 Vybaviť", kniha: "🚗 Kniha jázd", rozpis: "📅 Kto je v práci", furmanky: "🚚 Furmanky",
     sklad: "🧊 Sklad", balenie: "📦 Balenie", trasa: "🗺️ Trasa" };
   var ZAM = window.LBZ_ZAMESTNANCI || null;
 
@@ -321,12 +321,12 @@
     }
     var moduly = mojeModuly();
     // neznámy modul → Prehľad (v ostrom režime až keď sú načítané moduly z databázy, inak by sa pri štarte stratilo, kde bol)
-    if ((!OSTRY || stav.dbModuly) && !moduly.some(function (m) { return m.kod === stav.modul; })) stav.modul = "prehlad";
+    if ((!OSTRY || stav.dbModuly) && stav.modul !== "nastavenia" && !moduly.some(function (m) { return m.kod === stav.modul; })) stav.modul = "prehlad";   // Účet má každý
     if ((!OSTRY || stav.dbModuly) && window.lbzPamat) lbzPamat.uloz("modul", stav.modul);
     // v lište len hotové moduly; pripravované sú na Prehľade
     var hotove = moduly.filter(function (m) { return m.aktivny && m.kod !== "nastavenia"; });
     var polozka = function (m, trieda) {
-      return '<button class="' + trieda + '" data-mod="' + m.kod + '"' + (stav.modul === m.kod ? ' aria-current="page"' : "") + ">" +
+      return '<button class="' + trieda + '" data-mod="' + m.kod + '" title="' + esc(m.nazov) + '"' + (stav.modul === m.kod ? ' aria-current="page"' : "") + ">" +
         '<span class="ri-ik">' + ikona(m.kod) + "</span><span>" + esc(KRATKO[m.kod] || m.nazov) + "</span></button>";
     };
     var ucet = { kod: "nastavenia", nazov: "Účet" };
@@ -369,6 +369,27 @@
         return '<div class="row"><span>' + esc(t.nazov) + ' <span class="muted num">· ' + t.zastavky + ' zastávok</span></span><span class="pill ok">' + esc(t.stav) + "</span></div>";
       }).join("") + "</div></section>";
   }
+  // „Na schválenie“ – vedenie vidí na Prehľade, čo od zamestnancov čaká na jeho rozhodnutie
+  function kartaSchvalenie() {
+    if (!OSTRY || ["it", "ceo", "prevadzkar"].indexOf(stav.rola) === -1) return "";
+    if (!stav.naSchv || Date.now() - stav.naSchv.cas > 60000) {
+      var bolo = stav.naSchv; stav.naSchv = { cas: Date.now(), d: bolo ? bolo.d : null };
+      db.rpc("na_schvalenie").then(function (r) {
+        var st = JSON.stringify(stav.naSchv.d); stav.naSchv.d = r.data && r.data.ok ? r.data : null;
+        if (JSON.stringify(stav.naSchv.d) !== st && stav.modul === "prehlad") render();
+      });
+    }
+    var d = stav.naSchv.d; if (!d) return "";
+    var pol = [["smeny", "🔄", "zmena smeny", "zmeny smien", "zmien smien", "rozpis"], ["dochadzka", "🕒", "žiadosť v dochádzke", "žiadosti v dochádzke", "žiadostí v dochádzke", "dochadzka"],
+      ["udaje", "👤", "zmena údajov", "zmeny údajov", "zmien údajov", "zamestnanci"]].filter(function (x) { return +d[x[0]] > 0; });
+    if (!pol.length) return "";
+    var spolu = pol.reduce(function (s, x) { return s + +d[x[0]]; }, 0);
+    return '<section class="card schv-karta"><h3>🔔 Na schválenie <span class="pill warn num">' + spolu + "</span></h3>" +
+      '<div class="schv-zoz">' + pol.map(function (x) {
+        var n = +d[x[0]];
+        return '<button class="schv-pol" data-mod="' + x[5] + '"><span>' + x[1] + " <b>" + n + "</b> " + (n === 1 ? x[2] : n < 5 ? x[3] : x[4]) + "</span><span>›</span></button>";
+      }).join("") + "</div></section>";
+  }
   function kartaSklad() {
     if (skladZapnuty()) return SKLAD.kartaSklad();
     return '<section class="card"><h3>Sklad</h3><p class="muted" style="margin:0">Ukážkový režim.</p></section>';
@@ -408,6 +429,7 @@
           '<a class="btn btn-primary" href="https://www.legendarnebuchty.sk" target="_blank" rel="noopener">Otvoriť e-shop</a></div>';
       }
       var kh = {};
+      kh.schvalenie = kartaSchvalenie();
       var moje = mojeModuly(), kody = moje.map(function (m) { return m.kod; });
       if (dochadzkaZapnuta()) kh.dochadzka = DOCH.karta();
       if (ULO) kh.ulohy = ULO.karta();
@@ -420,7 +442,7 @@
       if (knihaZapnuta()) kh.kniha = KNIHA.karta();
       if (zamZapnute() && ZAM.karta) kh.zdrav = ZAM.karta();
       var por = poradieKariet(Object.keys(kh).filter(function (k) { return kh[k]; }));
-      var karty = por.viditelne.map(function (k) { return kh[k]; });
+      var karty = (kh.schvalenie ? ["schvalenie"] : []).concat(por.viditelne.filter(function (k) { return k !== "schvalenie"; })).map(function (k) { return kh[k]; });
       var dnes = new Date().toLocaleDateString("sk-SK", { weekday: "long", day: "numeric", month: "numeric" });
       var meno = String(stav.pouzivatel || "").split(" ").pop();
       return hlavicka("Dobrý deň" + (meno ? ", " + meno : "") + "!", "Dnes je " + dnes, true) + '<div class="grid">' + karty.join("") + "</div>" +

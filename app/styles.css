@@ -1186,3 +1186,48 @@ body.pdfv-otvorene { overflow: hidden; }
 .chat-odznak { position: absolute; top: -6px; right: -10px; background: var(--bad); color: #fff; font: 800 10px/1 var(--font-body); border-radius: 999px; padding: 3px 5px; min-width: 16px; text-align: center; box-shadow: 0 0 0 2px var(--surface); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .chat-ja .chat-bub { background: #4a3a22; border-color: #5e4a2a; } }
 :root[data-theme="dark"] .chat-ja .chat-bub { background: #4a3a22; border-color: #5e4a2a; }
+
+/* v0.24 – nič nevyčnieva: riadok výber + tlačidlo, dialógy v mobile ako spodný panel bez zbytočného posúvania */
+.r-riadok { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.r-riadok .r-select, .f-dialog select { min-width: 0; max-width: 100%; }
+.f-dialog { overflow-x: hidden; box-sizing: border-box; }
+.f-dialog > *, .f-dialog .f-form > * { min-width: 0; max-width: 100%; }
+@media (max-width: 760px) {
+  .f-dialog { top: auto; bottom: 0; left: 0; right: 0; transform: none; width: 100%; max-height: 94dvh; border-radius: 18px 18px 0 0;
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px)); gap: 10px; }
+  .f-dialog h3 { font-size: 18px; }
+  .f-dialog .r-h4 { margin: 0; font-size: 14px; }
+  .f-dialog .f-form { gap: 8px; }
+  .f-dialog .f-akcie { padding-top: 10px; }
+  .f-dialog .field .label { font-size: 12px; }
+}
+/* PC: bočná lišta bez posuvníkov – pri nízkom okne sa zmenší */
+.rail-nav { overflow-x: hidden; scrollbar-width: none; }
+.rail-nav::-webkit-scrollbar { display: none; }
+.rail { overflow: hidden; }
+@media (min-width: 761px) and (max-height: 820px) {
+  .rail { padding: 10px 6px; gap: 8px; }
+  .rail-logo img { width: 40px; height: 40px; }
+  .rail-nav { gap: 2px; }
+  .ri { padding: 5px 2px; font-size: 10px; }
+  .ri .ik { width: 20px; height: 20px; }
+}
+@media (min-width: 761px) and (max-height: 620px) {
+  .rail-logo .beta { display: none; }
+  .ri > span:last-child { display: none; }
+  .ri { padding: 7px 2px; }
+}
+.r-ziadosti { gap: 8px; }
+.r-z-zoz { display: grid; gap: 8px; }
+.r-z { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg); }
+.r-z-t { display: grid; gap: 2px; min-width: 0; flex: 1 1 220px; overflow-wrap: anywhere; font-size: 14px; }
+.r-z-typ { font-size: 12px; font-weight: 700; }
+.r-z-tl { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.r-z-tl .btn { min-height: 38px; padding: 4px 12px; }
+.r-z-hot { background: transparent; }
+.r-z-vyb summary { cursor: pointer; font-weight: 700; font-size: 14px; color: var(--muted); }
+.r-z-vyb .r-z { margin-top: 6px; }
+.schv-karta { border-color: var(--gold); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow); }
+.schv-zoz { display: grid; gap: 6px; }
+.schv-pol { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--bg); border-radius: 12px; padding: 10px 12px; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.schv-pol:hover { border-color: var(--gold); }

@@ -7,7 +7,7 @@
   "use strict";
 
   var DB = null, ROLA = null, koren = null;
-  var R = { pohlad: "tyzden", od: null, data: null, dialog: null, sprava: null, nacitavam: false, historia: null, karta: null };
+  var R = { pohlad: "tyzden", od: null, data: null, dialog: null, sprava: null, nacitavam: false, historia: null, karta: null, ziadosti: null };
   var DNI = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
   var DNI_DLHE = ["Pondelok", "Utorok", "Streda", "Štvrtok", "Piatok", "Sobota", "Nedeľa"];
   var MESIACE = ["január", "február", "marec", "apríl", "máj", "jún", "júl", "august", "september", "október", "november", "december"];
@@ -50,7 +50,12 @@
       if (!d || d.ok === false) { R.sprava = { typ: "chyba", text: (d && d.text) || "Rozpis sa nenačítal" }; }
       else R.data = d;
       prekresli();
-    }).catch(function (e) { R.nacitavam = false; R.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
+    }).catch(function (e) { R.nacitavam = false; R.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); })
+      .then(nacitajZiadosti);
+  }
+  function nacitajZiadosti() {
+    if (!DB) return;
+    return rpc("rozpis_ziadosti").then(function (z) { R.ziadosti = z && z.ok ? z : null; if (koren && koren.isConnected) prekresli(); }).catch(function () { /* */ });
   }
   function nacitajHistoriu() {
     return rpc("rozpis_historia", { p_pocet: 100 }).then(function (h) { R.historia = h || []; prekresli(); })
@@ -183,6 +188,44 @@
     }
     return sprava ? '<div class="r-lista"><button class="btn r-mini" data-r="pozn-upravit" data-m="' + m + '">📌 Pridať poznámku k mesiacu</button></div>' : "";
   }
+  // ---------- žiadosti o zmenu smien (prevziať / vymeniť / odovzdať → schvaľuje vedenie) ----------
+  var TYP_Z = { prevziat: "🙋 prevziať smenu", vymenit: "🔄 výmena smien", odovzdat: "➡️ odovzdať smenu" };
+  function zPopis(z) {
+    if (z.typ === "prevziat") return "<b>" + esc(z.ziadatel_meno) + "</b> chce ísť namiesto <b>" + esc(z.kolega_meno) + "</b>: " + esc(z.smena_b || "");
+    if (z.typ === "odovzdat") return "<b>" + esc(z.ziadatel_meno) + "</b> odovzdáva smenu <b>" + esc(z.kolega_meno) + "</b>: " + esc(z.smena_a || "");
+    return "<b>" + esc(z.ziadatel_meno) + "</b> (" + esc(z.smena_a || "") + ") ↔ <b>" + esc(z.kolega_meno) + "</b> (" + esc(z.smena_b || "") + ")";
+  }
+  function ziadostiHtml() {
+    var Z = R.ziadosti; if (!Z) return "";
+    var caka = Z.caka || [], vyb = (Z.vybavene || []).slice(0, Z.sprava ? 5 : 3), ja = R.data && R.data.ja;
+    if (!caka.length && !vyb.length) return "";
+    var STAV = { schvalena: "✅ schválená", zamietnuta: "❌ zamietnutá", zrusena: "zrušená", neplatna: "⚠️ neplatná" };
+    return '<section class="card r-ziadosti"><h3>🔄 Žiadosti o zmenu smien' + (caka.length ? ' <span class="pill warn num">' + caka.length + "</span>" : "") + "</h3>" +
+      (caka.length ? '<div class="r-z-zoz">' + caka.map(function (z) {
+        return '<div class="r-z"><div class="r-z-t"><span class="muted r-z-typ">' + esc(TYP_Z[z.typ] || z.typ) + "</span><span>" + zPopis(z) + "</span>" + (z.poznamka ? '<span class="muted">„' + esc(z.poznamka) + "“</span>" : "") + "</div>" +
+          '<div class="r-z-tl">' + (Z.sprava ? '<button class="btn btn-primary" data-r-zrozhodni="' + z.id + '" data-ano="1">✅ Schváliť</button><button class="btn" data-r-zrozhodni="' + z.id + '" data-ano="0">❌ Zamietnuť</button>'
+            : z.ziadatel === ja ? '<span class="muted">⏳ čaká na schválenie</span><button class="btn-link" data-r-zzrus="' + z.id + '">Zrušiť</button>' : '<span class="muted">⏳ čaká na vedenie</span>') + "</div></div>";
+      }).join("") + "</div>" : "") +
+      (vyb.length ? '<details class="r-z-vyb"><summary>Vybavené (' + vyb.length + ")</summary>" + vyb.map(function (z) {
+        return '<div class="r-z r-z-hot"><div class="r-z-t"><span>' + zPopis(z) + '</span><span class="muted">' + esc(STAV[z.stav] || z.stav) + (z.dovod ? " · " + esc(z.dovod) : "") + "</span></div></div>";
+      }).join("") + "</details>" : "") + "</section>";
+  }
+  function cakaNa(mId) { return ((R.ziadosti && R.ziadosti.caka) || []).filter(function (z) { return z.miesto_a === mId || z.miesto_b === mId; })[0]; }
+  function mojeBuduce(okrem) {
+    var ja = R.data && R.data.ja;
+    return ((R.data && R.data.miesta) || []).filter(function (x) { return x.osoba != null && x.osoba === ja && x.id !== okrem && !minule(x.datum); });
+  }
+  function smenaText(x) { var d = zIso(x.datum); return DNI[(d.getDay() + 6) % 7] + " " + kratkyDatum(d) + " " + pozicia(x.pozicia).nazov + (x.od ? " " + x.od : ""); }
+  function ziadostBlok(m) {       // zamestnanec: cudzia smena → prevziať / vymeniť
+    var cz = cakaNa(m.id);
+    if (cz) return '<p class="s-varovanie s-varovanie-info" style="margin:0">⏳ Na túto smenu čaká žiadosť: ' + zPopis(cz) + "</p>";
+    var moje = mojeBuduce(m.id);
+    return '<form class="f-form" data-r-ziadost="prevziat" data-id="' + m.id + '"><h4 class="r-h4">Chceš ísť namiesto ' + esc((osoba(m.osoba) || {}).meno || "kolegu") + "?</h4>" +
+        '<button class="btn btn-primary" type="submit">🙋 Prevziať túto smenu</button></form>' +
+      (moje.length ? '<form class="f-form" data-r-ziadost="vymenit" data-id="' + m.id + '"><h4 class="r-h4">Alebo vymeniť za moju smenu</h4><div class="r-riadok"><select name="moja" class="r-select">' +
+        moje.map(function (x) { return '<option value="' + x.id + '">' + esc(smenaText(x)) + "</option>"; }).join("") + '</select><button class="btn" type="submit">🔄 Vymeniť</button></div></form>' : "") +
+      '<p class="muted r-mala">Žiadosť pôjde na schválenie vedeniu – rozpis sa zmení až po schválení.</p>';
+  }
   function legenda() {
     var o = aktivneOsoby(); if (!o.length) return "";
     return '<div class="r-legenda">' + o.map(function (x) {
@@ -215,7 +258,7 @@
     }
     var upoz = rola() === "osobny" && !R.data.ja ? '<p class="s-varovanie">Váš účet ešte nie je spojený s menom v rozpise – vedenie ho spojí v „Ľudia a farby“ (podľa e-mailu).</p>' : "";
     var mTl = siroka() || R.pohlad !== "mesiac" ? minuleTl() : "";
-    return head + spravaHtml() + poznamkyHtml(r.mesiac) + upoz + mojeSmeny() + mTl + telo + legenda() + spravaTl;
+    return head + spravaHtml() + ziadostiHtml() + poznamkyHtml(r.mesiac) + upoz + mojeSmeny() + mTl + telo + legenda() + spravaTl;
   }
 
   function pohladLudia() {
@@ -271,7 +314,19 @@
         obsah = '<p class="r-kto"><span class="r-leg" style="background:' + esc(o.farba) + ";color:" + textNa(o.farba) + '">' + esc(o.meno) + "</span>" +
           (m.od ? ' <span class="num">' + esc(m.od + (m.do ? "–" + m.do : "")) + "</span>" : "") + (m.vynimka ? ' <span class="pill warn">výnimočne</span>' : "") + "</p>" +
           (m.poznamka ? '<p class="f-pozn" style="margin:0">' + esc(m.poznamka) + "</p>" : "");
-        if (moze) {
+        if (!moze && rola() === "osobny" && R.data.ja && m.osoba !== R.data.ja && !minule(m.datum)) obsah += ziadostBlok(m);
+        if (moze && rola() === "osobny") {       // vlastná smena zamestnanca – odovzdať / vymeniť ide na schválenie
+          var ine2 = (R.data.miesta || []).filter(function (x) { return x.osoba != null && x.osoba !== m.osoba && x.id !== m.id && !minule(x.datum); });
+          var cz2 = cakaNa(m.id);
+          obsah += (cz2 ? '<p class="s-varovanie s-varovanie-info" style="margin:0">⏳ Čaká žiadosť: ' + zPopis(cz2) + "</p>" :
+            '<form class="f-form" data-r-ziadost="odovzdat" data-id="' + m.id + '"><h4 class="r-h4">Odovzdať smenu kolegovi</h4><div class="r-riadok">' + vyberOsoby("komu", m.osoba) +
+              '<button class="btn" type="submit">Odovzdať</button></div></form>' +
+            (ine2.length ? '<form class="f-form" data-r-ziadost="vymenit-moja" data-id="' + m.id + '"><h4 class="r-h4">Vymeniť s kolegom</h4><div class="r-riadok"><select name="cudzia" class="r-select">' +
+              ine2.map(function (x) { var ox = osoba(x.osoba); return '<option value="' + x.id + '">' + esc((ox ? ox.meno : "?") + " – " + smenaText(x)) + "</option>"; }).join("") +
+              '</select><button class="btn" type="submit">Vymeniť</button></div></form>' : "") +
+            '<p class="muted r-mala">Odovzdanie aj výmena idú na schválenie vedeniu.</p>') +
+            '<div class="f-akcie"><button class="btn" data-r-akcia-tl="uvolnit" data-id="' + m.id + '">Uvoľniť smenu</button></div>';
+        } else if (moze) {
           var ine = (R.data.miesta || []).filter(function (x) { return x.osoba != null && x.osoba !== m.osoba && x.id !== m.id && !minule(x.datum); });
           obsah += (false ? '<form class="f-form" data-r-akcia="cas" data-id="' + m.id + '"><h4 class="r-h4">Pracovný čas</h4>' + casy(m) +
               '<label class="field"><span class="label">Poznámka</span><input name="poznamka" value="' + esc(m.poznamka || "") + '" placeholder="napr. príde skôr, zaúča sa"></label>' +
@@ -315,6 +370,22 @@
     var d = t.dataset;
     if (d.rDen) { R.denVyber = d.rDen; prekresli(); var det = koren && koren.querySelector(".rk-detail"); if (det) det.scrollIntoView({ block: "nearest", behavior: "smooth" }); return; }
     if (d.r === "zavri") { R.dialog = null; prekresli(); return; }
+    if (d.rZrozhodni) {
+      var ano = d.ano === "1";
+      if (!ano && !lbzPotvrd("Zamietnuť túto žiadosť?")) return;
+      t.disabled = true;
+      rpc("rozpis_ziadost_rozhodni", { p_id: +d.rZrozhodni, p_schval: ano, p_dovod: null }).then(function (r) {
+        R.sprava = { typ: r && r.ok ? "ok" : "chyba", text: (r && r.text) || "Chyba" };
+        if (r && (r.ok || /neplat/.test(r.text || ""))) DB.functions.invoke("upozornenia", { body: { akcia: "rozpis", id: +d.rZrozhodni, udalost: "rozhodnutie" } }).catch(function () { /* */ });
+        R.karta = null; nacitaj();
+      }).catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+      return;
+    }
+    if (d.rZzrus) {
+      if (!lbzPotvrd("Zrušiť žiadosť?")) return;
+      rpc("rozpis_ziadost_zrus", { p_id: +d.rZzrus }).then(function (r) { R.sprava = { typ: "ok", text: (r && r.text) || "Zrušené" }; nacitajZiadosti(); prekresli(); });
+      return;
+    }
     if (d.r === "zavri-spravu") { R.sprava = null; prekresli(); return; }
     if (d.r === "pozn-upravit") { R.poznEdit = d.m; prekresli(); var ta = document.getElementById("r-pozn-text"); if (ta) ta.focus(); return; }
     if (d.r === "pozn-zrusit") { R.poznEdit = null; prekresli(); return; }
@@ -371,6 +442,21 @@
       }).catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
       return;
     }
+    var zt = f.getAttribute("data-r-ziadost");
+    if (zt) {
+      e.preventDefault();
+      var xe = f.elements, id = +f.dataset.id, pz;
+      if (zt === "prevziat") pz = { typ: "prevziat", miesto_b: id };
+      else if (zt === "vymenit") pz = { typ: "vymenit", miesto_b: id, miesto_a: xe.moja.value };
+      else if (zt === "vymenit-moja") pz = { typ: "vymenit", miesto_a: id, miesto_b: xe.cudzia.value };
+      else pz = { typ: "odovzdat", miesto_a: id, komu: xe.komu.value };
+      rpc("rozpis_ziadost_nova", { p: pz }).then(function (r) {
+        R.sprava = { typ: r && r.ok ? "ok" : "chyba", text: (r && r.text) || "Neodoslané" };
+        if (r && r.ok) { R.dialog = null; DB.functions.invoke("upozornenia", { body: { akcia: "rozpis", id: r.id, udalost: "nova" } }).catch(function () { /* */ }); }
+        prekresli(); nacitajZiadosti();
+      }).catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+      return;
+    }
     var akcia = f.getAttribute("data-r-akcia"); if (!akcia) return;
     e.preventDefault();
     var p = { akcia: akcia }, x = f.elements;
@@ -388,7 +474,7 @@
   // ---------- verejné rozhranie pre app.js ----------
   window.LBZ_ROZPIS = {
     nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; if (!DB) { R.data = null; R.karta = null; } },
-    mozem: function () { return !!DB && ["it", "ceo", "prevadzka", "furman", "zakaznicky_servis", "zamestnanec", "uctovnicka"].indexOf(ROLA) > -1; },
+    mozem: function () { return !!DB && ["it", "ceo", "prevadzkar", "prevadzka", "furman", "zakaznicky_servis", "zamestnanec", "uctovnicka"].indexOf(ROLA) > -1; },
     mount: function (el) {
       koren = el; poslednaSirka = siroka();
       el.addEventListener("click", klik);
@@ -424,7 +510,11 @@
           }).join("") + "</div>" : '<p class="muted" style="margin:0">Dnes nie je nikto zapísaný.</p>';
         }
       }
-      return '<section class="card"><h3>' + (k.ja ? "Moje smeny" : "Dnes v práci") + "</h3>" + obsah + '<button class="btn" data-mod="rozpis">Otvoriť rozpis</button></section>';
+      if (R.kartaZ === undefined || R.kartaZ === null) { R.kartaZ = false; rpc("rozpis_ziadosti").then(function (z) { R.kartaZ = z && z.ok ? z : false; if (z && z.ok && (z.caka || []).length) window.dispatchEvent(new Event("lbz-prekresli")); }).catch(function () { /* */ }); }
+      var nz = R.kartaZ && R.kartaZ.sprava ? (R.kartaZ.caka || []).length : 0;
+      return '<section class="card"><h3>' + (k.ja ? "Moje smeny" : "Dnes v práci") + "</h3>" + obsah +
+        (nz ? '<p class="s-varovanie" style="margin:0">🔄 ' + nz + (nz === 1 ? " žiadosť" : nz < 5 ? " žiadosti" : " žiadostí") + " o zmenu smien čaká na schválenie</p>" : "") +
+        '<button class="btn" data-mod="rozpis">Otvoriť rozpis</button></section>';
     }
   };
 })();
