@@ -986,3 +986,57 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .prisp-zoz .prisp-skr > span { opacity: .45; text-decoration: line-through; }
 .k-nova { padding-bottom: 8px; }
 .u-osoby .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+/* ---------- Dochádzka v0.20: vzhľad ako stará webová dochádzka ---------- */
+.ds { border: 3px solid var(--gold) !important; border-radius: 14px; text-align: center; display: flex; flex-direction: column; gap: 12px; padding: 20px 18px; }
+.ds-h { color: var(--accent); margin: 0; font-size: 24px; font-weight: 800; }
+.ds-info { font-size: 14px; color: var(--blue); background: #e3f2fd; border: 1px solid var(--blue); border-radius: 8px; padding: 10px; text-align: left; line-height: 1.5; }
+.ds-stav { font-size: 15px; color: var(--ink); }
+.ds-toggle { width: 100%; padding: 12px; font: 700 14px var(--font-body); border: 2px solid var(--gold); border-radius: 8px; color: #583934; background: #fffaf0; cursor: pointer; }
+.ds-toggle:active { background: var(--gold); color: #fff; }
+.ds-vykaz { max-height: 260px; overflow: auto; border: 2px solid #e0e0e0; border-radius: 8px; background: #fff; }
+.ds-tab { width: 100%; border-collapse: collapse; font-size: 13px; text-align: center; color: #333; }
+.ds-tab th { background: #583934; color: #CBA75B; padding: 8px 2px; position: sticky; top: 0; font-size: 12px; border-bottom: 2px solid #CBA75B; }
+.ds-tab td { padding: 9px 2px; border-bottom: 1px solid #eee; line-height: 1.3; }
+.ds-tab tr:nth-child(even) td { background: #fcfcfc; }
+.ds-dat { font-weight: 700; color: #583934; }
+.ds-hod { font-weight: 700; color: #43a047; font-size: 14px; }
+.ds-prest { font-size: 10px; color: #888; }
+.ds-btn { width: 100%; padding: 22px; font: 800 20px var(--font-body); border: 0; border-radius: 12px; cursor: pointer; color: #fff; }
+.ds-prichod { background: #43a047; }
+.ds-odchod { background: #e53935; }
+.ds-btn:disabled { opacity: .6; }
+.ds-abs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; border-top: 2px dashed #e0e0e0; padding-top: 12px; }
+.ds-abs-tl { padding: 12px 2px; font: 700 13px var(--font-body); border: 2px solid var(--gold); border-radius: 8px; color: #583934; background: #fff; cursor: pointer; }
+.ds-abs-tl:active { background: var(--gold); color: #fff; }
+.ds-miesto { width: 100%; padding: 17px; font: 700 16px var(--font-body); border: 2px solid var(--blue); border-radius: 8px; background: #fff; color: var(--blue); cursor: pointer; }
+.ds-miesto.ds-navrh { background: #e3f2fd; }
+.ds-spat { width: 100%; padding: 15px; border: 0; border-radius: 8px; background: #583934; color: #CBA75B; font: 700 16px var(--font-body); cursor: pointer; }
+.d-tab-mes thead th { background: #583934; color: #CBA75B; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ds-info { background: #1d2a33; color: #bcd6e8; } :root:not([data-theme="light"]) .ds-toggle, :root:not([data-theme="light"]) .ds-abs-tl, :root:not([data-theme="light"]) .ds-miesto, :root:not([data-theme="light"]) .ds-vykaz { background: var(--surface); color: var(--ink); } :root:not([data-theme="light"]) .ds-tab { color: var(--ink); } :root:not([data-theme="light"]) .ds-tab tr:nth-child(even) td { background: transparent; } }
+
+/* ---------- Vzhľad v0.20: písmo Armonioso, ikony, spodná lišta 4 + Viac ---------- */
+@font-face { font-family: "Armonioso"; src: url("fonts/armonioso.woff") format("woff"); font-display: swap; }
+.ozdobne { font-family: "Armonioso", var(--font-display) !important; font-weight: 400 !important; font-size: 36px !important; color: var(--accent); letter-spacing: .01em; }
+.ik { display: block; width: 24px; height: 24px; }
+.ri-ik { display: grid; place-items: center; }
+.ri[aria-current="page"] .ik, .bi[aria-current="page"] .ik { fill: var(--accent-soft); }
+.card { border-radius: 20px; }
+@media (max-width: 760px) {
+  .bottom { overflow-x: visible; justify-content: space-around; }
+  .bi { flex: 1 1 0; min-width: 0; }
+  .bi span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .viac-pozadie { position: fixed; inset: 0; z-index: 9; background: rgba(23, 17, 15, .35); border: 0; padding: 0; }
+  .viac-panel { position: fixed; left: 10px; right: 10px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 10; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 20px; padding: 10px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, .2); }
+  .vp { border: 0; background: var(--bg); border-radius: 14px; padding: 12px 4px; display: grid; justify-items: center; gap: 4px; font: 700 12px var(--font-body); color: var(--ink); }
+  .vp[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
+}
+@media (min-width: 761px) { .viac-panel, .viac-pozadie { display: none; } }
+.instal-banner { position: fixed; left: 10px; right: 10px; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 8; background: var(--surface); border: 2px solid var(--gold);
+  border-radius: 18px; padding: 12px; display: flex; align-items: center; gap: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .18); max-width: 520px; margin: 0 auto; }
+.instal-banner img { width: 44px; height: 44px; border-radius: 10px; flex: none; }
+.ib-txt { display: flex; flex-direction: column; gap: 2px; font-size: 13px; flex: 1; min-width: 0; }
+.ib-txt b { font-size: 14px; }
+.ib-x { border: 0; background: transparent; font-size: 18px; color: var(--muted); padding: 6px; cursor: pointer; }
+@media (min-width: 761px) { .instal-banner { bottom: 20px; } }

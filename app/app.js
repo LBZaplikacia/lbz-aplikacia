@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.19.0 BETA";
+  var VERZIA = "0.20.0 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -43,6 +43,34 @@
   var IKONY = {
     prehlad: "🏠", sklad: "🧊", furmanky: "🚚", balenie: "📦", trasa: "🗺️", rozpis: "📅", dochadzka: "🕒", kniha_jazd: "🚗",
     objednavky: "🧾", komentare: "💬", zamestnanci: "👥", exporty: "📊", moje_objednavky: "🛍️", sledovanie: "📍", nastavenia: "⚙️"
+  };
+  // jednotné čiarové ikony (SVG) – lišta na PC aj v mobile
+  var P = {
+    prehlad: '<path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/>',
+    sklad: '<path d="M3 7l9-4 9 4v13H3z"/><path d="M7 20v-7h10v7M7 16h10"/>',
+    furmanky: '<path d="M2 6h11v10H2zM13 10h4l4 4v2h-8z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
+    balenie: '<path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/>',
+    trasa: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+    rozpis: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+    dochadzka: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    kniha_jazd: '<path d="M5 17h14M6 17l1.5-6h9L18 17M4 17v3h3v-3M17 17v3h3v-3"/><circle cx="8" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/>',
+    objednavky: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+    komentare: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    zamestnanci: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
+    exporty: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    moje_objednavky: '<path d="M6 7h12l-1 14H7z"/><path d="M9 7a3 3 0 0 1 6 0"/>',
+    sledovanie: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+    nastavenia: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    viac: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'
+  };
+  function ikona(k) { return '<svg class="ik" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (P[k] || P.viac) + "</svg>"; }
+  // čo je v spodnej lište v mobile (max 4 + Viac)
+  var LISTA = {
+    it: ["prehlad", "dochadzka", "kniha_jazd", "rozpis"], ceo: ["prehlad", "dochadzka", "kniha_jazd", "rozpis"],
+    prevadzkar: ["prehlad", "dochadzka", "rozpis", "sklad"], prevadzka: ["prehlad", "sklad", "balenie", "dochadzka"],
+    zamestnanec: ["prehlad", "dochadzka", "rozpis", "zamestnanci"], furman: ["prehlad", "trasa", "dochadzka", "rozpis"],
+    zakaznicky_servis: ["prehlad", "objednavky", "furmanky", "komentare"], uctovnicka: ["prehlad", "dochadzka", "zamestnanci"],
+    majitelka_arealu: ["prehlad", "kniha_jazd"], zakaznik: ["prehlad", "moje_objednavky", "sledovanie"]
   };
   var KRATKO = { rozpis: "Rozpis", balenie: "Balenie", trasa: "Trasa", dochadzka: "Dochádzka", kniha_jazd: "Jazdy", zamestnanci: "Ľudia", komentare: "Komentáre",
     exporty: "Exporty", moje_objednavky: "Objednávky", sledovanie: "Furmanka", nastavenia: "Účet" };
@@ -84,6 +112,26 @@
   var ULO = window.LBZ_ULOHY || null;
   var AKCIA = new URLSearchParams(location.search).get("akcia"); // skratka z ikony, spracuje sa po prihlásení
   var START_M = new URLSearchParams(location.search).get("m");
+  // inštalácia appky (QR kód vedie na ?instal=1)
+  var INSTAL = new URLSearchParams(location.search).get("instal") === "1", instalPrompt = null;
+  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); instalPrompt = e; ukazInstal(); });
+  function jeNainstalovana() { return window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; }
+  function ukazInstal() {
+    if (jeNainstalovana()) return;
+    var zamietnute = false; try { zamietnute = localStorage.getItem("lbz_instal_nie") === "1"; } catch (e) { /* */ }
+    var ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (!INSTAL && (zamietnute || !(instalPrompt || ios) || !/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent))) return;
+    if (!instalPrompt && !ios && !INSTAL) return;
+    var b = document.getElementById("instal-banner");
+    if (!b) { b = document.createElement("div"); b.id = "instal-banner"; b.className = "instal-banner"; document.body.appendChild(b); }
+    b.innerHTML = '<img src="icons/icon-192.png" alt=""><div class="ib-txt"><b>Nainštalujte si appku Legendárne buchty</b><span>' +
+      (instalPrompt ? "Bude na ploche ako bežná aplikácia, aj s upozorneniami." : ios ? "V Safari ťuknite na Zdieľať ⬆️ a potom „Pridať na plochu“." : "V menu prehliadača ⋮ zvoľte „Inštalovať aplikáciu“ alebo „Pridať na plochu“.") +
+      '</span></div>' + (instalPrompt ? '<button class="btn btn-primary" id="ib-ano">Inštalovať</button>' : "") + '<button class="ib-x" id="ib-nie" aria-label="Zavrieť">✕</button>';
+    var ano = document.getElementById("ib-ano");
+    if (ano) ano.onclick = function () { instalPrompt.prompt(); instalPrompt.userChoice.then(function () { instalPrompt = null; b.remove(); }); };
+    document.getElementById("ib-nie").onclick = function () { try { localStorage.setItem("lbz_instal_nie", "1"); } catch (e) { /* */ } b.remove(); };
+  }
+  setTimeout(ukazInstal, 1500);
   if (location.search) try { history.replaceState(null, "", location.pathname); } catch (e) {}
   // poradie kariet na Prehľade podľa roly (každý si ho môže upraviť – uloží sa v zariadení)
   var PORADIE = {
@@ -266,9 +314,20 @@
     var hotove = moduly.filter(function (m) { return m.aktivny && m.kod !== "nastavenia"; });
     var polozka = function (m, trieda) {
       return '<button class="' + trieda + '" data-mod="' + m.kod + '"' + (stav.modul === m.kod ? ' aria-current="page"' : "") + ">" +
-        '<span class="ri-ik" aria-hidden="true">' + (IKONY[m.kod] || "•") + "</span><span>" + esc(KRATKO[m.kod] || m.nazov) + "</span></button>";
+        '<span class="ri-ik">' + ikona(m.kod) + "</span><span>" + esc(KRATKO[m.kod] || m.nazov) + "</span></button>";
     };
     var ucet = { kod: "nastavenia", nazov: "Účet" };
+    // mobil: 4 hlavné + Viac (ostatné moduly a Účet v paneli)
+    var vsetky = hotove.concat([ucet]), pref = LISTA[stav.rola] || ["prehlad"];
+    var hlavne = pref.map(function (k) { return vsetky.filter(function (m) { return m.kod === k; })[0]; }).filter(Boolean);
+    vsetky.forEach(function (m) { if (hlavne.length < 4 && hlavne.indexOf(m) === -1 && m.kod !== "nastavenia") hlavne.push(m); });
+    var ostatne = vsetky.filter(function (m) { return hlavne.indexOf(m) === -1; });
+    if (ostatne.length === 1) { hlavne.push(ostatne[0]); ostatne = []; }
+    var viacAktivne = ostatne.some(function (m) { return m.kod === stav.modul; });
+    var spodna = hlavne.map(function (m) { return polozka(m, "bi"); }).join("") +
+      (ostatne.length ? '<button class="bi" data-viac="1"' + (viacAktivne ? ' aria-current="page"' : "") + ' aria-expanded="' + !!stav.viac + '"><span class="ri-ik">' + ikona("viac") + "</span><span>Viac</span></button>" : "");
+    var panel = stav.viac && ostatne.length ? '<button class="viac-pozadie" data-viac="0" aria-label="Zavrieť"></button><div class="viac-panel" role="dialog" aria-label="Ďalšie moduly">' +
+      ostatne.map(function (m) { return polozka(m, "vp"); }).join("") + "</div>" : "";
     var rolaNazov = (ROLY[stav.rola] || {}).nazov || stav.rola;
 
     el(
@@ -278,15 +337,15 @@
           '<div class="rail-dole">' + polozka(ucet, "ri") + "</div>" +
         "</aside>" +
         '<main class="main">' + obsahModulu() + "</main>" +
-        '<nav class="bottom" aria-label="Moduly">' + hotove.concat([ucet]).map(function (m) { return polozka(m, "bi"); }).join("") + "</nav>" +
+        '<nav class="bottom" aria-label="Moduly">' + spodna + "</nav>" + panel +
       "</div>"
     );
     document.title = "LBZ – " + (KRATKO[stav.modul] || (moduly.filter(function (m) { return m.kod === stav.modul; })[0] || {}).nazov || "aplikácia");
     void rolaNazov;
   }
 
-  function hlavicka(nadpis, podnadpis) {
-    return '<div class="head"><div><h2>' + esc(nadpis) + '</h2><div class="sub">' + esc(podnadpis) + "</div></div>" +
+  function hlavicka(nadpis, podnadpis, ozdobne) {
+    return '<div class="head"><div><h2' + (ozdobne ? ' class="ozdobne"' : "") + ">" + esc(nadpis) + '</h2><div class="sub">' + esc(podnadpis) + "</div></div>" +
       (OSTRY ? "" : '<span class="badge-demo">ukážkové údaje</span>') + "</div>";
   }
 
@@ -350,7 +409,7 @@
       var karty = por.viditelne.map(function (k) { return kh[k]; });
       var dnes = new Date().toLocaleDateString("sk-SK", { weekday: "long", day: "numeric", month: "numeric" });
       var meno = String(stav.pouzivatel || "").split(" ").pop();
-      return hlavicka("Dobrý deň" + (meno ? ", " + meno : "") + "!", "Dnes je " + dnes) + '<div class="grid">' + karty.join("") + "</div>" +
+      return hlavicka("Dobrý deň" + (meno ? ", " + meno : "") + "!", "Dnes je " + dnes, true) + '<div class="grid">' + karty.join("") + "</div>" +
         kartaPrisposobit(por) +
         kartaPripravujeme(moje.filter(function (m) { return !m.aktivny && m.kod !== "nastavenia"; }));
     }
@@ -460,6 +519,8 @@
   root.addEventListener("click", function (e) {
     var t = e.target.closest("button");
     if (!t) return;
+    if (t.dataset.viac) { stav.viac = t.dataset.viac === "1" && !stav.viac; render(); return; }
+    if (t.dataset.mod) stav.viac = false;
     if (t.dataset.prispHore || t.dataset.prispDole || t.dataset.prispSkry || t.dataset.prispReset) {
       var kl = [];
       root.querySelectorAll("[data-prisp-skry]").forEach(function (b) { kl.push(b.dataset.prispSkry); });
