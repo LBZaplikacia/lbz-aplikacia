@@ -77,10 +77,15 @@
   function datum(s) { if (!s) return ""; var d = new Date(String(s).length === 10 ? s + "T12:00:00" : s); return isNaN(d) ? String(s) : d.toLocaleDateString("sk-SK"); }
   // PDF faktúry / dobropisu z Upgates – zobrazí sa priamo v appke
   function otvorPdf(cislo, tl) {
-    var data = DB.functions.invoke("upgates-sync", { body: { akcia: "pdf", cislo: cislo } }).then(function (r) {
-      var b = r && r.data;
-      if (r.error || !(b instanceof Blob) || b.type.indexOf("pdf") < 0) throw new Error("PDF " + cislo + " sa nepodarilo načítať z Upgates");
-      return b;
+    var cfg = window.LBZ_CONFIG || {};
+    var data = DB.auth.getSession().then(function (r) {
+      var tok = r && r.data && r.data.session && r.data.session.access_token;
+      return fetch(cfg.supabaseUrl + "/functions/v1/upgates-sync", { method: "POST",
+        headers: { "Content-Type": "application/json", apikey: cfg.supabaseAnonKey, Authorization: "Bearer " + (tok || cfg.supabaseAnonKey) },
+        body: JSON.stringify({ akcia: "pdf", cislo: cislo }) });
+    }).then(function (odp) {
+      if (!odp.ok || (odp.headers.get("Content-Type") || "").indexOf("pdf") < 0) throw new Error("PDF " + cislo + " sa nepodarilo načítať z Upgates");
+      return odp.blob();
     });
     if (window.lbzPdf) { window.lbzPdf(cislo, data); return; }
     data.then(function (b) { var u = URL.createObjectURL(b); var a = document.createElement("a"); a.href = u; a.download = cislo + ".pdf"; document.body.appendChild(a); a.click(); a.remove(); })
