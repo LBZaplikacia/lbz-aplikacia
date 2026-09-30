@@ -61,8 +61,10 @@
       if (!d || !d.ok) { C.chyba = (d && d.text) || "Chat sa nenačítal"; C.zoznam = []; kresli(); return; }
       C.zoznam = d.konv || []; C.ja = d.ja; C.spravca = !!d.spravca; C.chyba = null;
       C.neprecitane = C.zoznam.reduce(function (s, k) { return s + (k.stlmene || k.archiv ? 0 : +k.neprecitane || 0); }, 0);
-      kresli(); odznak();
-    }).catch(function (e) { C.chyba = chybaText(e); C.zoznam = C.zoznam || []; kresli(); });
+      // už vykreslený chat len obnoví zoznam – nerušiť písanie (kurzor ostane v poli)
+      if (koren && koren.querySelector(".chat") && !C.chybaBola) kresliZoznam(); else kresli();
+      C.chybaBola = false; odznak();
+    }).catch(function (e) { C.chyba = chybaText(e); C.chybaBola = true; C.zoznam = C.zoznam || []; kresli(); });
   }
   function otvor(id) {
     C.konv = id; C.data = null; C.spravy = []; C.viac = false;
@@ -140,11 +142,12 @@
     if (!koren || !koren.isConnected) return;
     var w = siroka(), vo = C.konv != null;
     var zachovaj = document.getElementById("chat-text"), draft = zachovaj ? zachovaj.value : null;
+    var mal = zachovaj && document.activeElement === zachovaj, sel = mal ? [zachovaj.selectionStart, zachovaj.selectionEnd] : null;
     koren.innerHTML = '<div class="chat' + (w ? " chat-siroky" : "") + (vo ? " chat-vo" : "") + '">' +
       (w || !vo ? '<section class="chat-zoznam" id="chat-zoznam"></section>' : "") +
       (w || vo ? '<section class="chat-vlakno" id="chat-vlakno">' + vlaknoKostra() + "</section>" : "") + "</div>" + '<div id="chat-dialog-obal">' + dialogHtml() + "</div>";
     kresliZoznam(); kresliHlavicku(); kresliSpravy(); hlasUI(); kresliOdp();
-    if (draft != null && C.konv != null) { var t = document.getElementById("chat-text"); if (t) { t.value = draft; vyska(t); } }
+    if (draft != null && C.konv != null) { var t = document.getElementById("chat-text"); if (t) { t.value = draft; vyska(t); if (mal) { t.focus(); try { t.setSelectionRange(sel[0], sel[1]); } catch (x) { /* */ } } } }
   }
   function kresliZoznam() {
     var el = document.getElementById("chat-zoznam"); if (!el) return;

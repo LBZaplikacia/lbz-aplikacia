@@ -342,7 +342,8 @@
           f.stav === "rozvezena" ? '<button class="btn" data-f="stav" data-stav="full">↩️ Vrátiť z archívu</button>' :
           '<button class="btn" data-f="stav" data-stav="otvorena">Otvoriť</button>') : "") +
         (f.id && f.rozvoz && f.stav !== "rozvezena" ? (f.naplanovane ? '<span class="pill ok f-napl">✓ Naplánované ' + esc(casSk(f.naplanovane)) + "</span>" :
-          '<button class="btn f-tl-napl" data-f="naplanovane">✅ Naplánované</button>') +
+          (F.trasa && F.trasa.trasa ? '<button class="btn f-tl-napl" data-f="naplanovane">✅ Naplánované</button>'
+            : '<button class="btn f-tl-napl" type="button" disabled title="Najprv vytvorte trasu pre furmana – podľa nej sa pripravia SMS">✅ Naplánované <small>(najprv trasa)</small></button>')) +
           '<button class="btn f-tl-vrat" data-f="vrat-statusy">↩️ Vrátiť statusy</button>' : "") +
         // Rozvezené nastaví furman v module Trasa (bez uzavretého rozvozu sa neodhlási z práce); ručne sa dá archivovať kedykoľvek
         (f.id && f.stav !== "rozvezena" ? '<button class="btn" data-f="stav" data-stav="rozvezena">🗄️ Archivovať</button>' : "") +
@@ -705,6 +706,7 @@
         F.id = null; F.data = null; F.sprava = null; F.dialog = null; F.zArchivu = false; prekresli(); nacitajZoznam(); break;
       case "archiv": F.id = "archiv"; F.zArchivu = true; F.sprava = null; F.archiv = null; prekresli(); nacitajArchiv(); break;
       case "naplanovane":
+        if (!(F.trasa && F.trasa.trasa)) { lbzInfo("Najprv vytvorte trasu pre furmana (čas odchodu) – podľa nej sa pripravia SMS pre zákazníkov."); return; }
         if (!lbzPotvrd("Potvrdiť, že furmanka " + F.data.furmanka.nazov + " je skontrolovaná a naplánovaná?\n\nPo ostrom štarte sa tým objednávky v Upgates označia ako Naplánované. Počas testu sa len zapíše v appke.")) return;
         po(rpc("furmanka_naplanovana", { p_id: F.data.furmanka.id }), "Označené ako naplánované").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
         break;
