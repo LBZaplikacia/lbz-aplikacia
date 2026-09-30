@@ -10,7 +10,7 @@
   var Z = { zoznam: null, info: null, detail: null, osoba: null, uprav: null, filter: "aktivni", hladaj: "", sprava: null, ukazCitlive: false, novy: false, prace: false };
 
   var TYP_VZTAHU = ["TPP", "DPČ", "DoVP", "DoBPŠ", "Študent", "Paušál", "DOV"];
-  var POZICIE = ["Pomocný pekár", "Pomocný pekár a predavač", "Čašník – obsluha", "Prevádzkar", "Rozvozár – zásobovač", "Manažment"];
+  var POZICIE = ["Pomocný pekár", "Pomocný pekár a predavač", "Čašník – obsluha", "Prevádzkar", "Rozvozár – zásobovač", "Manažment", "CEO – konateľ"];
   var POISTOVNE = ["VšZP", "Dôvera", "Union"];
   var VZDELANIE = ["Základné", "Stredné bez maturity (výučný list)", "Stredné s maturitou", "Vyššie odborné", "Vysokoškolské I. stupňa", "Vysokoškolské II. stupňa", "Vysokoškolské III. stupňa"];
 
@@ -118,10 +118,12 @@
 
   // ---------- zdravotný preukaz (platnosť + fotka) ----------
   var ZD = { stav: null, foto: null, prace: false };
+  var NEURCITO = "9999-12-31";   // preukaz vydaný na dobu neurčitú
   function dnesIso() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
   function plus30() { var d = new Date(); d.setDate(d.getDate() + 30); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
   function zdravPill(doD) {
     if (!doD) return '<span class="pill warn">🩺 preukaz chýba</span>';
+    if (doD >= NEURCITO) return '<span class="pill ok">🩺 preukaz na dobu neurčitú</span>';
     if (doD < dnesIso()) return '<span class="pill bad">🩺 preukaz prepadnutý ' + esc(datum(doD)) + "</span>";
     if (doD < plus30()) return '<span class="pill warn">🩺 preukaz končí ' + esc(datum(doD)) + "</span>";
     return '<span class="pill ok">🩺 preukaz do ' + esc(datum(doD)) + "</span>";
@@ -132,10 +134,11 @@
   }
   function zdravSekcia() {
     var d = Z.detail; if (!d || !(d.ja || d.spravca)) return "";
-    var doD = (d.z || {}).zdrav_preukaz_do, foto = (d.z || {}).zdrav_preukaz_foto;
+    var doD = (d.z || {}).zdrav_preukaz_do, foto = (d.z || {}).zdrav_preukaz_foto, neurc = doD && doD >= NEURCITO;
     return '<form class="card zm-sekcia zm-zdrav" id="zm-zdrav-form"><div class="zm-s-hl"><h3>🩺 Zdravotný preukaz</h3>' + zdravPill(doD) + "</div>" +
       '<p class="muted" style="margin:0">Odfoť platný preukaz a zadaj dátum, do kedy platí. 30 a 7 dní pred koncom ti appka pripomenie obnovu.</p>' +
-      '<div class="d-riadok"><label class="field"><span class="label">Platí do</span><input type="date" id="zm-zd-do" value="' + esc(doD || "") + '" required></label>' +
+      '<label class="zm-zd-neurc"><input type="checkbox" id="zm-zd-neurc"' + (neurc ? " checked" : "") + '> Platí na dobu neurčitú</label>' +
+      '<div class="d-riadok"><label class="field"' + (neurc ? " hidden" : "") + ' id="zm-zd-do-pole"><span class="label">Platí do</span><input type="date" id="zm-zd-do" value="' + esc(neurc ? "" : doD || "") + '"></label>' +
       '<label class="field"><span class="label">Fotka preukazu</span><input type="file" id="zm-zd-foto" accept="image/*" capture="environment"></label></div>' +
       (ZD.foto ? '<img class="zm-zd-img" src="' + esc(ZD.foto) + '" alt="Zdravotný preukaz">' : foto ? '<button type="button" class="btn-link" data-zm="zd-ukaz">🖼 Zobraziť uloženú fotku</button>' : "") +
       '<div class="f-akcie"><button class="btn btn-primary" type="submit"' + (ZD.prace ? " disabled" : "") + ">" + (ZD.prace ? "Ukladám…" : "💾 Uložiť preukaz") + "</button></div></form>";
@@ -154,8 +157,9 @@
     });
   }
   function ulozZdrav() {
-    var doD = document.getElementById("zm-zd-do").value, f = document.getElementById("zm-zd-foto").files[0], os = Z.osoba;
-    if (!doD) { lbzInfo("Zadaj dátum platnosti."); return; }
+    var neurc = document.getElementById("zm-zd-neurc").checked;
+    var doD = neurc ? NEURCITO : document.getElementById("zm-zd-do").value, f = document.getElementById("zm-zd-foto").files[0], os = Z.osoba;
+    if (!doD) { lbzInfo("Zadaj dátum platnosti alebo zaškrtni „Platí na dobu neurčitú“."); return; }
     ZD.prace = true; prekresli();
     var nahraj = f ? zmensiFotku(f).then(function (b) {
       var cesta = os + "/zdrav_" + Date.now() + ".jpg";
@@ -312,17 +316,20 @@
         }).join("") + "</div>") + "</section>";
   }
   function dkOtvor(subor) {
-    var okno = window.open("", "_blank");
-    DB.storage.from("zamestnanci").createSignedUrl(Z.osoba + "/dokumenty/" + subor, 300).then(function (r) {
+    var x = (DK.zoznam || []).filter(function (d) { return d.subor === subor; })[0] || {};
+    var data = DB.storage.from("zamestnanci").download(Z.osoba + "/dokumenty/" + subor).then(function (r) {
       if (r.error || !r.data) throw r.error || new Error("Súbor sa nenašiel");
-      if (okno) okno.location = r.data.signedUrl; else window.location = r.data.signedUrl;
-    }).catch(function (x) { if (okno) okno.close(); lbzInfo(chybaText(x)); });
+      return r.data;
+    });
+    if (window.lbzPdf) window.lbzPdf(x.nazov || subor, data);
+    else data.then(function (b) { window.open(URL.createObjectURL(b), "_blank"); }).catch(function (e) { lbzInfo(chybaText(e)); });
   }
   function paNacitajDok() {
     var os = Z.osoba; PA.prace = true; prekresli();
     paVolaj("dokumenty").then(function (r) {
       PA.prace = false; if (PA.osoba !== os) return;
-      PA.vysledok = r && r.ok ? { ok: true, stav: "Načítané dokumenty: " + ((r.subory || []).length) + (r.upozornenie ? " – " + r.upozornenie : "") } : (r || { ok: false, text: "Chyba" });
+      PA.vysledok = r && r.ok && !r.upozornenie ? { ok: true, stav: "Načítané dokumenty: " + ((r.subory || []).length) }
+        : r && r.ok ? { ok: false, text: "Dokumenty sa do appky neuložili: " + r.upozornenie } : (r || { ok: false, text: "Chyba" });
       DK.osoba = null; kresli();
     }).catch(function (e) { PA.prace = false; PA.vysledok = { ok: false, text: chybaText(e) }; kresli(); });
   }
@@ -464,6 +471,7 @@
   }
   function vstupEv(e) {
     if (e.target.id === "zm-hladaj") { Z.hladaj = e.target.value; prekresli(); }
+    if (e.target.id === "zm-zd-neurc") { var pd = document.getElementById("zm-zd-do-pole"); if (pd) pd.hidden = e.target.checked; }
     if (e.target.id === "pa-typ") { var j = document.getElementById("pa-jedn"); if (j) j.value = /^HPP/.test(e.target.value) ? "mesačne" : "za hodinu"; }
   }
 

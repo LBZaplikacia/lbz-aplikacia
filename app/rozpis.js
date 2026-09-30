@@ -101,12 +101,21 @@
     var plus = mozemUpravovat() && !minule(datum) ? '<button class="r-plus" data-r-pridat="' + datum + "|" + p.kod + '" aria-label="Pridať smenu – ' + esc(p.nazov) + " " + esc(datum) + '">+</button>' : "";
     return '<td class="r-bunka' + (ms.length ? "" : " r-nerobi") + '"><div class="r-cipy">' + ms.map(cip).join("") + plus + "</div></td>";
   }
+  // v období, kde je dnešok, sa minulé dni schovajú; ukážu sa až po ťuknutí na „Minulé dni“
+  function obsahujeDnes() { var r = rozsah(), dn = iso(dnes()); return iso(R.pohlad === "mesiac" ? new Date(r.mesiac.getFullYear(), r.mesiac.getMonth(), 1, 12) : r.od) < dn && dn <= iso(R.pohlad === "mesiac" ? new Date(r.mesiac.getFullYear(), r.mesiac.getMonth() + 1, 0, 12) : r.do); }
+  function skryvamMinule() { return !R.minule && obsahujeDnes(); }
+  function minuleTl() {
+    if (!obsahujeDnes()) return "";
+    return '<div class="r-lista r-minule-tl"><button class="btn r-mini" data-r="minule">' + (R.minule ? "▲ Skryť minulé dni" : "▼ Zobraziť minulé dni") + "</button></div>";
+  }
   function tyzdenTabulka(od, mesiac) {
     var dni = []; for (var i = 0; i < 7; i++) dni.push(pridaj(od, i));
     var dn = iso(dnes());
-    return '<div class="r-obal"><table class="r-tab"><thead><tr><th class="r-poz"></th>' + dni.map(function (d, i) {
+    if (skryvamMinule()) dni = dni.filter(function (d) { return iso(d) >= dn; });   // minulé dni sú schované (tlačidlo „Minulé dni“)
+    if (!dni.length) return "";
+    return '<div class="r-obal"><table class="r-tab"><thead><tr><th class="r-poz"></th>' + dni.map(function (d) {
       var mimo = mesiac && d.getMonth() !== mesiac.getMonth();
-      return '<th class="' + (iso(d) === dn ? "r-dnes" : "") + (mimo ? " r-mimo" : "") + '"><span class="r-den">' + DNI[i] + '</span> <span class="num">' + kratkyDatum(d) + "</span></th>";
+      return '<th class="' + (iso(d) === dn ? "r-dnes" : "") + (mimo ? " r-mimo" : "") + '"><span class="r-den">' + DNI[(d.getDay() + 6) % 7] + '</span> <span class="num">' + kratkyDatum(d) + "</span></th>";
     }).join("") + "</tr></thead><tbody>" + pozicie().map(function (p) {
       return '<tr><th class="r-poz">' + esc(p.nazov) + "</th>" + dni.map(function (d) { return bunka(iso(d), p); }).join("") + "</tr>";
     }).join("") + "</tbody></table></div>";
@@ -120,6 +129,7 @@
         return '<div class="r-den-riadok"><span class="r-den-poz">' + esc(p.nazov) + '</span><span class="r-cipy">' + ms.map(cip).join("") + "</span></div>";
       }).join("");
       if (!riadky && di < dn) continue;
+      if (di < dn && od < koniec && skryvamMinule()) continue;
       out.push('<section class="card r-den-karta' + (di === dn ? " r-dnes-karta" : "") + '"><h3><span>' + DNI_DLHE[(d.getDay() + 6) % 7] + ' <span class="num">' + kratkyDatum(d) + "</span></span>" +
         (mozemUpravovat() && !minule(di) ? '<button class="btn r-mini" data-r-pridat="' + di + '|">+ Smena</button>' : "") + "</h3>" +
         (riadky || '<p class="muted" style="margin:0">Nikto nie je zapísaný.</p>') + "</section>");
@@ -204,7 +214,8 @@
       telo = R.pohlad === "mesiac" ? mesiacMriezka(r.mesiac) : '<div class="r-dni">' + dniZoznam(od, dok) + "</div>";
     }
     var upoz = rola() === "osobny" && !R.data.ja ? '<p class="s-varovanie">Váš účet ešte nie je spojený s menom v rozpise – vedenie ho spojí v „Ľudia a farby“ (podľa e-mailu).</p>' : "";
-    return head + spravaHtml() + poznamkyHtml(r.mesiac) + upoz + mojeSmeny() + telo + legenda() + spravaTl;
+    var mTl = siroka() || R.pohlad !== "mesiac" ? minuleTl() : "";
+    return head + spravaHtml() + poznamkyHtml(r.mesiac) + upoz + mojeSmeny() + mTl + telo + legenda() + spravaTl;
   }
 
   function pohladLudia() {
@@ -311,7 +322,8 @@
       if (!lbzPotvrd("Odstrániť poznámku k tomuto mesiacu?")) return;
       ulozPoznamku(d.m, ""); return;
     }
-    if (d.r === "dnes") { R.od = dnes(); nacitaj(); return; }
+    if (d.r === "dnes") { R.od = dnes(); R.minule = false; nacitaj(); return; }
+    if (d.r === "minule") { R.minule = !R.minule; prekresli(); return; }
     if (d.r === "spat" || d.r === "dalej") {
       var smer = d.r === "spat" ? -1 : 1;
       R.od = R.pohlad === "mesiac" ? new Date(R.od.getFullYear(), R.od.getMonth() + smer, 1, 12) : pridaj(R.od, 7 * smer);

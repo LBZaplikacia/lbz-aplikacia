@@ -1074,3 +1074,22 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .zm-dok-riadok { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; background: var(--karta, #fff); border: 1px solid rgba(88, 57, 52, .15); border-radius: 10px; padding: 10px 12px; font: inherit; color: inherit; cursor: pointer; }
 .zm-dok-riadok:hover { border-color: #CBA75B; }
 .zm-dok-riadok .muted { white-space: nowrap; }
+
+/* v0.23 – karta dokumentov sa nezväčší cez okraj obrazovky (dlhé chybové texty sa zalomia) */
+.zm-sekcia { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.zm-pa p, .zm-pa .f-sprava, .zm-dok-riadok span:first-child { overflow-wrap: anywhere; min-width: 0; }
+.zm-pa .f-akcie > * { max-width: 100%; }
+
+/* prehliadač PDF v appke */
+body.pdfv-otvorene { overflow: hidden; }
+.pdfv { position: fixed; inset: 0; z-index: 3000; background: #3b302d; display: flex; flex-direction: column; }
+.pdfv-hl { display: flex; align-items: center; gap: 10px; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); background: #583934; color: #fff; }
+.pdfv-n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.pdfv-x { background: none; border: 0; color: #fff; font-size: 24px; line-height: 1; min-width: 44px; min-height: 44px; cursor: pointer; }
+.pdfv-st { background: #CBA75B; color: #2b1d1a; border: 0; min-width: 44px; justify-content: center; text-decoration: none; }
+.pdfv-st[aria-disabled] { opacity: .5; pointer-events: none; }
+.pdfv-telo { flex: 1; overflow: auto; -webkit-overflow-scrolling: touch; padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+.pdfv-str { background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); max-width: 100%; }
+.pdfv-info { color: #f3ebe3; margin: 24px 16px; text-align: center; }
+.zm-zd-neurc { display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
+.zm-zd-neurc input { width: 20px; height: 20px; accent-color: var(--accent); }
