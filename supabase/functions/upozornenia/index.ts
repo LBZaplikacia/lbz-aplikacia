@@ -43,7 +43,7 @@ async function posli(uids: string[], sprava: { title: string; body: string; url?
   let n = 0;
   for (const o of odbery || []) {
     try {
-      await webpush.sendNotification({ endpoint: o.endpoint, keys: { p256dh: o.p256dh, auth: o.auth } }, JSON.stringify(sprava), { TTL: 3600 });
+      await webpush.sendNotification({ endpoint: o.endpoint, keys: { p256dh: o.p256dh, auth: o.auth } }, JSON.stringify(sprava), { TTL: 86400, urgency: "high" });   // high = doručí aj keď telefón spí a appka je zavretá
       n++;
     } catch (e: any) {
       if (e && (e.statusCode === 404 || e.statusCode === 410)) await rest("push_odbery?endpoint=eq." + encodeURIComponent(o.endpoint), { method: "DELETE" });
