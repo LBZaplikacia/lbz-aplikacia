@@ -127,6 +127,27 @@ Deno.serve(async (req) => {
         body: skupina ? meno.split(" ")[0] + ": " + text : text, url: "/?m=chat&k=" + s.konv_id, tag: "chat-" + s.konv_id });
       return odpoved({ ok: true, poslane: n });
     }
+    if (akcia === "rozpis") {
+      // žiadosť o zmenu smeny: nová → vedenie; rozhodnutie → žiadateľ a kolega
+      const z = (await rest("rozpis_ziadosti?select=id,typ,stav,ziadatel,osoba_b,miesto_a,miesto_b,kto,vybavil&id=eq." + Number(body.id)))?.[0];
+      if (!z) return odpoved({ ok: false, text: "Žiadosť sa nenašla" });
+      const meno = async (id: number) => (await rest("rozpis_osoby?select=meno&id=eq." + id))?.[0]?.meno || "?";
+      const smena = async (id: number | null) => id ? await rpc("rozpis_miesto_popis", { p_id: id }) : "";
+      const zm = await meno(z.ziadatel), km = await meno(z.osoba_b);
+      const popis = z.typ === "prevziat" ? zm + " chce ísť namiesto " + km + " (" + await smena(z.miesto_b) + ")"
+        : z.typ === "odovzdat" ? zm + " odovzdáva smenu " + km + " (" + await smena(z.miesto_a) + ")"
+        : zm + " (" + await smena(z.miesto_a) + ") ↔ " + km + " (" + await smena(z.miesto_b) + ")";
+      let n = 0;
+      if (body.udalost === "nova" && z.kto === pouz.id && z.stav === "caka") {
+        const p = await rest("profily?select=id&aktivny=eq.true&rola=in.(it,ceo,prevadzkar)");
+        n = await posli((p || []).map((x: any) => x.id), { title: "🔄 Žiadosť o zmenu smeny", body: popis + " – ťukni a schváľ", url: "/?m=rozpis", tag: "roz-z-" + z.id });
+      } else if (body.udalost === "rozhodnutie" && z.vybavil === pouz.id && z.stav !== "caka") {
+        const vys = z.stav === "schvalena" ? "✅ schválená" : z.stav === "zamietnuta" ? "❌ zamietnutá" : "⚠️ neplatná (smeny sa zmenili)";
+        const uids = [...await uidyOsoby(z.ziadatel), ...(z.osoba_b ? await uidyOsoby(z.osoba_b) : [])];
+        n = await posli(uids, { title: "🔄 Zmena smeny " + vys, body: popis, url: "/?m=rozpis", tag: "roz-z-" + z.id });
+      }
+      return odpoved({ ok: true, poslane: n });
+    }
     if (akcia === "ziadost") {
       // posledná čakajúca žiadosť, ktorú tento používateľ práve poslal
       const z = await rest("dochadzka_absencie?select=id,typ,od_dna,do_dna,cas_od,cas_do,poznamka,rozpis_osoby(meno)&stav=eq.ziadost&kto=eq." + pouz.id + "&order=id.desc&limit=1");
