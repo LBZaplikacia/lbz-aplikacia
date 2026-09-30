@@ -1337,3 +1337,4 @@ body.pdfv-otvorene { overflow: hidden; }
 /* v0.28.2 – zoznam objednávok späť ako karty; doprava farebne v karte */
 .o-pol-h .o-dp { font-size: 12px; padding: 2px 8px; vertical-align: middle; }
 .o-dalsie { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; padding-top: 6px; }
+.o-tab-karta .o-dalsie { padding: 10px; }
