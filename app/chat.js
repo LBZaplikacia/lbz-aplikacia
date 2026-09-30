@@ -96,7 +96,12 @@
     kanal = DB.channel("lbz-chat")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_sprava" }, function (p) { prislo(p.new, false); })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_sprava" }, function (p) { prislo(p.new, true); })
-      .subscribe();
+      .subscribe(function (st) {
+        // spojenie spadlo (mobil v pozadí, slabý signál) → znova pripojiť a dotiahnuť, čo ušlo
+        if (st === "CHANNEL_ERROR" || st === "TIMED_OUT" || st === "CLOSED") {
+          var k = kanal; setTimeout(function () { if (kanal === k) { odpojRealtime(); pripojRealtime(); obnovTeraz(); } }, 3000);
+        }
+      });
   }
   function odpojRealtime() { if (kanal && DB) { try { DB.removeChannel(kanal); } catch (e) { /* */ } } kanal = null; }
   function prislo(s, uprava) {
@@ -564,10 +569,28 @@
     if (!siroka() && !e.ctrlKey && !e.metaKey) return;   // v mobile Enter = nový riadok, odosiela sa tlačidlom
     e.preventDefault(); posli(e.target.value);
   }
-  document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState !== "visible" || !DB) return;
-    if (koren && koren.isConnected) { nacitajZoznam(); if (C.konv != null) rpc("chat_spravy", { p_konv: C.konv }).then(function (d) { if (d && d.ok && C.konv != null) { C.data = d; C.spravy = d.spravy; C.viac = !!d.viac; kresliHlavicku(); kresliSpravy(); dole(); } }); }
-    else nacitajPocet();
+  // dotiahnuť nové správy (po návrate do appky, pri upozornení, záložne každých 20 s pri otvorenom chate)
+  var obnovujem = false;
+  function obnovTeraz() {
+    if (!DB || document.visibilityState !== "visible") return;
+    if (!(koren && koren.isConnected)) { nacitajPocet(); return; }
+    nacitajZoznam();
+    var id = C.konv; if (id == null || obnovujem) return;
+    obnovujem = true;
+    rpc("chat_spravy", { p_konv: id }).then(function (d) {
+      obnovujem = false;
+      if (!d || !d.ok || C.konv !== id) return;
+      var predtym = C.spravy.length ? C.spravy[C.spravy.length - 1].id : 0, teraz = d.spravy.length ? d.spravy[d.spravy.length - 1].id : 0;
+      if (C.viac && C.spravy.length > d.spravy.length) { if (teraz === predtym) return; }   // načítané staršie správy nechať
+      C.data = d; C.spravy = d.spravy; C.viac = !!d.viac;
+      kresliHlavicku(); kresliSpravy(); if (teraz !== predtym) naSpodok();
+    }).catch(function () { obnovujem = false; });
+  }
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") { if (!kanal) pripojRealtime(); obnovTeraz(); } });
+  window.addEventListener("focus", obnovTeraz);
+  setInterval(function () { if (koren && koren.isConnected && C.konv != null) obnovTeraz(); }, 20000);
+  if (navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", function (e) {
+    var m = e.data || {}; if (m.typ === "push" && /^chat-/.test(m.tag || "")) obnovTeraz();
   });
   window.addEventListener("resize", function () { if (koren && koren.isConnected && !!document.querySelector(".chat-siroky") !== siroka()) kresli(); });
 

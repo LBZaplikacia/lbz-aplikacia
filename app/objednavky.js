@@ -29,7 +29,8 @@
   function nacitaj() {
     if (!DB) return;
     O.prace = true; kresli();
-    rpc("obj_zoznam", { p: { hladaj: O.filter.hladaj, stav: O.filter.stav, doprava: O.filter.doprava, platba: O.filter.platba, osobny: O.filter.osobny, limit: O.limit || 300 } }).then(function (d) {
+    var pf = Object.assign({}, O.filter, { limit: O.limit || 300 });
+    rpc("obj_zoznam", { p: pf }).then(function (d) {
       O.prace = false; O.zoznam = d && d.ok ? d : { ok: false, text: (d && d.text) || "Nenačítané" }; kresli();
     }).catch(function (e) { O.prace = false; O.zoznam = { ok: false, text: chyba(e) }; kresli(); });
   }
@@ -72,6 +73,49 @@
     return { t: "ina", n: d.split("(")[0].trim() || "–" };
   }
   function dopravaPill(d) { var x = dopravaTyp(d); return '<span class="o-dp o-dp-' + x.t + '" title="' + esc(d || "") + '">' + esc(x.n) + "</span>"; }
+  var TYP_DOKLADU = { invoice: "Faktúra", creditNote: "Dobropis", receipt: "Účtenka", proforma: "Zálohová faktúra" };
+  function datum(s) { if (!s) return ""; var d = new Date(String(s).length === 10 ? s + "T12:00:00" : s); return isNaN(d) ? String(s) : d.toLocaleDateString("sk-SK"); }
+  // dodací list – tlačová stránka z údajov objednávky (bez cien), dá sa vytlačiť alebo uložiť ako PDF
+  function otvorPdf(cislo, tl) {
+    var w = window.open("", "_blank");   // otvoriť hneď (inak prehliadač okno zablokuje)
+    if (tl) { tl.disabled = true; tl.textContent = "…"; }
+    DB.functions.invoke("upgates-sync", { body: { akcia: "pdf", cislo: cislo } }).then(function (r) {
+      if (tl) { tl.disabled = false; tl.textContent = "PDF"; }
+      var b = r && r.data;
+      if (r.error || !(b instanceof Blob) || b.type.indexOf("pdf") < 0) { if (w) w.close(); sprava("chyba", "PDF " + cislo + " sa nepodarilo otvoriť"); return; }
+      var url = URL.createObjectURL(b);
+      if (w) w.location.href = url; else { var a = document.createElement("a"); a.href = url; a.download = cislo + ".pdf"; document.body.appendChild(a); a.click(); a.remove(); }
+      setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
+    }).catch(function () { if (tl) { tl.disabled = false; tl.textContent = "PDF"; } if (w) w.close(); sprava("chyba", "PDF " + cislo + " sa nepodarilo otvoriť"); });
+  }
+  function dodaciList() {
+    var D = O.detail; if (!D || !D.ok) return;
+    var o = D.objednavka, pol = (D.polozky || []).filter(function (p) { return +p.mnozstvo; });
+    var spolu = pol.reduce(function (a, p) { return a + (+p.mnozstvo || 0); }, 0);
+    var e = esc, dnes = new Date().toLocaleDateString("sk-SK");
+    var html = '<!doctype html><html lang="sk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dodací list ' + e(o.cislo) + "</title>" +
+      "<style>body{font:14px/1.45 Montserrat,'Segoe UI',Arial,sans-serif;color:#2b1d1a;margin:24px;background:#fff}h1{font-size:22px;margin:0;color:#583934}" +
+      ".hl{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:3px solid #CBA75B;padding-bottom:12px;margin-bottom:16px}.hl img{width:84px;height:84px}" +
+      ".st{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}.box{border:1px solid #e3d6bf;border-radius:8px;padding:10px 12px}.box b{color:#583934}.m{color:#7d6c64;font-size:12px}" +
+      "table{width:100%;border-collapse:collapse;margin:8px 0 16px}th,td{border-bottom:1px solid #e3d6bf;padding:7px 6px;text-align:left}th{background:#F5ECD9;font-size:12px;text-transform:uppercase}td.k,th.k{text-align:right;white-space:nowrap}" +
+      ".pod{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:40px}.pod div{border-top:1px solid #2b1d1a;padding-top:6px;font-size:12px}.tl{margin:0 0 16px}" +
+      "@media print{.tl{display:none}body{margin:12mm}}</style></head><body>" +
+      '<p class="tl"><button onclick="window.print()" style="font:inherit;padding:10px 16px;border-radius:8px;border:0;background:#583934;color:#fff">🖨 Vytlačiť / uložiť ako PDF</button></p>' +
+      '<div class="hl"><div><h1>DODACÍ LIST</h1><div>k objednávke <b>' + e(o.cislo) + "</b>" + (o.faktura ? " · faktúra " + e(o.faktura) : "") + '</div><div class="m">Dátum: ' + e(dnes) + "</div></div>" +
+      '<img src="' + e(location.origin) + '/icons/logo.svg" alt="Legendárne buchty ZBOJSKÁ"></div>' +
+      '<div class="st"><div class="box"><div class="m">Dodávateľ</div><b>V sedle u Falťanov s.r.o.</b><br>Legendárne buchty ZBOJSKÁ®<br>Mládežnícka 3427/9, 974 04 Banská Bystrica<br>IČO 47206934 · IČ DPH SK2023800614<br><span class="m">Prevádzka: Zbojská 1960/14, 980 61 Tisovec</span></div>' +
+      '<div class="box"><div class="m">Odberateľ</div><b>' + e([o.firma, o.meno].filter(Boolean).join(" – ") || "–") + "</b><br>" + e([o.ulica, [o.psc, o.mesto].filter(Boolean).join(" ")].filter(Boolean).join(", ")) +
+      (o.telefon ? "<br>Tel.: " + e(o.telefon) : "") + (o.email ? "<br>" + e(o.email) : "") + '<br><span class="m">Doprava: ' + e(o.doprava || "") + "</span></div></div>" +
+      "<table><thead><tr><th>#</th><th>Položka</th><th>Kód</th><th class=\"k\">Množstvo</th></tr></thead><tbody>" +
+      pol.map(function (p, i) { return "<tr><td>" + (i + 1) + "</td><td>" + e(p.nazov || p.kod) + "</td><td>" + e(p.kod) + '</td><td class="k">' + e(p.mnozstvo) + " ks</td></tr>"; }).join("") +
+      '<tr><td></td><td><b>Spolu</b></td><td></td><td class="k"><b>' + e(spolu) + " ks</b></td></tr></tbody></table>" +
+      (o.poznamka ? '<div class="box"><div class="m">Poznámka</div>' + e(o.poznamka) + "</div>" : "") +
+      '<div class="pod"><div>Odovzdal (meno, podpis)</div><div>Prevzal (meno, podpis, dátum)</div></div></body></html>';
+    var url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    var w = window.open(url, "_blank");
+    if (!w) { var a = document.createElement("a"); a.href = url; a.download = "Dodaci_list_" + o.cislo + ".html"; document.body.appendChild(a); a.click(); a.remove(); }
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  }
   function zoznamHtml() {
     var Z = O.zoznam || {}, obj = Z.objednavky || [];
     var stavy = (Z.stavy || []).slice().sort();
@@ -84,13 +128,21 @@
       poradie.map(function (s) {
         return '<button class="o-tab' + (s === O.filter.stav ? " on" : "") + '" data-o-stav="' + esc(s) + '" style="--st:' + esc(farbaStavu(s, farby)) + '">' + esc(s) + ' <span class="o-bub">' + pocty[s] + "</span></button>";
       }).join("") + "</div>";
-    var aktivne = !!(O.filter.doprava || O.filter.platba || O.filter.osobny);
+    var F = O.filter, aktivne = !!(F.doprava || F.platba || F.osobny || F.doklad || F.zaplatene || F.od || F.do || F.suma_od || F.suma_do || F.produkt || F.miesto || F.zdroj);
+    function vol(meno, moznosti) { return '<select name="' + meno + '" class="r-select">' + moznosti.map(function (m) { return '<option value="' + esc(m[0]) + '"' + ((F[meno] || "") === m[0] ? " selected" : "") + ">" + esc(m[1]) + "</option>"; }).join("") + "</select>"; }
+    function pole(meno, typ, ph) { return '<label class="o-pole"><span>' + esc(ph) + '</span><input name="' + meno + '" type="' + typ + '"' + (typ === "number" ? ' step="0.01" inputmode="decimal"' : "") + ' value="' + esc(F[meno] || "") + '"></label>'; }
     h += '<section class="card o-filtre"><form id="o-hladaj"><div class="o-hl"><input name="hladaj" type="search" placeholder="Hľadať: meno, telefón, e-mail, číslo" value="' + esc(O.filter.hladaj) + '">' +
       '<button class="btn" type="submit">Hľadať</button></div>' +
       '<input type="hidden" name="stav" value="' + esc(O.filter.stav) + '">' +
       '<details class="o-viac"' + (aktivne || O.viac ? " open" : "") + '><summary>Filtre' + (aktivne ? " (zapnuté)" : "") + " a akcie</summary>" +
       '<div class="o-riadok">' + vyber("doprava", "Všetky dopravy", Z.dopravy) + vyber("platba", "Všetky platby", Z.platby) +
+      vol("doklad", [["", "Všetky doklady"], ["faktura", "S faktúrou"], ["bez_faktury", "Bez faktúry"], ["dobropis", "S dobropisom"]]) +
+      vol("zaplatene", [["", "Zaplatené aj nezaplatené"], ["ano", "Zaplatené"], ["nie", "Nezaplatené"]]) +
+      vol("zdroj", [["", "Všetky zdroje"], ["upgates", "E-shop / Upgates"], ["appka", "Založené v appke"]]) +
       '<label class="f-check"><input type="checkbox" name="osobny"' + (O.filter.osobny ? " checked" : "") + "> len osobný odber</label></div>" +
+      '<div class="o-riadok o-polia">' + pole("od", "date", "Vytvorené od") + pole("do", "date", "do") + pole("suma_od", "number", "Cena od €") + pole("suma_do", "number", "do €") +
+      pole("produkt", "search", "Produkt (názov/kód)") + pole("miesto", "search", "Mesto alebo PSČ") + "</div>" +
+      '<div class="o-riadok"><button class="btn btn-primary r-mini" type="submit">Použiť filtre</button>' + (aktivne ? '<button class="btn r-mini" type="button" data-o="zrus-filtre">✕ Zrušiť filtre</button>' : "") + "</div>" +
       '<div class="o-riadok o-akcie"><button class="btn r-mini" type="button" data-o="obnovit">🔄 Stiahnuť z Upgates</button>' +
       (Z.caka ? '<button class="btn r-mini" type="button" data-o="odoslat">⬆️ Odoslať zmeny do Upgates (' + Z.caka + ")</button>" : "") +
       '<button class="btn r-mini" type="button" data-o="ciselniky">Načítať stavy, dopravy a platby</button>' +
@@ -108,7 +160,8 @@
             (o.poznamka ? '<div class="o-pozn">' + esc(o.poznamka) + "</div>" : "") + (stitky ? '<div class="o-stitky">' + stitky + "</div>" : "") + "</td>" +
           '<td class="o-dat">' + esc(dat(o.vytvorena)) + "</td>" +
           '<td class="num o-suma">' + esc(eur(o.suma)) + "</td>" +
-          "<td>" + esc(o.faktura || "–") + (o.dobropis ? '<div class="muted">' + esc(o.dobropis) + "</div>" : "") + "</td></tr>";
+          '<td class="o-dok">' + (o.faktura ? '<span class="o-fa">' + esc(o.faktura) + "</span>" + (o.zaplatena ? ' <span class="o-zapl" title="Zaplatená">✓</span>' : "") : '<span class="muted">–</span>') +
+            (o.dobropis ? '<div class="o-db">↩ ' + esc(o.dobropis) + "</div>" : "") + "</td></tr>";
       }).join("") + "</tbody></table></div>" +
       (Z.najdenych > obj.length ? '<div class="o-dalsie"><span class="muted">Zobrazených ' + obj.length + " z " + Z.najdenych + '</span> <button class="btn r-mini" data-o="dalsie">Načítať ďalšie</button></div>' : (Z.najdenych ? '<div class="o-dalsie muted">Spolu ' + Z.najdenych + "</div>" : "")) +
       "</section>";
@@ -132,11 +185,20 @@
     h += '<section class="card"><h3>Položky</h3><div class="rows">' + (D.polozky || []).map(function (p) {
       return '<div class="row"><span>' + esc(p.nazov || p.kod) + ' <span class="muted">' + esc(p.kod) + '</span></span><span class="num">' + esc(p.mnozstvo) + " ks" + (p.cena != null ? " · " + esc(eur(p.cena)) : "") + "</span></div>";
     }).join("") + "</div></section>";
+    var dok = D.doklady || [];
+    h += '<section class="card"><h3>Doklady</h3>' + (dok.length ? '<div class="rows">' + dok.map(function (d) {
+      var info = [datum(d.vystavena)];
+      if (d.typ === "invoice") info.push(d.zaplatene ? "zaplatená " + datum(d.zaplatena) : "nezaplatená" + (d.splatnost ? " (splatná " + datum(d.splatnost) + ")" : ""));
+      else if (d.suvisiaci) info.push("k faktúre " + d.suvisiaci);
+      return '<div class="row o-dok-r"><span><b>' + esc(TYP_DOKLADU[d.typ] || d.typ) + "</b> " + esc(d.cislo) + '<span class="muted"> · ' + esc(info.filter(Boolean).join(" · ")) + "</span></span>" +
+        '<span class="num">' + esc(eur(d.suma)) + ' <button class="btn r-mini" type="button" data-o-pdf="' + esc(d.cislo) + '">PDF</button>' + "</span></div>";
+    }).join("") + "</div>" : '<p class="muted" style="margin:0">' + (o.faktura ? "Faktúra " + esc(o.faktura) + " – detail sa načíta pri ďalšom stiahnutí z Upgates." : "Zatiaľ bez faktúry.") + "</p>") +
+      '<div class="f-akcie"><button class="btn" data-o="dodaci">📄 Dodací list</button></div></section>';
     if (!storno) {
       h += '<section class="card"><h3>Stav objednávky</h3>' + ((D.stavy || []).length ?
         '<form id="o-stav" class="o-riadok"><select name="stav">' + D.stavy.map(function (s) { return '<option value="' + esc(s.kod) + '"' + (s.nazov === o.status ? " selected" : "") + ">" + esc(s.nazov) + "</option>"; }).join("") +
         '</select><button class="btn btn-primary" type="submit">Zmeniť stav</button></form>' +
-        '<p class="muted r-mala">Pri zmene stavu Upgates pošle zákazníkovi e-mail, ak ho má stav nastavený. <b>Storno</b> sa dá až po vystavení dobropisu v Upgates.</p>'
+        '<p class="muted r-mala">Pri zmene stavu Upgates pošle zákazníkovi e-mail, ak ho má stav nastavený. Pri <b>Storno</b> appka najprv ponúkne vystaviť dobropis v Upgates.</p>'
         : '<p class="muted" style="margin:0">Stavy z Upgates ešte nie sú načítané – v zozname objednávok ťuknite „Načítať stavy, dopravy a platby“.</p>') +
         (o.faktura && !o.dobropis ? '<div class="f-akcie"><button class="btn" data-o="dobropis">🔎 Skontrolovať dobropis v Upgates</button></div>' : "") + "</section>";
     }
@@ -189,10 +251,13 @@
   function klik(e) {
     var t = e.target.closest("button, [data-o], tr[data-o-cislo]"); if (!t) return;
     var d = t.dataset;
+    if (d.oPdf) { otvorPdf(d.oPdf, t); return; }
     if (d.oStav !== undefined) { O.filter.stav = d.oStav; O.limit = 300; nacitaj(); return; }
     if (d.oCislo) { otvor(d.oCislo); return; }
     if (d.oZmaz != null) { var fz = koren.querySelector("#o-form"); citajFormular(fz); formular().polozky.splice(+d.oZmaz, 1); kresli(); return; }
     switch (d.o) {
+      case "zrus-filtre": O.filter = { hladaj: O.filter.hladaj, stav: O.filter.stav, doprava: "", platba: "", osobny: false }; O.limit = 300; nacitaj(); return;
+      case "dodaci": dodaciList(); return;
       case "dalsie": O.limit = (O.limit || 300) + 300; nacitaj(); return;
       case "zavri-spravu": O.sprava = null; kresli(); return;
       case "spat": O.cislo = null; O.detail = null; O.uprava = null; nacitaj(); return;
@@ -251,16 +316,31 @@
       e.preventDefault();
       O.limit = 300;
       O.filter = { hladaj: f.elements.hladaj.value.trim(), stav: f.elements.stav.value, doprava: f.elements.doprava.value, platba: f.elements.platba.value, osobny: f.elements.osobny.checked };
+      ["doklad", "zaplatene", "od", "do", "suma_od", "suma_do", "produkt", "miesto", "zdroj"].forEach(function (k) { if (f.elements[k]) O.filter[k] = String(f.elements[k].value || "").trim(); });
       nacitaj(); return;
     }
     if (f.id === "o-stav") {
       e.preventDefault();
-      var kod = f.elements.stav.value, nazov = f.elements.stav.selectedOptions[0].textContent;
-      if (!lbzPotvrd("Zmeniť stav objednávky " + O.cislo + " na „" + nazov + "“?")) return;
-      rpc("obj_stav", { p_cislo: O.cislo, p_kod: kod }).then(function (r) {
-        if (!r || r.ok === false) { sprava("chyba", (r && r.text) || "Nezmenené"); return; }
-        sprava("ok", r.text); odoslatZmeny(true);
-      }).catch(function (x) { sprava("chyba", chyba(x)); });
+      var kod = f.elements.stav.value, nazov = f.elements.stav.selectedOptions[0].textContent, cis = O.cislo;
+      var ob = (O.detail && O.detail.objednavka) || {}, maDob = !!ob.dobropis || (O.detail.doklady || []).some(function (d) { return d.typ === "creditNote"; });
+      var zmen = function () {
+        return rpc("obj_stav", { p_cislo: cis, p_kod: kod }).then(function (r) {
+          if (!r || r.ok === false) { sprava("chyba", (r && r.text) || "Nezmenené"); return; }
+          sprava("ok", r.text); odoslatZmeny(true);
+        });
+      };
+      if (/storn/i.test(nazov) && ob.faktura && !maDob && ob.zdroj !== "appka") {
+        if (!lbzPotvrd("K objednávke " + cis + " je faktúra " + ob.faktura + ".\n\nPred Storno treba vystaviť dobropis. Vystaviť dobropis v Upgates teraz a potom dať Storno?\n\n(Upgates potom zákazníkovi pošle e-mail so storno a dobropisom.)")) return;
+        sprava("ok", "Vystavujem dobropis v Upgates…");
+        fn("vystav_dobropis", { cislo: cis }).then(function (r) {
+          if (!r || !r.ok) { sprava("chyba", (r && r.text) || "Dobropis sa nevystavil – Storno som nedal"); otvor(cis); return; }
+          sprava("ok", r.text + " – dávam Storno…");
+          return zmen();
+        }).catch(function (x) { sprava("chyba", chyba(x)); });
+        return;
+      }
+      if (!lbzPotvrd("Zmeniť stav objednávky " + cis + " na „" + nazov + "“?")) return;
+      zmen().catch(function (x) { sprava("chyba", chyba(x)); });
       return;
     }
     if (f.id === "o-form") {

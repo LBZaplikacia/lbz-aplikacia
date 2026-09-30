@@ -1352,3 +1352,13 @@ body.pdfv-otvorene { overflow: hidden; }
 .chat-blik .chat-bub { animation: chatBlik 1.2s ease-out; }
 @keyframes chatBlik { 0%, 40% { box-shadow: 0 0 0 3px var(--lbz-zlata, #CBA75B); } 100% { box-shadow: none; } }
 @media (prefers-reduced-motion: reduce) { .chat-msg { transition: none; } .chat-blik .chat-bub { animation: none; } }
+/* v0.29.0 – doklady a rozšírené filtre objednávok */
+.o-polia { align-items: flex-end; }
+.o-pole { display: grid; gap: 2px; flex: 1 1 140px; min-width: 0; font-size: 12px; color: var(--muted); }
+.o-pole input { width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; background: var(--bg); color: var(--ink); font: inherit; font-size: 15px; min-height: 42px; }
+.o-dok { white-space: nowrap; }
+.o-fa { font-weight: 600; }
+.o-zapl { color: #2e7d32; font-weight: 800; }
+.o-db { color: #c62828; font-size: 12px; font-weight: 600; }
+.o-dok-r > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.o-dok-r .num { display: inline-flex; gap: 8px; align-items: center; }

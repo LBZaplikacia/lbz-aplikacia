@@ -1,14 +1,15 @@
 // Service worker: appka sa otvorí aj pri slabom signáli (uložené základné súbory).
 // Pri každej novej verzii appky zvýš číslo VERZIA – zariadenia si ju stiahnu samé.
-const VERZIA = "0.28.5";
+const VERZIA = "0.29.0";
 const CACHE = "lbz-v" + VERZIA;
 const SUPABASE = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
-const SUBORY = ["./", "index.html", "styles.css", "app.js", "sklad.js", "furmanky.js", "rozpis.js", "objednavky.js", "balenie.js", "trasa.js", "dochadzka.js", "kniha.js", "vybavit.js", "zamestnanci.js", "ulohy.js", "chat.js", "lib/qr.js", "lib/dialog.js", "lib/pdfview.js", "lib/push.js", "lib/aktivita.js", "config.js", "manifest.webmanifest", "icons/logo.svg", "icons/icon-192.png", "icons/badge-96.png", "icons/monochrome-192.png", "fonts/armonioso.woff", "vybavit.html", "manifest-vybavit.webmanifest"];
+const SUBORY = ["./", "index.html", "styles.css", "app.js", "sklad.js", "furmanky.js", "rozpis.js", "objednavky.js", "balenie.js", "trasa.js", "dochadzka.js", "kniha.js", "vybavit.js", "zamestnanci.js", "ulohy.js", "chat.js", "lib/qr.js", "lib/dialog.js", "lib/pdfview.js", "lib/push.js", "lib/aktivita.js", "config.js", "manifest.webmanifest", "icons/logo.svg", "icons/icon-192.png", "icons/badge-96.png", "icons/monochrome-192.png", "vybavit.html", "manifest-vybavit.webmanifest"];
 self.addEventListener("install", e => {
   self.skipWaiting(); // nová verzia sa zapne hneď, nečaká na zatvorenie appky
   e.waitUntil(caches.open(CACHE).then(c => {
     c.add(SUPABASE).catch(() => {}); // knižnica prihlásenia – aby appka naštartovala aj bez signálu
-    return c.addAll(SUBORY.map(u => new Request(u, { cache: "reload" })));
+    // každý súbor zvlášť – chýbajúci súbor nesmie zablokovať inštaláciu appky (inak nefungujú upozornenia)
+    return Promise.all(SUBORY.map(u => c.add(new Request(u, { cache: "reload" })).catch(() => {})));
   }));
 });
 self.addEventListener("activate", e => e.waitUntil(
@@ -43,7 +44,9 @@ self.addEventListener("push", e => {
   e.waitUntil(Promise.all([self.registration.showNotification(d.title || "Legendárne buchty", {
     body: d.body || "", icon: "icons/icon-192.png", badge: "icons/badge-96.png", tag: d.tag || undefined, renotify: !!d.tag,
     data: { url: d.url || "/" }, vibrate: [120, 60, 120]
-  }), zvysOdznak()]));
+  }), zvysOdznak(),
+  // otvorená appka si hneď dotiahne novinky (napr. správy v chate)
+  self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(zoz => zoz.forEach(c => c.postMessage({ typ: "push", tag: d.tag || "" })))]));
 });
 self.addEventListener("notificationclick", e => {
   e.notification.close();

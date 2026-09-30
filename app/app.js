@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.28.5 BETA";
+  var VERZIA = "0.29.0 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
