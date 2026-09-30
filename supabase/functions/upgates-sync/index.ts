@@ -454,6 +454,23 @@ Deno.serve(async (req) => {
       const n = [await rpc("obj_ciselnik_uloz", { p_typ: "stav", p: stavy }), await rpc("obj_ciselnik_uloz", { p_typ: "doprava", p: dopravy }), await rpc("obj_ciselnik_uloz", { p_typ: "platba", p: platby })];
       return odpoved({ ok: true, text: "Z Upgates načítané: " + n[0] + " stavov, " + n[1] + " dopráv, " + n[2] + " platieb" });
     }
+    // jednorazovo: staršie objednávky (napr. celý rok 2026) – len doplní chýbajúce, furmanky nemení
+    if (akcia === "historia") {
+      const od = String(body.od || "2026-01-01").slice(0, 10) + "T00:00:00";
+      const po = miestne(new Date(Date.now() - (DNI_SPAT - 1) * 86400000)).datum + "T00:00:00";
+      const maxStran = Math.min(Number(body.stran) || 25, 30);
+      const vsetky: any[] = []; let stran = 0, strana = Number(body.strana) || 1;
+      for (; strana <= 200; strana++) {
+        const data = await upgatesGet("/orders?creation_time_from=" + encodeURIComponent(od) + "&creation_time_to=" + encodeURIComponent(po) + "&page=" + strana);
+        const obj = (data && data.orders) || [];
+        vsetky.push(...obj); stran++;
+        const spolu = Number(data && data.number_of_pages) || 0;
+        if (!obj.length || (spolu && strana >= spolu) || stran >= maxStran) { if (obj.length && spolu && strana < spolu) { strana++; break; } strana = 0; break; }
+        await sleep(600);
+      }
+      const res = await rpc("obj_import_historia", { p_obj: vsetky.map(prevedObjednavku) });
+      return odpoved({ ok: true, text: "Z Upgates prenesené staršie objednávky: " + (res && res.nove) + " nových (stiahnutých " + vsetky.length + ")" + (strana ? " – pokračuje sa od strany " + strana : ""), dalsia_strana: strana || null });
+    }
     // je k objednávke vystavený dobropis? (1 požiadavka)
     if (akcia === "dobropis") {
       const cislo = String(body.cislo || "").trim();
