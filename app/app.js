@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.22.0 BETA";
+  var VERZIA = "0.22.1 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -69,7 +69,7 @@
     it: ["prehlad", "dochadzka", "kniha_jazd", "rozpis"], ceo: ["prehlad", "dochadzka", "kniha_jazd", "rozpis"],
     prevadzkar: ["prehlad", "dochadzka", "rozpis", "sklad"], prevadzka: ["prehlad", "sklad", "balenie", "dochadzka"],
     zamestnanec: ["prehlad", "dochadzka", "rozpis", "zamestnanci"], furman: ["prehlad", "trasa", "dochadzka", "rozpis"],
-    zakaznicky_servis: ["prehlad", "objednavky", "furmanky", "komentare"], uctovnicka: ["prehlad", "dochadzka", "zamestnanci"],
+    zakaznicky_servis: ["prehlad", "dochadzka", "objednavky", "furmanky"], uctovnicka: ["prehlad", "dochadzka", "zamestnanci"],
     majitelka_arealu: ["prehlad", "kniha_jazd"], zakaznik: ["prehlad", "moje_objednavky", "sledovanie"]
   };
   var KRATKO = { rozpis: "Rozpis", balenie: "Balenie", trasa: "Trasa", dochadzka: "Dochádzka", kniha_jazd: "Jazdy", zamestnanci: "Ľudia", komentare: "Komentáre",
@@ -81,7 +81,7 @@
     prevadzka: ["prehlad", "sklad", "balenie", "dochadzka", "kniha_jazd", "nastavenia"],
     zamestnanec: ["prehlad", "dochadzka", "nastavenia"],
     furman: ["prehlad", "trasa", "dochadzka", "kniha_jazd", "nastavenia"],
-    zakaznicky_servis: ["prehlad", "objednavky", "furmanky", "balenie", "trasa", "sklad", "komentare", "nastavenia"],
+    zakaznicky_servis: ["prehlad", "dochadzka", "objednavky", "furmanky", "balenie", "trasa", "sklad", "komentare", "zamestnanci", "nastavenia"],
     uctovnicka: ["prehlad", "dochadzka", "zamestnanci", "nastavenia"],
     prevadzkar: ["prehlad", "dochadzka", "rozpis", "sklad", "balenie", "furmanky", "kniha_jazd", "zamestnanci", "nastavenia"],
     majitelka_arealu: ["prehlad", "kniha_jazd", "nastavenia"],
@@ -141,6 +141,7 @@
     zamestnanec: ["dochadzka", "zdrav", "ulohy", "furmanky", "rozpis", "vybavit"],
     prevadzka: ["ulohy", "dochadzka", "sklad", "balenie", "furmanky", "vybavit"],
     furman: ["dochadzka", "rozpis", "trasa", "vybavit", "ulohy", "kniha"],
+    zakaznicky_servis: ["dochadzka", "ulohy", "zdrav", "furmanky", "balenie", "rozpis", "vybavit"],
     majitelka_arealu: ["kniha", "vybavit"]
   };
   var NAZVY_KARIET = { dochadzka: "🕒 Príchod a smeny", ulohy: "✅ Úlohy a Vybaviť", zdrav: "🩺 Zdravotné preukazy", vybavit: "📝 Vybaviť", kniha: "🚗 Kniha jázd", rozpis: "📅 Kto je v práci", furmanky: "🚚 Furmanky",

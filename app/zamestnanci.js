@@ -470,7 +470,7 @@
   window.LBZ_ZAMESTNANCI = {
     nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; Z.zoznam = null; Z.detail = null; Z.osoba = null; PA.osoba = null; DK.osoba = null; DK.zoznam = null; PA.stav = null; PA.vysledok = null; PA.dialog = false; ZD.stav = null; ZD.foto = null; if (DB && this.mozem()) nacitajZdrav(); },
     karta: function () { return kartaZdrav(); },
-    mozem: function () { return !!DB && ["it", "ceo", "uctovnicka", "zamestnanec"].indexOf(ROLA) > -1; },
+    mozem: function () { return !!DB && ["it", "ceo", "uctovnicka", "zamestnanec", "zakaznicky_servis"].indexOf(ROLA) > -1; },
     mount: function (el) {
       koren = el;
       el.addEventListener("click", klik); el.addEventListener("submit", odoslanie); el.addEventListener("input", vstupEv);
