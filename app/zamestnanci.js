@@ -289,7 +289,7 @@
         (v.chyby && v.chyby.length ? '<ul class="zm-zmeny">' + v.chyby.map(function (c) { return "<li>" + esc(c) + "</li>"; }).join("") + "</ul>" : "") + "</div>" : "") +
       '<div class="f-akcie"><button class="btn btn-primary" type="button" data-zm="pa-dialog"' + (PA.prace ? " disabled" : "") + ">" + (PA.prace ? "Pracujem… (do 1 min)" : "📄 Vygenerovať dokumenty") + "</button>" +
       (url ? '<a class="btn" href="' + esc(url) + '" target="_blank" rel="noopener">📁 Priečinok</a>' : "") +
-      (st.row && url ? '<button class="btn" type="button" data-zm="pa-dok"' + (PA.prace ? " disabled" : "") + ">🔄 Dokumenty z Disku do appky</button>" : "") +
+      (url ? '<button class="btn" type="button" data-zm="pa-dok"' + (PA.prace ? " disabled" : "") + ">🔄 Dokumenty z Disku do appky</button>" : "") +
       (st.row && url ? '<button class="btn" type="button" data-zm="pa-mzdarke"' + (PA.prace ? " disabled" : "") + ">📧 Poslať mzdárke</button>" : "") + "</div></section>";
   }
   // ---------- dokumenty zamestnanca (PDF v úložisku zamestnanci/<osoba>/dokumenty/) ----------
