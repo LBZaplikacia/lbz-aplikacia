@@ -142,16 +142,35 @@ Deno.serve(async (req) => {
       let n = 0;
       if (body.udalost === "nova" && z.kto === pouz.id && z.stav === "caka") {
         if (z.potvrdzuje === "kolega" && z.osoba_b) {
-          n = await posli(await uidyOsoby(z.osoba_b), { title: "🔄 " + zm + " – zmena smeny", body: popis + " – ťukni a potvrď", url: "/?m=rozpis", tag: "roz-z-" + z.id });
+          n = await posli(await uidyOsoby(z.osoba_b), { title: "🔄 " + zm + " – zmena smeny", body: popis + " – ťukni a potvrď", url: "/?m=rozpis", tag: "roz-z-" + z.id + "-" });
         } else {
           const p = await rest("profily?select=id&aktivny=eq.true&rola=in.(it,ceo,prevadzkar)");
-          n = await posli((p || []).map((x: any) => x.id), { title: "🔄 Žiadosť o zmenu smeny", body: popis + " – ťukni a potvrď", url: "/?m=rozpis", tag: "roz-z-" + z.id });
+          n = await posli((p || []).map((x: any) => x.id), { title: "🔄 Žiadosť o zmenu smeny", body: popis + " – ťukni a potvrď", url: "/?m=rozpis", tag: "roz-z-" + z.id + "-" });
         }
       } else if (body.udalost === "rozhodnutie" && z.vybavil === pouz.id && z.stav !== "caka") {
         const vys = z.stav === "schvalena" ? "✅ potvrdená" : z.stav === "zamietnuta" ? "❌ zamietnutá" : "⚠️ neplatná (smeny sa zmenili)";
         const uids = [...await uidyOsoby(z.ziadatel), ...(z.osoba_b ? await uidyOsoby(z.osoba_b) : [])];
-        n = await posli(uids, { title: "🔄 Zmena smeny " + vys, body: popis, url: "/?m=rozpis", tag: "roz-z-" + z.id });
+        n = await posli(uids, { title: "🔄 Zmena smeny " + vys, body: popis, url: "/?m=rozpis", tag: "roz-z-" + z.id + "-" });
       }
+      return odpoved({ ok: true, poslane: n });
+    }
+    if (akcia === "uloha") {
+      // nová úloha → prijímatelia (alebo všetci so smenou v ten deň pri úlohe „na deň“)
+      const t = (await rest("ulohy?select=id,text,datum,termin,na_den,vytvoril&id=eq." + Number(body.id)))?.[0];
+      if (!t || t.vytvoril !== pouz.id) return odpoved({ ok: false, text: "Úloha sa nenašla" });
+      let osoby: number[] = [];
+      if (t.na_den) osoby = ((await rest("rozpis_miesta?select=osoba_id&datum=eq." + t.datum + "&osoba_id=not.is.null")) || []).map((x: any) => x.osoba_id);
+      else osoby = ((await rest("ulohy_prijemci?select=osoba_id&uloha_id=eq." + t.id)) || []).map((x: any) => x.osoba_id);
+      const uids = new Set<string>();
+      for (const o of [...new Set(osoby)]) for (const u of await uidyOsoby(o)) if (u !== pouz.id) uids.add(u);
+      const n = await posli([...uids], { title: "📋 Nová úloha" + (t.termin ? " – do " + datumSk(t.termin) : ""), body: String(t.text).slice(0, 180), url: "/", tag: "uloha-" + t.id + "-" });
+      return odpoved({ ok: true, poslane: n });
+    }
+    if (akcia === "udaje") {
+      // zamestnanec žiada o zmenu osobných údajov → IT a CEO
+      const z = (await rest("zamestnanci_ziadosti?select=id,rozpis_osoby(meno)&stav=eq.ziadost&kto=eq." + pouz.id + "&order=id.desc&limit=1"))?.[0];
+      if (!z) return odpoved({ ok: false, text: "Žiadosť sa nenašla" });
+      const n = await posli(await vedenie(), { title: "👤 " + (z.rozpis_osoby?.meno || "Zamestnanec") + " – zmena údajov", body: "Žiada o zmenu osobných údajov – ťukni a schváľ v appke", url: "/?m=zamestnanci", tag: "udaje-" + z.id });
       return odpoved({ ok: true, poslane: n });
     }
     if (akcia === "ziadost") {
