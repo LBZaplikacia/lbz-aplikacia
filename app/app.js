@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.25.1 BETA";
+  var VERZIA = "0.25.2 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -371,7 +371,7 @@
   }
   // „Na schválenie“ – vedenie vidí na Prehľade, čo od zamestnancov čaká na jeho rozhodnutie
   function kartaSchvalenie() {
-    if (!OSTRY || ["it", "ceo", "prevadzkar", "zamestnanec"].indexOf(stav.rola) === -1) return "";
+    if (!OSTRY || ["it", "ceo", "prevadzkar", "zamestnanec", "furman"].indexOf(stav.rola) === -1) return "";
     if (!stav.naSchv || Date.now() - stav.naSchv.cas > 60000) {
       var bolo = stav.naSchv; stav.naSchv = { cas: Date.now(), d: bolo ? bolo.d : null };
       db.rpc("na_schvalenie").then(function (r) {
