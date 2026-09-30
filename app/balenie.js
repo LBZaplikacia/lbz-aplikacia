@@ -392,7 +392,7 @@
       DB = klient || null; ROLA = klient ? rola : null;
       if (!DB) { B.zoznam = null; B.fData = null; B.obj = null; B.karta = null; B.pohlad = "zoznam"; B.fId = null; }
     },
-    mozem: function () { return !!DB && ["it", "ceo", "zakaznicky_servis", "prevadzka"].indexOf(ROLA) > -1; },
+    mozem: function () { return !!DB && ["it", "ceo", "zakaznicky_servis", "prevadzka", "prevadzkar"].indexOf(ROLA) > -1; },
     mount: function (el) {
       if (kamera) vypniKameru();
       koren = el;
