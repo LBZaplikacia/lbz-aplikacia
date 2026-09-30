@@ -3,7 +3,9 @@
 //   kluc      – verejný VAPID kľúč pre appku (bez prihlásenia)
 //   ziadost   – nová žiadosť v dochádzke → upozornenie IT a CEO (volá appka zamestnanca po odoslaní žiadosti)
 //   test      – skúšobné upozornenie prihlásenému používateľovi
-//   kontrola  – plánovač (pg_cron, hlavička x-lbz-cron): šichty dlhšie ako 14 h → zamestnanec + vedenie
+//   kontrola  – plánovač (pg_cron, hlavička x-lbz-cron): šichty dlhšie ako 14 h → zamestnanec + vedenie;
+//               ráno 8:00 – 8:30: zdravotný preukaz končí o 30 alebo 7 dní → zamestnanec + vedenie
+//   chat      – nová správa v chate → ostatní členovia konverzácie (okrem stlmených)
 // Kľúče: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY v trezore Supabase (Edge Function Secrets).
 import webpush from "npm:web-push@3.6.7";
 
@@ -83,7 +85,23 @@ Deno.serve(async (req) => {
         n += await posli(ved, { title: "⏰ " + meno + " – 14 h v práci", body: "Stále nemá zapísaný odchod (" + (d.miesto || "") + "). Skontroluj v Dochádzke → Tím.", url: "/?m=dochadzka&z=tim", tag: "doch-v-" + d.id });
         await rest("dochadzka?id=eq." + d.id, { method: "PATCH", body: JSON.stringify({ upozornene: new Date().toISOString() }), headers: { Prefer: "return=minimal" } });
       }
-      return odpoved({ ok: true, dlhe: (dlhe || []).length, poslane: n });
+      // zdravotné preukazy – raz denne ráno (plánovač beží každých 30 min)
+      const teraz = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Bratislava" }));
+      let preukazy = 0;
+      if (teraz.getHours() === 8 && teraz.getMinutes() < 30) {
+        const iso = (d: Date) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+        for (const dni of [30, 7]) {
+          const d = new Date(teraz); d.setDate(d.getDate() + dni);
+          const z = await rest("zamestnanci?select=osoba_id,zdrav_preukaz_do,rozpis_osoby(meno,aktivny)&zdrav_preukaz_do=eq." + iso(d));
+          for (const x of z || []) {
+            if (!x.rozpis_osoby?.aktivny) continue;
+            const meno = x.rozpis_osoby?.meno || "Zamestnanec";
+            preukazy += await posli(await uidyOsoby(x.osoba_id), { title: "🩺 Zdravotný preukaz končí o " + dni + " dní", body: "Platí do " + datumSk(x.zdrav_preukaz_do) + ". Vybav si obnovu a nahraj nový preukaz v appke (Moje údaje).", url: "/?m=zamestnanci", tag: "zdrav-" + x.osoba_id + "-" + dni });
+            preukazy += await posli(ved, { title: "🩺 " + meno + ": preukaz končí o " + dni + " dní", body: "Zdravotný preukaz platí do " + datumSk(x.zdrav_preukaz_do) + ".", url: "/?m=zamestnanci", tag: "zdrav-v-" + x.osoba_id + "-" + dni });
+          }
+        }
+      }
+      return odpoved({ ok: true, dlhe: (dlhe || []).length, poslane: n, preukazy });
     }
 
     // ostatné akcie – prihlásený používateľ
@@ -95,6 +113,19 @@ Deno.serve(async (req) => {
     if (akcia === "test") {
       const n = await posli([pouz.id], { title: "🔔 Legendárne buchty", body: "Upozornenia fungujú. Takto ti budú chodiť správy z appky.", url: "/" });
       return odpoved({ ok: n > 0, text: n ? "Skúšobné upozornenie odoslané" : "Toto zariadenie nemá zapnuté upozornenia" });
+    }
+    if (akcia === "chat") {
+      const s = (await rest("chat_sprava?select=id,konv_id,uid,text,priloha,chat_konv(typ,nazov,ikona)&id=eq." + Number(body.id)))?.[0];
+      if (!s || s.uid !== pouz.id) return odpoved({ ok: false, text: "Správa sa nenašla" });
+      const cl = await rest("chat_clen?select=uid&konv_id=eq." + s.konv_id + "&stlmene=eq.false&uid=neq." + pouz.id);
+      const od = (await rest("profily?select=meno,email&id=eq." + pouz.id))?.[0];
+      const meno = (od?.meno || String(od?.email || "").split("@")[0] || "Niekto").trim();
+      const text = s.text ? String(s.text).slice(0, 180) : "📎 " + (s.priloha?.nazov || "príloha");
+      const skupina = s.chat_konv?.typ === "skupina";
+      const n = await posli((cl || []).map((x: any) => x.uid), {
+        title: skupina ? (s.chat_konv?.ikona || "💬") + " " + (s.chat_konv?.nazov || "Skupina") : "💬 " + meno,
+        body: skupina ? meno.split(" ")[0] + ": " + text : text, url: "/?m=chat&k=" + s.konv_id, tag: "chat-" + s.konv_id });
+      return odpoved({ ok: true, poslane: n });
     }
     if (akcia === "ziadost") {
       // posledná čakajúca žiadosť, ktorú tento používateľ práve poslal
