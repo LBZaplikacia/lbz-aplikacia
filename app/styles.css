@@ -1261,3 +1261,10 @@ body.pdfv-otvorene { overflow: hidden; }
 #o-form .field { min-width: 0; }
 .o-riadok select[name=stav] { flex: 1 1 180px; }
 .o-pol { background: var(--surface); border-color: var(--line); }
+/* v0.27.1 – filtre objednávok nepretekajú na mobile */
+.o-filtre { grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+.o-filtre > * { min-width: 0; }
+.o-filtre .o-riadok input[type=search] { flex: 1 1 100%; width: 100%; }
+.o-filtre .o-riadok select, .o-filtre .o-riadok select[name=stav] { flex: 1 1 140px; width: auto; }
+.o-filtre .o-riadok .btn { white-space: normal; max-width: 100%; }
+@media (max-width: 520px) { .o-filtre .o-riadok select, .o-filtre .o-riadok select[name=stav] { flex-basis: 100%; } }
