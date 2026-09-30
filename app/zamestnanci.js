@@ -249,7 +249,7 @@
       (d.spravca ? ziadostiHtml((d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }), false) :
         (d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }).map(function (z) { return '<div class="card zm-caka">⏳ <b>Žiadosť o zmenu čaká na schválenie</b>' + zmenyHtml(z.zmeny, null) + "</div>"; }).join("") +
         (d.ziadosti || []).filter(function (z) { return z.stav !== "ziadost"; }).slice(0, 2).map(function (z) { return '<p class="muted zm-vybavena">' + (z.stav === "schvalena" ? "✅ Tvoja žiadosť o zmenu bola schválená" : "✖ Tvoja žiadosť o zmenu bola zamietnutá") + " (" + esc(datum(z.kedy)) + ")</p>"; }).join("")) +
-      zdravSekcia() + paSekcia() +
+      zdravSekcia() + dkSekcia() + paSekcia() +
       '<div class="zm-sekcie">' + sekcie.map(sekciaHtml).join("") + "</div>" +
       (citatel() && (d.log || []).length ? '<details class="card zm-log"><summary>🕘 História zmien</summary><div class="rows">' + d.log.map(function (l) {
         return '<div class="row"><span>' + esc(new Date(l.kedy).toLocaleString("sk-SK", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })) + " · " + esc(l.kto || "") + '</span><span class="muted">' + esc((l.polia || []).join(", ")) + "</span></div>";
@@ -258,6 +258,7 @@
 
   // ---------- nástupné dokumenty (skript „Formular prihlasenie“ cez Edge Function personalna) ----------
   var PA = { osoba: null, stav: null, dialog: false, prace: false, vysledok: null };
+  var DK = { osoba: null, zoznam: null, chyba: null };
   var PA_TYPY = ["HPP – pracovná zmluva", "DoPČ – dohoda o pracovnej činnosti", "DoVP – dohoda o vykonaní práce", "DoBPŠ – dohoda o brigádnickej práci študentov"];
   var PA_OKRESY = ["603 - Brezno", "601 - Banská Bystrica", "609 - Rimavská Sobota", "608 - Revúca", "611 - Zvolen", "604 - Detva", "606 - Lučenec", "607 - Poltár", "610 - Veľký Krtíš", "613 - Žiar nad Hronom", "612 - Žarnovica", "602 - Banská Štiavnica", "605 - Krupina"];
   var PA_DOCHODOK = ["Starobný", "Predčasný starobný", "Invalidný", "Výsluhový", "Iný"];
@@ -284,12 +285,48 @@
     return '<section class="card zm-sekcia zm-pa"><div class="zm-s-hl"><h3>📄 Nástupné dokumenty</h3></div>' +
       '<p class="muted" style="margin:0">Zmluva / dohoda + prílohy (GDPR, NČZD, výnimka…), MRP XML a PDF pre mzdárku. Vytvára ich skript v Personálnej agende podľa údajov z appky a pošle e-maily.</p>' +
       '<p style="margin:0">' + info + "</p>" +
-      (v ? '<div class="f-sprava f-' + (v.ok ? "ok" : "chyba") + '">' + esc(v.ok ? "✅ " + (v.stav || "Hotovo") + (v.stav && /^Hotovo/.test(v.stav) ? " – dokumenty sú v priečinku, e-mail s kontrolným zoznamom ti prišiel." : "") : (v.chyby && v.chyby.length ? "Dokumenty sa nevygenerovali, oprav:" : (v.text || v.stav || "Chyba"))) +
+      (v ? '<div class="f-sprava f-' + (v.ok ? "ok" : "chyba") + '">' + esc(v.ok ? "✅ " + (v.stav || "Hotovo") + (v.stav && /^Hotovo/.test(v.stav) ? " – PDF sú v appke v Dokumentoch zamestnanca aj v priečinku na Disku, e-mail s kontrolným zoznamom ti prišiel." : "") : (v.chyby && v.chyby.length ? "Dokumenty sa nevygenerovali, oprav:" : (v.text || v.stav || "Chyba"))) +
         (v.chyby && v.chyby.length ? '<ul class="zm-zmeny">' + v.chyby.map(function (c) { return "<li>" + esc(c) + "</li>"; }).join("") + "</ul>" : "") + "</div>" : "") +
       '<div class="f-akcie"><button class="btn btn-primary" type="button" data-zm="pa-dialog"' + (PA.prace ? " disabled" : "") + ">" + (PA.prace ? "Pracujem… (do 1 min)" : "📄 Vygenerovať dokumenty") + "</button>" +
       (url ? '<a class="btn" href="' + esc(url) + '" target="_blank" rel="noopener">📁 Priečinok</a>' : "") +
+      (st.row && url ? '<button class="btn" type="button" data-zm="pa-dok"' + (PA.prace ? " disabled" : "") + ">🔄 Dokumenty z Disku do appky</button>" : "") +
       (st.row && url ? '<button class="btn" type="button" data-zm="pa-mzdarke"' + (PA.prace ? " disabled" : "") + ">📧 Poslať mzdárke</button>" : "") + "</div></section>";
   }
+  // ---------- dokumenty zamestnanca (PDF v úložisku zamestnanci/<osoba>/dokumenty/) ----------
+  function dkNacitaj() {
+    var os = Z.osoba; DK.osoba = os; DK.zoznam = null; DK.chyba = null;
+    DB.storage.from("zamestnanci").download(os + "/dokumenty/_zoznam.json").then(function (r) {
+      if (DK.osoba !== os) return;
+      if (r.error || !r.data) { DK.zoznam = []; kresli(); return; }
+      return r.data.text().then(function (t) { var j = {}; try { j = JSON.parse(t); } catch (x) { /* */ } DK.zoznam = j.subory || []; kresli(); });
+    }).catch(function () { if (DK.osoba === os) { DK.zoznam = []; kresli(); } });
+  }
+  function dkSekcia() {
+    var d = Z.detail; if (!d || !(d.ja || d.spravca)) return "";
+    if (DK.osoba !== Z.osoba) dkNacitaj();
+    var l = DK.zoznam;
+    return '<section class="card zm-sekcia zm-dok"><div class="zm-s-hl"><h3>📑 ' + (d.ja ? "Moje dokumenty" : "Dokumenty zamestnanca") + "</h3></div>" +
+      (l == null ? '<p class="muted" style="margin:0">Načítavam…</p>' : !l.length ? '<p class="muted" style="margin:0">Zatiaľ tu nie sú žiadne dokumenty.' + (d.spravca ? " Objavia sa po vygenerovaní nástupných dokumentov." : "") + "</p>" :
+        '<div class="rows">' + l.map(function (x) {
+          return '<button type="button" class="row zm-dok-riadok" data-zm-dok="' + esc(x.subor) + '"><span>📄 ' + esc(x.nazov) + '</span><span class="muted">' + esc(x.datum ? datum(x.datum) : "") + " ›</span></button>";
+        }).join("") + "</div>") + "</section>";
+  }
+  function dkOtvor(subor) {
+    var okno = window.open("", "_blank");
+    DB.storage.from("zamestnanci").createSignedUrl(Z.osoba + "/dokumenty/" + subor, 300).then(function (r) {
+      if (r.error || !r.data) throw r.error || new Error("Súbor sa nenašiel");
+      if (okno) okno.location = r.data.signedUrl; else window.location = r.data.signedUrl;
+    }).catch(function (x) { if (okno) okno.close(); lbzInfo(chybaText(x)); });
+  }
+  function paNacitajDok() {
+    var os = Z.osoba; PA.prace = true; prekresli();
+    paVolaj("dokumenty").then(function (r) {
+      PA.prace = false; if (PA.osoba !== os) return;
+      PA.vysledok = r && r.ok ? { ok: true, stav: "Načítané dokumenty: " + ((r.subory || []).length) + (r.upozornenie ? " – " + r.upozornenie : "") } : (r || { ok: false, text: "Chyba" });
+      DK.osoba = null; kresli();
+    }).catch(function (e) { PA.prace = false; PA.vysledok = { ok: false, text: chybaText(e) }; kresli(); });
+  }
+
   function dialogDok() {
     if (!PA.dialog || !Z.detail) return "";
     var z = Z.detail.z || {}, typ = paTyp(z.typ_vztahu), hpp = /^HPP/.test(typ);
@@ -323,6 +360,8 @@
       PA.prace = false; if (PA.osoba !== os) return;
       PA.vysledok = r || { ok: false, text: "Bez odpovede" };
       if (r && r.row) PA.stav = r;
+      if (r && r.upozornenie) PA.vysledok.text = r.upozornenie;
+      DK.osoba = null;
       if (r && r.ok) otvor(os); else kresli();
     }).catch(function (e) { PA.prace = false; PA.vysledok = { ok: false, text: chybaText(e) }; kresli(); });
   }
@@ -369,6 +408,7 @@
       }).catch(function (x) { lbzInfo(chybaText(x)); });
       return;
     }
+    if (t.dataset.zmDok) { dkOtvor(t.dataset.zmDok); return; }
     if (t.dataset.zmFilter) { Z.filter = t.dataset.zmFilter; prekresli(); return; }
     if (t.dataset.zmUpr) { Z.uprav = t.dataset.zmUpr; Z.sprava = null; prekresli(); var f = document.getElementById("zm-form"); if (f) f.scrollIntoView({ block: "start", behavior: "smooth" }); return; }
     var a = t.dataset.zm;
@@ -381,6 +421,7 @@
     else if (a === "pa-dialog") { PA.dialog = true; prekresli(); var m = document.getElementById("pa-mzda"); if (m) m.focus(); }
     else if (a === "pa-zavri") { PA.dialog = false; prekresli(); }
     else if (a === "pa-mzdarke") paMzdarke();
+    else if (a === "pa-dok") paNacitajDok();
     else if (a === "zd-ukaz") {
       rpc("zam_zdrav_foto", { p_osoba: Z.osoba }).then(function (c) { if (!c) return; return DB.storage.from("zamestnanci").createSignedUrl(c, 300); })
         .then(function (r) { if (r && r.data) { ZD.foto = r.data.signedUrl; prekresli(); } }).catch(function (x) { lbzInfo(chybaText(x)); });
@@ -427,7 +468,7 @@
   }
 
   window.LBZ_ZAMESTNANCI = {
-    nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; Z.zoznam = null; Z.detail = null; Z.osoba = null; PA.osoba = null; PA.stav = null; PA.vysledok = null; PA.dialog = false; ZD.stav = null; ZD.foto = null; if (DB && this.mozem()) nacitajZdrav(); },
+    nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; Z.zoznam = null; Z.detail = null; Z.osoba = null; PA.osoba = null; DK.osoba = null; DK.zoznam = null; PA.stav = null; PA.vysledok = null; PA.dialog = false; ZD.stav = null; ZD.foto = null; if (DB && this.mozem()) nacitajZdrav(); },
     karta: function () { return kartaZdrav(); },
     mozem: function () { return !!DB && ["it", "ceo", "uctovnicka", "zamestnanec"].indexOf(ROLA) > -1; },
     mount: function (el) {

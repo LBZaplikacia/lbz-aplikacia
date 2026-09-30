@@ -1070,3 +1070,7 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .zm-pa .f-sprava { display: block; }
 #zm-pa-form .d-riadok > * { min-width: 0; }
 #zm-pa-form select, #zm-pa-form input:not([type=checkbox]) { max-width: 100%; min-width: 0; width: 100%; box-sizing: border-box; }
+.zm-dok .rows { display: grid; gap: 6px; }
+.zm-dok-riadok { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; background: var(--karta, #fff); border: 1px solid rgba(88, 57, 52, .15); border-radius: 10px; padding: 10px 12px; font: inherit; color: inherit; cursor: pointer; }
+.zm-dok-riadok:hover { border-color: #CBA75B; }
+.zm-dok-riadok .muted { white-space: nowrap; }
