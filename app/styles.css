@@ -1338,3 +1338,17 @@ body.pdfv-otvorene { overflow: hidden; }
 .o-pol-h .o-dp { font-size: 12px; padding: 2px 8px; vertical-align: middle; }
 .o-dalsie { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; padding-top: 6px; }
 .o-tab-karta .o-dalsie { padding: 10px; }
+/* v0.28.4 – odpoveď na konkrétnu správu v chate */
+.chat-cit { display: grid; gap: 1px; width: 100%; text-align: left; border: 0; border-left: 3px solid var(--lbz-zlata, #CBA75B); background: rgba(88, 57, 52, .07); border-radius: 8px; padding: 5px 8px; margin: 0 0 5px; font: inherit; font-size: 13px; color: inherit; cursor: pointer; min-width: 0; }
+.chat-cit b { font-size: 12px; color: var(--lbz-hneda, #583934); }
+.chat-cit span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.chat-odp-bar:empty { display: none; }
+.chat-odp { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--surface); border-top: 1px solid var(--line); }
+.chat-odp-t { flex: 1 1 auto; min-width: 0; display: grid; gap: 1px; border-left: 3px solid var(--lbz-zlata, #CBA75B); padding-left: 8px; font-size: 13px; }
+.chat-odp-t b { color: var(--lbz-hneda, #583934); font-size: 12px; }
+.chat-odp-t span { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-odp-x { flex: none; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
+.chat-msg { transition: transform .15s ease-out; }
+.chat-blik .chat-bub { animation: chatBlik 1.2s ease-out; }
+@keyframes chatBlik { 0%, 40% { box-shadow: 0 0 0 3px var(--lbz-zlata, #CBA75B); } 100% { box-shadow: none; } }
+@media (prefers-reduced-motion: reduce) { .chat-msg { transition: none; } .chat-blik .chat-bub { animation: none; } }

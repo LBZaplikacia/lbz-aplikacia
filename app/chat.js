@@ -104,7 +104,8 @@
     var otvorena = C.konv === s.konv_id && C.data && koren && koren.isConnected && document.visibilityState === "visible";
     if (otvorena) {
       var i = C.spravy.map(function (x) { return x.id; }).indexOf(s.id);
-      var x = { id: s.id, uid: s.uid, text: s.zmazane ? null : s.text, priloha: s.zmazane ? null : s.priloha, pripnute: s.pripnute, zmazane: s.zmazane, kedy: s.vytvorene };
+      var x = { id: s.id, uid: s.uid, text: s.zmazane ? null : s.text, priloha: s.zmazane ? null : s.priloha, pripnute: s.pripnute, zmazane: s.zmazane, kedy: s.vytvorene, odpoved_na: s.odpoved_na || null };
+      if (i > -1 && C.spravy[i].odpoved) x.odpoved = C.spravy[i].odpoved;
       if (i > -1) C.spravy[i] = x; else if (!uprava) C.spravy.push(x);
       if (uprava) { C.data.pripnute = null; obnovPripnute(); }
       if (!uprava && !meno(s.uid).length) { /* nový člen – mená sa doplnia pri ďalšom otvorení */ }
@@ -137,7 +138,7 @@
     koren.innerHTML = '<div class="chat' + (w ? " chat-siroky" : "") + (vo ? " chat-vo" : "") + '">' +
       (w || !vo ? '<section class="chat-zoznam" id="chat-zoznam"></section>' : "") +
       (w || vo ? '<section class="chat-vlakno" id="chat-vlakno">' + vlaknoKostra() + "</section>" : "") + "</div>" + '<div id="chat-dialog-obal">' + dialogHtml() + "</div>";
-    kresliZoznam(); kresliHlavicku(); kresliSpravy(); hlasUI();
+    kresliZoznam(); kresliHlavicku(); kresliSpravy(); hlasUI(); kresliOdp();
     if (draft != null && C.konv != null) { var t = document.getElementById("chat-text"); if (t) { t.value = draft; vyska(t); } }
   }
   function kresliZoznam() {
@@ -164,7 +165,7 @@
     return '<header class="chat-v-hl" id="chat-v-hl"></header><div class="chat-pripnute" id="chat-pripnute"></div>' +
       '<div class="chat-spravy" id="chat-spravy"></div>' +
       (k.archiv ? '<p class="muted chat-pozn">Skupina je archivovaná – písať sa do nej nedá.</p>' :
-      '<form class="chat-pis" id="chat-pis"><label class="chat-priloha-tl" title="Fotka alebo PDF"><input type="file" id="chat-subor" accept="image/*,application/pdf" hidden>📎</label>' +
+      '<div class="chat-odp-bar" id="chat-odp-bar"></div><form class="chat-pis" id="chat-pis"><label class="chat-priloha-tl" title="Fotka alebo PDF"><input type="file" id="chat-subor" accept="image/*,application/pdf" hidden>📎</label>' +
       '<textarea id="chat-text" rows="1" maxlength="4000" placeholder="Správa…" enterkeyhint="send"></textarea>' +
       (hlasMozna() ? '<button type="button" class="chat-mic" data-ch="hlas" aria-label="Nahrať hlasovú správu" title="Hlasová správa">🎤</button>' : "") +
       '<div class="chat-rec" id="chat-rec"><button type="button" class="chat-rec-x" data-ch="hlas-zrus" aria-label="Zahodiť nahrávku">✕</button>' +
@@ -197,7 +198,7 @@
       var d = den(s.kedy); if (d !== predDen) { out.push('<div class="chat-den"><span>' + esc(d) + "</span></div>"); predDen = d; predUid = null; }
       var ja = s.uid === C.ja, t = new Date(s.kedy).getTime(), spoj = predUid === s.uid && t - predCas < 5 * 60e3;
       predUid = s.uid; predCas = t;
-      var obsah = s.zmazane ? '<i class="muted">Správa bola zmazaná</i>' : (priloha(s.priloha) + (s.text ? '<div class="chat-txt">' + odkazy(s.text) + "</div>" : ""));
+      var obsah = s.zmazane ? '<i class="muted">Správa bola zmazaná</i>' : (citat(s) + priloha(s.priloha) + (s.text ? '<div class="chat-txt">' + odkazy(s.text) + "</div>" : ""));
       var videli = "";
       if (ja && s.id === mojePosl && ostatni.length) {
         var n = ostatni.filter(function (c) { return new Date(c.precitane) >= new Date(s.kedy); }).length;
@@ -274,6 +275,7 @@
     if (d.typ === "menu") {
       var s = C.spravy.filter(function (x) { return x.id === d.id; })[0] || {};
       return obal('<h3>Správa</h3><div class="chat-menu">' +
+        (!s.zmazane && !(C.data && C.data.konv && C.data.konv.archiv) ? '<button class="btn" data-ch="odpovedz">↩️ Odpovedať</button>' : "") +
         (s.text ? '<button class="btn" data-ch="kopiruj">📋 Kopírovať text</button>' : "") +
         (C.spravca ? '<button class="btn" data-ch="pripni">' + (s.pripnute ? "📌 Odopnúť" : "📌 Pripnúť pre všetkých") + "</button>" : "") +
         (s.uid === C.ja || C.spravca ? '<button class="btn chat-zmaz" data-ch="zmaz">🗑 Zmazať správu</button>' : "") +
@@ -329,12 +331,14 @@
         return pr;
       });
     }) : Promise.resolve(null);
-    nahraj.then(function (pr) { return rpc("chat_posli", { p_konv: id, p_text: text, p_priloha: pr }); }).then(function (r) {
+    var odp = C.odpoved && C.odpoved.konv === id ? C.odpoved : null;
+    nahraj.then(function (pr) { return rpc("chat_posli", { p_konv: id, p_text: text, p_priloha: pr, p_odpoved: odp ? odp.id : null }); }).then(function (r) {
       C.prace = false; nastavTl();
       if (!r || !r.ok) { lbzInfo((r && r.text) || "Správa neodišla"); return; }
+      if (odp && C.odpoved === odp) { C.odpoved = null; kresliOdp(); }
       var t = document.getElementById("chat-text"); if (t && !subor) { t.value = ""; vyska(t); }
       if (C.konv === id && !C.spravy.some(function (x) { return x.id === r.id; })) {   // ak Realtime ešte neprišlo, doplníme hneď
-        C.spravy.push({ id: r.id, uid: C.ja, text: text || null, priloha: null, pripnute: false, zmazane: false, kedy: new Date().toISOString() });
+        C.spravy.push({ id: r.id, uid: C.ja, text: text || null, priloha: null, pripnute: false, zmazane: false, kedy: new Date().toISOString(), odpoved_na: odp ? odp.id : null, odpoved: odp ? odp.nahlad : null });
         kresliSpravy(); dole();
         if (subor) rpc("chat_spravy", { p_konv: id }).then(function (d) { if (d && d.ok && C.konv === id) { C.spravy = d.spravy; kresliSpravy(); dole(); } });
       }
@@ -346,6 +350,60 @@
   function nastavTl() { var b = document.querySelector(".chat-posli"); if (b) { b.disabled = C.prace; b.textContent = C.prace ? "…" : "➤"; } }
 
   // ---------- udalosti ----------
+  // ---------- odpoveď na konkrétnu správu ----------
+  function nahladSpravy(x) {
+    if (!x) return "";
+    if (x.zmazane) return "Správa bola zmazaná";
+    var p = x.priloha || {};
+    if (x.text) return String(x.text).replace(/\s+/g, " ").slice(0, 140);
+    if (/^audio\//.test(p.typ || "")) return "🎤 Hlasová správa";
+    if (/^image\//.test(p.typ || "")) return "📷 Fotka";
+    return "📎 " + (p.nazov || "Príloha");
+  }
+  function citat(s) {
+    if (!s.odpoved_na) return "";
+    var o = s.odpoved || C.spravy.filter(function (x) { return x.id === s.odpoved_na; })[0];
+    return '<button type="button" class="chat-cit" data-ch-cit="' + s.odpoved_na + '"><b>↩️ ' + esc(o ? (o.uid === C.ja ? "Ty" : meno(o.uid)) : "Odpoveď") + "</b><span>" + esc(o ? nahladSpravy(o) : "na staršiu správu") + "</span></button>";
+  }
+  function nastavOdp(so) {
+    C.odpoved = { id: so.id, konv: C.konv, nahlad: { id: so.id, uid: so.uid, zmazane: so.zmazane, text: so.text ? String(so.text).slice(0, 160) : null, priloha: so.priloha ? { nazov: so.priloha.nazov, typ: so.priloha.typ } : null } };
+    kresliOdp();
+    var t = document.getElementById("chat-text"); if (t) t.focus();
+  }
+  function kresliOdp() {
+    var b = document.getElementById("chat-odp-bar"); if (!b) return;
+    var o = C.odpoved && C.odpoved.konv === C.konv ? C.odpoved.nahlad : null;
+    b.innerHTML = o ? '<div class="chat-odp"><span class="chat-odp-t"><b>↩️ Odpovedáš ' + esc(o.uid === C.ja ? "sebe" : meno(o.uid)) + "</b><span>" + esc(nahladSpravy(o)) + "</span></span>" +
+      '<button type="button" class="chat-odp-x" data-ch="odp-zrus" aria-label="Zrušiť odpoveď">✕</button></div>' : "";
+  }
+  function skocNa(id) {
+    var el = document.getElementById("chat-m-" + id);
+    if (!el) { lbzInfo("Pôvodná správa je staršia – načítaj „Staršie správy“ hore."); return; }
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.classList.remove("chat-blik"); void el.offsetWidth; el.classList.add("chat-blik");
+  }
+  // potiahnutie správy doprava = odpovedať (ako v Messengeri)
+  var tah = null;
+  document.addEventListener("touchstart", function (e) {
+    var m = e.target.closest && e.target.closest(".chat-msg"); if (!m || !koren || !koren.contains(m) || e.touches.length !== 1) { tah = null; return; }
+    tah = { el: m, x: e.touches[0].clientX, y: e.touches[0].clientY, dx: 0 };
+  }, { passive: true });
+  document.addEventListener("touchmove", function (e) {
+    if (!tah) return;
+    var dx = e.touches[0].clientX - tah.x, dy = e.touches[0].clientY - tah.y;
+    if (Math.abs(dy) > 30 && Math.abs(dy) > Math.abs(dx)) { tah.el.style.transform = ""; tah = null; return; }
+    tah.dx = Math.max(0, Math.min(dx, 80)); tah.el.style.transform = tah.dx ? "translateX(" + tah.dx + "px)" : "";
+  }, { passive: true });
+  document.addEventListener("touchend", function () {
+    if (!tah) return;
+    var t = tah; tah = null; t.el.style.transform = "";
+    if (t.dx >= 60) {
+      var id = +String(t.el.id || "").replace("chat-m-", "");
+      var so = C.spravy.filter(function (x) { return x.id === id; })[0];
+      if (so && !so.zmazane && !(C.data && C.data.konv && C.data.konv.archiv)) { if (navigator.vibrate) navigator.vibrate(15); nastavOdp(so); }
+    }
+  }, { passive: true });
+
   // ---------- hlasové správy ----------
   var NAHR = null;
   function mmss(s) { s = Math.max(0, Math.round(+s || 0)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
@@ -416,6 +474,7 @@
       t.setAttribute("aria-pressed", ix === -1); return;
     }
     if (d.chMenu) { otvorDialog({ typ: "menu", id: +d.chMenu }); return; }
+    if (d.chCit) { skocNa(+d.chCit); return; }
     if (d.chObr) { podpisanaUrl(d.chObr).then(function (u) { otvorDialog({ typ: "obr", url: u }); }).catch(function (x) { lbzInfo(chybaText(x)); }); return; }
     if (d.chSubor) {
       var data = DB.storage.from("chat").download(d.chSubor).then(function (r) { if (r.error || !r.data) throw r.error || new Error("Súbor sa nenašiel"); return r.data; });
@@ -439,6 +498,10 @@
         nacitajLudi(); return;
       case "info": otvorDialog({ typ: "info" }); return;
       case "starsie": starsie(); return;
+      case "odpovedz":
+        var so = C.spravy.filter(function (x) { return x.id === C.dialog.id; })[0];
+        C.dialog = null; kresliDialog(); if (so) nastavOdp(so); return;
+      case "odp-zrus": C.odpoved = null; kresliOdp(); return;
       case "kopiruj":
         var s1 = C.spravy.filter(function (x) { return x.id === C.dialog.id; })[0];
         if (s1 && navigator.clipboard) navigator.clipboard.writeText(s1.text || "");
