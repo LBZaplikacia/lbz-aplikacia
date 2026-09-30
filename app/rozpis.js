@@ -1,7 +1,7 @@
 // LBZ aplikácia – modul Rozpis práce (smeny)
 // Týždeň / mesiac ako v tabuľke „Rozpis práce LBZ 2026“: pozície × dni, farby ľudí.
-// IT/CEO všetko, spoločné účty (prevádzka, furman, zákaznícky servis) za ktoréhokoľvek zamestnanca,
-// osobný účet zamestnanca len svoje smeny. Každá zmena ide do histórie (rozpis_log).
+// Vedenie (IT, CEO, prevádzkár) mení priamo. Zamestnanec posiela žiadosti: namiesto kolegu / výmena → potvrdí kolega,
+// nová smena / odhlásenie → potvrdí vedenie. Spoločné účty rozpis len prezerajú. Každá zmena ide do histórie (rozpis_log).
 
 (function () {
   "use strict";
@@ -72,11 +72,8 @@
   }
   function miesto(id) { return ((R.data && R.data.miesta) || []).filter(function (m) { return m.id === id; })[0] || null; }
   function rola() { return R.data && R.data.rola; }
-  function mozemUpravovat() { return ["sprava", "spolocny", "osobny"].indexOf(rola()) > -1; }
-  function mozemMiesto(m) {
-    if (rola() === "sprava" || rola() === "spolocny") return true;
-    return rola() === "osobny" && m.osoba != null && m.osoba === R.data.ja;
-  }
+  function mozemUpravovat() { return rola() === "sprava" || (rola() === "osobny" && !!(R.data && R.data.ja)); }
+  function mozemMiesto() { return rola() === "sprava"; }
   function minule(datum) { return datum < iso(dnes()) && rola() !== "sprava"; }
   function aktivneOsoby() { return ((R.data && R.data.osoby) || []).filter(function (o) { return o.aktivny; }); }
 
@@ -189,9 +186,11 @@
     return sprava ? '<div class="r-lista"><button class="btn r-mini" data-r="pozn-upravit" data-m="' + m + '">📌 Pridať poznámku k mesiacu</button></div>' : "";
   }
   // ---------- žiadosti o zmenu smien (prevziať / vymeniť / odovzdať → schvaľuje vedenie) ----------
-  var TYP_Z = { prevziat: "🙋 prevziať smenu", vymenit: "🔄 výmena smien", odovzdat: "➡️ odovzdať smenu" };
+  var TYP_Z = { prevziat: "🙋 namiesto kolegu", vymenit: "🔄 výmena smien", odovzdat: "➡️ odovzdať smenu", pridat: "➕ nová smena", odhlasit: "➖ odhlásenie zo smeny" };
   function zPopis(z) {
     if (z.typ === "prevziat") return "<b>" + esc(z.ziadatel_meno) + "</b> chce ísť namiesto <b>" + esc(z.kolega_meno) + "</b>: " + esc(z.smena_b || "");
+    if (z.typ === "pridat") return "<b>" + esc(z.ziadatel_meno) + "</b> sa chce zapísať: " + esc(z.smena_b || z.smena_nova || "");
+    if (z.typ === "odhlasit") return "<b>" + esc(z.ziadatel_meno) + "</b> sa chce odhlásiť: " + esc(z.smena_a || "");
     if (z.typ === "odovzdat") return "<b>" + esc(z.ziadatel_meno) + "</b> odovzdáva smenu <b>" + esc(z.kolega_meno) + "</b>: " + esc(z.smena_a || "");
     return "<b>" + esc(z.ziadatel_meno) + "</b> (" + esc(z.smena_a || "") + ") ↔ <b>" + esc(z.kolega_meno) + "</b> (" + esc(z.smena_b || "") + ")";
   }
@@ -203,28 +202,30 @@
     return '<section class="card r-ziadosti"><h3>🔄 Žiadosti o zmenu smien' + (caka.length ? ' <span class="pill warn num">' + caka.length + "</span>" : "") + "</h3>" +
       (caka.length ? '<div class="r-z-zoz">' + caka.map(function (z) {
         return '<div class="r-z"><div class="r-z-t"><span class="muted r-z-typ">' + esc(TYP_Z[z.typ] || z.typ) + "</span><span>" + zPopis(z) + "</span>" + (z.poznamka ? '<span class="muted">„' + esc(z.poznamka) + "“</span>" : "") + "</div>" +
-          '<div class="r-z-tl">' + (Z.sprava ? '<button class="btn btn-primary" data-r-zrozhodni="' + z.id + '" data-ano="1">✅ Schváliť</button><button class="btn" data-r-zrozhodni="' + z.id + '" data-ano="0">❌ Zamietnuť</button>'
-            : z.ziadatel === ja ? '<span class="muted">⏳ čaká na schválenie</span><button class="btn-link" data-r-zzrus="' + z.id + '">Zrušiť</button>' : '<span class="muted">⏳ čaká na vedenie</span>') + "</div></div>";
+          '<div class="r-z-tl">' + (z.smiem ? '<button class="btn btn-primary" data-r-zrozhodni="' + z.id + '" data-ano="1">✅ Potvrdiť</button><button class="btn" data-r-zrozhodni="' + z.id + '" data-ano="0">❌ Odmietnuť</button>' : "") +
+            (!z.smiem || z.ziadatel === ja ? '<span class="muted">⏳ ' + esc(kdoPotvrdi(z)) + "</span>" : "") +
+            (z.ziadatel === ja ? '<button class="btn-link" data-r-zzrus="' + z.id + '">Zrušiť</button>' : "") + "</div></div>";
       }).join("") + "</div>" : "") +
       (vyb.length ? '<details class="r-z-vyb"><summary>Vybavené (' + vyb.length + ")</summary>" + vyb.map(function (z) {
         return '<div class="r-z r-z-hot"><div class="r-z-t"><span>' + zPopis(z) + '</span><span class="muted">' + esc(STAV[z.stav] || z.stav) + (z.dovod ? " · " + esc(z.dovod) : "") + "</span></div></div>";
       }).join("") + "</details>" : "") + "</section>";
   }
+  function kdoPotvrdi(z) { return z.potvrdzuje === "kolega" ? "čaká na potvrdenie: " + (z.kolega_meno || "kolega") : "čaká na vedenie"; }
   function cakaNa(mId) { return ((R.ziadosti && R.ziadosti.caka) || []).filter(function (z) { return z.miesto_a === mId || z.miesto_b === mId; })[0]; }
   function mojeBuduce(okrem) {
     var ja = R.data && R.data.ja;
     return ((R.data && R.data.miesta) || []).filter(function (x) { return x.osoba != null && x.osoba === ja && x.id !== okrem && !minule(x.datum); });
   }
   function smenaText(x) { var d = zIso(x.datum); return DNI[(d.getDay() + 6) % 7] + " " + kratkyDatum(d) + " " + pozicia(x.pozicia).nazov + (UKAZ_CAS && x.od ? " " + x.od : ""); }
-  function ziadostBlok(m) {       // zamestnanec: cudzia smena → prevziať / vymeniť
+  function ziadostBlok(m) {       // zamestnanec: cudzia smena → namiesto kolegu / vymeniť (potvrdí kolega)
     var cz = cakaNa(m.id);
     if (cz) return '<p class="s-varovanie s-varovanie-info" style="margin:0">⏳ Na túto smenu čaká žiadosť: ' + zPopis(cz) + "</p>";
-    var moje = mojeBuduce(m.id);
-    return '<form class="f-form" data-r-ziadost="prevziat" data-id="' + m.id + '"><h4 class="r-h4">Chceš ísť namiesto ' + esc((osoba(m.osoba) || {}).meno || "kolegu") + "?</h4>" +
-        '<button class="btn btn-primary" type="submit">🙋 Prevziať túto smenu</button></form>' +
+    var moje = mojeBuduce(m.id), meno = (osoba(m.osoba) || {}).meno || "kolega";
+    return '<form class="f-form" data-r-ziadost="prevziat" data-id="' + m.id + '"><h4 class="r-h4">Chceš ísť namiesto ' + esc(meno) + "?</h4>" +
+        '<button class="btn btn-primary" type="submit">🙋 Zapísať sa namiesto ' + esc(meno) + "</button></form>" +
       (moje.length ? '<form class="f-form" data-r-ziadost="vymenit" data-id="' + m.id + '"><h4 class="r-h4">Alebo vymeniť za moju smenu</h4><div class="r-riadok"><select name="moja" class="r-select">' +
         moje.map(function (x) { return '<option value="' + x.id + '">' + esc(smenaText(x)) + "</option>"; }).join("") + '</select><button class="btn" type="submit">🔄 Vymeniť</button></div></form>' : "") +
-      '<p class="muted r-mala">Žiadosť pôjde na schválenie vedeniu – rozpis sa zmení až po schválení.</p>';
+      '<p class="muted r-mala">Potvrdiť to musí ' + esc(meno) + " (ak nemá appku, vedenie). Rozpis sa zmení až po potvrdení.</p>";
   }
   function legenda() {
     var o = aktivneOsoby(); if (!o.length) return "";
@@ -306,7 +307,10 @@
       nadpis = esc(pozicia(m.pozicia).nazov) + " · " + DNI_DLHE[(d.getDay() + 6) % 7].toLowerCase() + " " + kratkyDatum(d);
       if (!o) {
         obsah = '<p style="margin:0">Voľná smena' + (UKAZ_CAS && m.od ? ' <span class="num">' + esc(m.od + (m.do ? "–" + m.do : "")) + "</span>" : "") + ".</p>";
-        if (mozemUpravovat() && !minule(m.datum)) {
+        if (rola() === "osobny" && R.data.ja && !minule(m.datum)) {
+          obsah += '<form class="f-form" data-r-ziadost="pridat" data-id="' + m.id + '"><button class="btn btn-primary" type="submit" data-r-fokus>🙋 Zapísať sa</button>' +
+            '<p class="muted r-mala">Potvrdí vedenie – rozpis sa zmení až po potvrdení.</p></form>';
+        } else if (rola() === "sprava" && !minule(m.datum)) {
           obsah += '<form class="f-form" data-r-akcia="zapisat" data-id="' + m.id + '">' +
             (rola() === "osobny" ? "" : '<label class="field"><span class="label">Kto</span>' + vyberOsoby("osoba") + "</label>") +
             '<button class="btn btn-primary" type="submit" data-r-fokus>' + (rola() === "osobny" ? "Zapísať sa" : "Zapísať") + "</button></form>";
@@ -317,17 +321,17 @@
           (UKAZ_CAS && m.od ? ' <span class="num">' + esc(m.od + (m.do ? "–" + m.do : "")) + "</span>" : "") + (m.vynimka ? ' <span class="pill warn">výnimočne</span>' : "") + "</p>" +
           (m.poznamka ? '<p class="f-pozn" style="margin:0">' + esc(m.poznamka) + "</p>" : "");
         if (!moze && rola() === "osobny" && R.data.ja && m.osoba !== R.data.ja && !minule(m.datum)) obsah += ziadostBlok(m);
-        if (moze && rola() === "osobny") {       // vlastná smena zamestnanca – odovzdať / vymeniť ide na schválenie
+        if (rola() === "osobny" && R.data.ja && m.osoba === R.data.ja && !minule(m.datum)) {   // vlastná smena zamestnanca
           var ine2 = (R.data.miesta || []).filter(function (x) { return x.osoba != null && x.osoba !== m.osoba && x.id !== m.id && !minule(x.datum); });
           var cz2 = cakaNa(m.id);
           obsah += (cz2 ? '<p class="s-varovanie s-varovanie-info" style="margin:0">⏳ Čaká žiadosť: ' + zPopis(cz2) + "</p>" :
-            '<form class="f-form" data-r-ziadost="odovzdat" data-id="' + m.id + '"><h4 class="r-h4">Odovzdať smenu kolegovi</h4><div class="r-riadok">' + vyberOsoby("komu", m.osoba) +
-              '<button class="btn" type="submit">Odovzdať</button></div></form>' +
             (ine2.length ? '<form class="f-form" data-r-ziadost="vymenit-moja" data-id="' + m.id + '"><h4 class="r-h4">Vymeniť s kolegom</h4><div class="r-riadok"><select name="cudzia" class="r-select">' +
               ine2.map(function (x) { var ox = osoba(x.osoba); return '<option value="' + x.id + '">' + esc((ox ? ox.meno : "?") + " – " + smenaText(x)) + "</option>"; }).join("") +
-              '</select><button class="btn" type="submit">Vymeniť</button></div></form>' : "") +
-            '<p class="muted r-mala">Odovzdanie aj výmena idú na schválenie vedeniu.</p>') +
-            '<div class="f-akcie"><button class="btn" data-r-akcia-tl="uvolnit" data-id="' + m.id + '">Uvoľniť smenu</button></div>';
+              '</select><button class="btn" type="submit">🔄 Vymeniť</button></div><p class="muted r-mala">Výmenu potvrdí kolega (ak nemá appku, vedenie).</p></form>' : "") +
+            '<form class="f-form" data-r-ziadost="odhlasit" data-id="' + m.id + '"><h4 class="r-h4">Nemôžem prísť</h4><button class="btn" type="submit">➖ Odhlásiť sa zo smeny</button>' +
+              '<p class="muted r-mala">Odhlásenie potvrdí vedenie. Ak vieš o náhrade, nech sa kolega zapíše namiesto teba.</p></form>') +
+          '<form class="f-form" data-r-akcia="cas" data-id="' + m.id + '"><label class="field"><span class="label">Poznámka k smene</span><input name="poznamka" value="' + esc(m.poznamka || "") + '" placeholder="napr. prídem skôr"></label>' +
+            '<button class="btn" type="submit">Uložiť poznámku</button></form>';
         } else if (moze) {
           var ine = (R.data.miesta || []).filter(function (x) { return x.osoba != null && x.osoba !== m.osoba && x.id !== m.id && !minule(x.datum); });
           obsah += (false ? '<form class="f-form" data-r-akcia="cas" data-id="' + m.id + '"><h4 class="r-h4">Pracovný čas</h4>' + casy(m) +
@@ -347,10 +351,11 @@
       nadpis = "Nová smena · " + DNI_DLHE[(dd.getDay() + 6) % 7].toLowerCase() + " " + kratkyDatum(dd);
       var poz = D.pozicia;
       var nerobi = poz && !miesta(D.datum, poz).length;
-      obsah = '<form class="f-form" data-r-akcia="zapisat" data-datum="' + esc(D.datum) + '"' + (poz ? ' data-pozicia="' + esc(poz) + '"' : "") + ">" +
+      obsah = '<form class="f-form" ' + (rola() === "osobny" ? 'data-r-ziadost="pridat"' : 'data-r-akcia="zapisat"') + ' data-datum="' + esc(D.datum) + '"' + (poz ? ' data-pozicia="' + esc(poz) + '"' : "") + ">" +
         (poz ? "" : '<label class="field"><span class="label">Pozícia</span><select name="pozicia" class="r-select">' + pozicie().map(function (p) { return '<option value="' + p.kod + '">' + esc(p.nazov) + "</option>"; }).join("") + "</select></label>") +
         (poz ? '<p style="margin:0"><b>' + esc(pozicia(poz).nazov) + "</b></p>" : "") +
         (nerobi ? '<p class="s-varovanie s-varovanie-info" style="margin:0">V tento deň sa na pozícii bežne nerobí – zapíšete sa výnimočne.</p>' : "") +
+        (rola() === "osobny" ? '<p class="muted r-mala">Novú smenu potvrdí vedenie – rozpis sa zmení až po potvrdení.</p>' : "") +
         (rola() === "osobny" ? "" : '<label class="field"><span class="label">Kto</span>' + vyberOsoby("osoba") + "</label>") +
         '<button class="btn btn-primary" type="submit" data-r-fokus>' + (rola() === "osobny" ? "Zapísať sa" : "Zapísať") + "</button>" +
         (rola() === "sprava" ? '<button class="btn" type="button" data-r-otvorit>Len otvoriť voľné miesto</button>' : "") + "</form>";
@@ -451,7 +456,10 @@
       if (zt === "prevziat") pz = { typ: "prevziat", miesto_b: id };
       else if (zt === "vymenit") pz = { typ: "vymenit", miesto_b: id, miesto_a: xe.moja.value };
       else if (zt === "vymenit-moja") pz = { typ: "vymenit", miesto_a: id, miesto_b: xe.cudzia.value };
-      else pz = { typ: "odovzdat", miesto_a: id, komu: xe.komu.value };
+      else if (zt === "odhlasit") pz = { typ: "odhlasit", miesto_a: id };
+      else if (zt === "pridat") pz = id ? { typ: "pridat", miesto_b: id } : { typ: "pridat", datum: f.dataset.datum, pozicia: f.dataset.pozicia || (xe.pozicia && xe.pozicia.value) };
+      else return;
+      if (zt === "odhlasit" && !lbzPotvrd("Poslať žiadosť o odhlásenie zo smeny?")) return;
       rpc("rozpis_ziadost_nova", { p: pz }).then(function (r) {
         R.sprava = { typ: r && r.ok ? "ok" : "chyba", text: (r && r.text) || "Neodoslané" };
         if (r && r.ok) { R.dialog = null; DB.functions.invoke("upozornenia", { body: { akcia: "rozpis", id: r.id, udalost: "nova" } }).catch(function () { /* */ }); }
@@ -513,9 +521,9 @@
         }
       }
       if (R.kartaZ === undefined || R.kartaZ === null) { R.kartaZ = false; rpc("rozpis_ziadosti").then(function (z) { R.kartaZ = z && z.ok ? z : false; if (z && z.ok && (z.caka || []).length) window.dispatchEvent(new Event("lbz-prekresli")); }).catch(function () { /* */ }); }
-      var nz = R.kartaZ && R.kartaZ.sprava ? (R.kartaZ.caka || []).length : 0;
+      var nz = R.kartaZ ? (R.kartaZ.caka || []).filter(function (z) { return z.smiem; }).length : 0;
       return '<section class="card"><h3>' + (k.ja ? "Moje smeny" : "Dnes v práci") + "</h3>" + obsah +
-        (nz ? '<p class="s-varovanie" style="margin:0">🔄 ' + nz + (nz === 1 ? " žiadosť" : nz < 5 ? " žiadosti" : " žiadostí") + " o zmenu smien čaká na schválenie</p>" : "") +
+        (nz ? '<p class="s-varovanie" style="margin:0">🔄 ' + nz + (nz === 1 ? " žiadosť" : nz < 5 ? " žiadosti" : " žiadostí") + " o zmenu smien čaká na tvoje potvrdenie</p>" : "") +
         '<button class="btn" data-mod="rozpis">Otvoriť rozpis</button></section>';
     }
   };

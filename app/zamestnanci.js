@@ -137,6 +137,8 @@
     var z = (Z.detail && Z.detail.z) || {};
     return !!(z.zdrav_preukaz_do && z.zdrav_preukaz_do >= plus30() && (z.zdrav_preukaz_foto || z.zdrav_preukaz_foto2));
   }
+  // rozvoz balených potravín nie je epidemiologicky závažná činnosť → rozvozár preukaz nepotrebuje
+  function zdravTreba() { var z = (Z.detail && Z.detail.z) || {}; return !/^Rozvozár/.test(z.pozicia || ""); }
   function zdravSekcia() {
     var d = Z.detail; if (!d || !(d.ja || d.spravca)) return "";
     var html = zdravForm(d);
@@ -198,7 +200,7 @@
         '<p class="muted" style="margin:0">' + (zle ? zle + " prepadnutých · " : "") + (chyba ? chyba + " bez zadaného preukazu" : "") + "</p>" +
         '<button class="btn" data-mod="zamestnanci">Otvoriť Ľudí</button></section>';
     }
-    if (!m || !m.osoba_id) return "";
+    if (!m || !m.osoba_id || m.netreba) return "";
     if (m.do && m.do >= plus30()) return "";
     return '<section class="card zm-zdrav-karta"><h3>🩺 Zdravotný preukaz</h3>' + zdravPill(m.do) +
       '<p class="muted" style="margin:0">' + (!m.do ? "Odfoť svoj platný zdravotný preukaz a zadaj dátum platnosti." : m.do < dnesIso() ? "Preukaz je prepadnutý – vybav si nový a nahraj ho." : "Preukaz čoskoro končí – vybav si obnovu.") + "</p>" +
@@ -270,7 +272,7 @@
       (d.spravca ? ziadostiHtml((d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }), false) :
         (d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }).map(function (z) { return '<div class="card zm-caka">⏳ <b>Žiadosť o zmenu čaká na schválenie</b>' + zmenyHtml(z.zmeny, null) + "</div>"; }).join("") +
         (d.ziadosti || []).filter(function (z) { return z.stav !== "ziadost"; }).slice(0, 2).map(function (z) { return '<p class="muted zm-vybavena">' + (z.stav === "schvalena" ? "✅ Tvoja žiadosť o zmenu bola schválená" : "✖ Tvoja žiadosť o zmenu bola zamietnutá") + " (" + esc(datum(z.kedy)) + ")</p>"; }).join("")) +
-      (zdravOk() ? "" : zdravSekcia()) + dkSekcia() + (zdravOk() ? zdravSekcia() : "") + paSekcia() +
+      (zdravOk() || !zdravTreba() ? "" : zdravSekcia()) + dkSekcia() + (zdravOk() && zdravTreba() ? zdravSekcia() : "") + paSekcia() +
       '<div class="zm-sekcie">' + sekcie.map(sekciaHtml).join("") + "</div>" +
       (citatel() && (d.log || []).length ? '<details class="card zm-log"><summary>🕘 História zmien</summary><div class="rows">' + d.log.map(function (l) {
         return '<div class="row"><span>' + esc(new Date(l.kedy).toLocaleString("sk-SK", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })) + " · " + esc(l.kto || "") + '</span><span class="muted">' + esc((l.polia || []).join(", ")) + "</span></div>";

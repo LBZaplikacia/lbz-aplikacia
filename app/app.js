@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.24.1 BETA";
+  var VERZIA = "0.25.0 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -371,7 +371,7 @@
   }
   // „Na schválenie“ – vedenie vidí na Prehľade, čo od zamestnancov čaká na jeho rozhodnutie
   function kartaSchvalenie() {
-    if (!OSTRY || ["it", "ceo", "prevadzkar"].indexOf(stav.rola) === -1) return "";
+    if (!OSTRY || ["it", "ceo", "prevadzkar", "zamestnanec"].indexOf(stav.rola) === -1) return "";
     if (!stav.naSchv || Date.now() - stav.naSchv.cas > 60000) {
       var bolo = stav.naSchv; stav.naSchv = { cas: Date.now(), d: bolo ? bolo.d : null };
       db.rpc("na_schvalenie").then(function (r) {
@@ -380,11 +380,12 @@
       });
     }
     var d = stav.naSchv.d; if (!d) return "";
-    var pol = [["smeny", "🔄", "zmena smeny", "zmeny smien", "zmien smien", "rozpis"], ["dochadzka", "🕒", "žiadosť v dochádzke", "žiadosti v dochádzke", "žiadostí v dochádzke", "dochadzka"],
+    var pol = [d.osobne ? ["smeny", "🔄", "zmena smeny čaká na tvoje potvrdenie", "zmeny smien čakajú na tvoje potvrdenie", "zmien smien čaká na tvoje potvrdenie", "rozpis"]
+      : ["smeny", "🔄", "zmena smeny", "zmeny smien", "zmien smien", "rozpis"], ["dochadzka", "🕒", "žiadosť v dochádzke", "žiadosti v dochádzke", "žiadostí v dochádzke", "dochadzka"],
       ["udaje", "👤", "zmena údajov", "zmeny údajov", "zmien údajov", "zamestnanci"]].filter(function (x) { return +d[x[0]] > 0; });
     if (!pol.length) return "";
     var spolu = pol.reduce(function (s, x) { return s + +d[x[0]]; }, 0);
-    return '<section class="card schv-karta"><h3>🔔 Na schválenie <span class="pill warn num">' + spolu + "</span></h3>" +
+    return '<section class="card schv-karta"><h3>🔔 ' + (d.osobne ? "Na potvrdenie" : "Na schválenie") + ' <span class="pill warn num">' + spolu + "</span></h3>" +
       '<div class="schv-zoz">' + pol.map(function (x) {
         var n = +d[x[0]];
         return '<button class="schv-pol" data-mod="' + x[5] + '"><span>' + x[1] + " <b>" + n + "</b> " + (n === 1 ? x[2] : n < 5 ? x[3] : x[4]) + "</span><span>›</span></button>";
