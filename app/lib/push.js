@@ -42,5 +42,13 @@
     try { if (navigator.setAppBadge) { if (n) navigator.setAppBadge(n); else navigator.clearAppBadge(); } } catch (e) { /* */ }
     try { if (window.caches) caches.open("lbz-odznak").then(function (c) { return c.put("/pocet", new Response(String(n))); }).catch(function () { /* */ }); } catch (e) { /* */ }
   }
-  window.lbzPush = { moze: moze, stav: stav, zapni: zapni, obnov: obnov, odznak: odznak };
+  // zatvorí upozornenia v lište telefónu (začiatok značky, napr. "chat-12-" alebo "chat-"); podľa nich Android ukazuje číslo na ikone
+  function zavri(zaciatok) {
+    try {
+      if (!("serviceWorker" in navigator)) return;
+      navigator.serviceWorker.ready.then(function (r) { return r.getNotifications(); })
+        .then(function (z) { (z || []).forEach(function (n) { if (!zaciatok || String(n.tag || "").indexOf(zaciatok) === 0) n.close(); }); }).catch(function () { /* */ });
+    } catch (e) { /* */ }
+  }
+  window.lbzPush = { moze: moze, stav: stav, zapni: zapni, obnov: obnov, odznak: odznak, zavri: zavri };
 })();
