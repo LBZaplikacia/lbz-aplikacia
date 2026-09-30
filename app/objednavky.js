@@ -75,46 +75,16 @@
   function dopravaPill(d) { var x = dopravaTyp(d); return '<span class="o-dp o-dp-' + x.t + '" title="' + esc(d || "") + '">' + esc(x.n) + "</span>"; }
   var TYP_DOKLADU = { invoice: "Faktúra", creditNote: "Dobropis", receipt: "Účtenka", proforma: "Zálohová faktúra" };
   function datum(s) { if (!s) return ""; var d = new Date(String(s).length === 10 ? s + "T12:00:00" : s); return isNaN(d) ? String(s) : d.toLocaleDateString("sk-SK"); }
-  // dodací list – tlačová stránka z údajov objednávky (bez cien), dá sa vytlačiť alebo uložiť ako PDF
+  // PDF faktúry / dobropisu z Upgates – zobrazí sa priamo v appke
   function otvorPdf(cislo, tl) {
-    var w = window.open("", "_blank");   // otvoriť hneď (inak prehliadač okno zablokuje)
-    if (tl) { tl.disabled = true; tl.textContent = "…"; }
-    DB.functions.invoke("upgates-sync", { body: { akcia: "pdf", cislo: cislo } }).then(function (r) {
-      if (tl) { tl.disabled = false; tl.textContent = "PDF"; }
+    var data = DB.functions.invoke("upgates-sync", { body: { akcia: "pdf", cislo: cislo } }).then(function (r) {
       var b = r && r.data;
-      if (r.error || !(b instanceof Blob) || b.type.indexOf("pdf") < 0) { if (w) w.close(); sprava("chyba", "PDF " + cislo + " sa nepodarilo otvoriť"); return; }
-      var url = URL.createObjectURL(b);
-      if (w) w.location.href = url; else { var a = document.createElement("a"); a.href = url; a.download = cislo + ".pdf"; document.body.appendChild(a); a.click(); a.remove(); }
-      setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
-    }).catch(function () { if (tl) { tl.disabled = false; tl.textContent = "PDF"; } if (w) w.close(); sprava("chyba", "PDF " + cislo + " sa nepodarilo otvoriť"); });
-  }
-  function dodaciList() {
-    var D = O.detail; if (!D || !D.ok) return;
-    var o = D.objednavka, pol = (D.polozky || []).filter(function (p) { return +p.mnozstvo; });
-    var spolu = pol.reduce(function (a, p) { return a + (+p.mnozstvo || 0); }, 0);
-    var e = esc, dnes = new Date().toLocaleDateString("sk-SK");
-    var html = '<!doctype html><html lang="sk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dodací list ' + e(o.cislo) + "</title>" +
-      "<style>body{font:14px/1.45 Montserrat,'Segoe UI',Arial,sans-serif;color:#2b1d1a;margin:24px;background:#fff}h1{font-size:22px;margin:0;color:#583934}" +
-      ".hl{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:3px solid #CBA75B;padding-bottom:12px;margin-bottom:16px}.hl img{width:84px;height:84px}" +
-      ".st{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}.box{border:1px solid #e3d6bf;border-radius:8px;padding:10px 12px}.box b{color:#583934}.m{color:#7d6c64;font-size:12px}" +
-      "table{width:100%;border-collapse:collapse;margin:8px 0 16px}th,td{border-bottom:1px solid #e3d6bf;padding:7px 6px;text-align:left}th{background:#F5ECD9;font-size:12px;text-transform:uppercase}td.k,th.k{text-align:right;white-space:nowrap}" +
-      ".pod{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:40px}.pod div{border-top:1px solid #2b1d1a;padding-top:6px;font-size:12px}.tl{margin:0 0 16px}" +
-      "@media print{.tl{display:none}body{margin:12mm}}</style></head><body>" +
-      '<p class="tl"><button onclick="window.print()" style="font:inherit;padding:10px 16px;border-radius:8px;border:0;background:#583934;color:#fff">🖨 Vytlačiť / uložiť ako PDF</button></p>' +
-      '<div class="hl"><div><h1>DODACÍ LIST</h1><div>k objednávke <b>' + e(o.cislo) + "</b>" + (o.faktura ? " · faktúra " + e(o.faktura) : "") + '</div><div class="m">Dátum: ' + e(dnes) + "</div></div>" +
-      '<img src="' + e(location.origin) + '/icons/logo.svg" alt="Legendárne buchty ZBOJSKÁ"></div>' +
-      '<div class="st"><div class="box"><div class="m">Dodávateľ</div><b>V sedle u Falťanov s.r.o.</b><br>Legendárne buchty ZBOJSKÁ®<br>Mládežnícka 3427/9, 974 04 Banská Bystrica<br>IČO 47206934 · IČ DPH SK2023800614<br><span class="m">Prevádzka: Zbojská 1960/14, 980 61 Tisovec</span></div>' +
-      '<div class="box"><div class="m">Odberateľ</div><b>' + e([o.firma, o.meno].filter(Boolean).join(" – ") || "–") + "</b><br>" + e([o.ulica, [o.psc, o.mesto].filter(Boolean).join(" ")].filter(Boolean).join(", ")) +
-      (o.telefon ? "<br>Tel.: " + e(o.telefon) : "") + (o.email ? "<br>" + e(o.email) : "") + '<br><span class="m">Doprava: ' + e(o.doprava || "") + "</span></div></div>" +
-      "<table><thead><tr><th>#</th><th>Položka</th><th>Kód</th><th class=\"k\">Množstvo</th></tr></thead><tbody>" +
-      pol.map(function (p, i) { return "<tr><td>" + (i + 1) + "</td><td>" + e(p.nazov || p.kod) + "</td><td>" + e(p.kod) + '</td><td class="k">' + e(p.mnozstvo) + " ks</td></tr>"; }).join("") +
-      '<tr><td></td><td><b>Spolu</b></td><td></td><td class="k"><b>' + e(spolu) + " ks</b></td></tr></tbody></table>" +
-      (o.poznamka ? '<div class="box"><div class="m">Poznámka</div>' + e(o.poznamka) + "</div>" : "") +
-      '<div class="pod"><div>Odovzdal (meno, podpis)</div><div>Prevzal (meno, podpis, dátum)</div></div></body></html>';
-    var url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-    var w = window.open(url, "_blank");
-    if (!w) { var a = document.createElement("a"); a.href = url; a.download = "Dodaci_list_" + o.cislo + ".html"; document.body.appendChild(a); a.click(); a.remove(); }
-    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+      if (r.error || !(b instanceof Blob) || b.type.indexOf("pdf") < 0) throw new Error("PDF " + cislo + " sa nepodarilo načítať z Upgates");
+      return b;
+    });
+    if (window.lbzPdf) { window.lbzPdf(cislo, data); return; }
+    data.then(function (b) { var u = URL.createObjectURL(b); var a = document.createElement("a"); a.href = u; a.download = cislo + ".pdf"; document.body.appendChild(a); a.click(); a.remove(); })
+      .catch(function (e) { sprava("chyba", chyba(e)); });
   }
   function zoznamHtml() {
     var Z = O.zoznam || {}, obj = Z.objednavky || [];
@@ -185,15 +155,14 @@
     h += '<section class="card"><h3>Položky</h3><div class="rows">' + (D.polozky || []).map(function (p) {
       return '<div class="row"><span>' + esc(p.nazov || p.kod) + ' <span class="muted">' + esc(p.kod) + '</span></span><span class="num">' + esc(p.mnozstvo) + " ks" + (p.cena != null ? " · " + esc(eur(p.cena)) : "") + "</span></div>";
     }).join("") + "</div></section>";
-    var dok = D.doklady || [];
+    var dok = (D.doklady || []).filter(function (d) { return d.typ === "invoice" || d.typ === "creditNote"; });
     h += '<section class="card"><h3>Doklady</h3>' + (dok.length ? '<div class="rows">' + dok.map(function (d) {
       var info = [datum(d.vystavena)];
       if (d.typ === "invoice") info.push(d.zaplatene ? "zaplatená " + datum(d.zaplatena) : "nezaplatená" + (d.splatnost ? " (splatná " + datum(d.splatnost) + ")" : ""));
       else if (d.suvisiaci) info.push("k faktúre " + d.suvisiaci);
       return '<div class="row o-dok-r"><span><b>' + esc(TYP_DOKLADU[d.typ] || d.typ) + "</b> " + esc(d.cislo) + '<span class="muted"> · ' + esc(info.filter(Boolean).join(" · ")) + "</span></span>" +
         '<span class="num">' + esc(eur(d.suma)) + ' <button class="btn r-mini" type="button" data-o-pdf="' + esc(d.cislo) + '">PDF</button>' + "</span></div>";
-    }).join("") + "</div>" : '<p class="muted" style="margin:0">' + (o.faktura ? "Faktúra " + esc(o.faktura) + " – detail sa načíta pri ďalšom stiahnutí z Upgates." : "Zatiaľ bez faktúry.") + "</p>") +
-      '<div class="f-akcie"><button class="btn" data-o="dodaci">📄 Dodací list</button></div></section>';
+    }).join("") + "</div>" : '<p class="muted" style="margin:0">' + (o.faktura ? "Faktúra " + esc(o.faktura) + " – detail sa načíta pri ďalšom stiahnutí z Upgates." : "Zatiaľ bez faktúry.") + "</p>")  + "</section>";
     if (!storno) {
       h += '<section class="card"><h3>Stav objednávky</h3>' + ((D.stavy || []).length ?
         '<form id="o-stav" class="o-riadok"><select name="stav">' + D.stavy.map(function (s) { return '<option value="' + esc(s.kod) + '"' + (s.nazov === o.status ? " selected" : "") + ">" + esc(s.nazov) + "</option>"; }).join("") +
@@ -257,7 +226,6 @@
     if (d.oZmaz != null) { var fz = koren.querySelector("#o-form"); citajFormular(fz); formular().polozky.splice(+d.oZmaz, 1); kresli(); return; }
     switch (d.o) {
       case "zrus-filtre": O.filter = { hladaj: O.filter.hladaj, stav: O.filter.stav, doprava: "", platba: "", osobny: false }; O.limit = 300; nacitaj(); return;
-      case "dodaci": dodaciList(); return;
       case "dalsie": O.limit = (O.limit || 300) + 300; nacitaj(); return;
       case "zavri-spravu": O.sprava = null; kresli(); return;
       case "spat": O.cislo = null; O.detail = null; O.uprava = null; nacitaj(); return;
