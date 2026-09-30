@@ -25,6 +25,15 @@
   function dobierka(z) { return z.platba !== "ZAPLATENÉ" && z.platba !== "NA FAKTÚRU"; }
   function mapa(adresa) { return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(adresa); }
   function tel(t) { return "tel:" + String(t || "").replace(/[^\d+]/g, ""); }
+  // odpovede zákazníka na SMS (GoSMS → webhook → appka)
+  function odpovedeHtml(z) {
+    var o = z.odpovede || [];
+    var sms = z.sms_cestou ? "📱 SMS „na ceste“ " + cas(z.sms_cestou) : z.sms_den ? "📱 SMS deň vopred odoslaná" : "";
+    if (!o.length) return sms ? '<p class="muted t-sms-info">' + esc(sms) + "</p>" : "";
+    return '<div class="t-sms-odp"><b>💬 Zákazník odpísal na SMS:</b>' + o.map(function (x) {
+      return '<p><span class="num muted">' + esc(new Date(x.prijata).toLocaleString("sk-SK", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })) + "</span> " + esc(x.text) + "</p>";
+    }).join("") + (sms ? '<span class="muted">' + esc(sms) + "</span>" : "") + "</div>";
+  }
 
   // ---------- načítanie ----------
   function nacitajZoznam() {
@@ -111,6 +120,7 @@
       '<div class="t-z-platba ' + (dob ? "t-dob" : "") + '">' + (dob ? "💶 DOBIERKA " + esc(eur(z.suma)) : z.platba === "NA FAKTÚRU" ? "🧾 NA FAKTÚRU" : "✅ ZAPLATENÉ") +
         '<span class="muted"> · ' + esc(z.kusy) + " ks" + (z.faktura ? " · fa " + esc(z.faktura) : "") + " · obj. " + esc(z.cislo) + "</span></div>" +
       (z.pozn_obj ? '<p class="s-varovanie s-varovanie-info t-z-pozn">' + esc(z.pozn_obj) + "</p>" : "") +
+      odpovedeHtml(z) +
       (z.poznamka ? '<p class="t-z-moja">📝 ' + esc(z.poznamka) + (z.presun_datum ? " · nový termín " + esc(datumSk(z.presun_datum)) : "") + "</p>" : "") +
       foto + qr +
       (T.data.trasa.stav === "ukoncena" ? "" : '<div class="t-z-tl">' +
@@ -170,6 +180,7 @@
       '<div class="t-akt-platba ' + (dob ? "t-dob" : a.platba === "NA FAKTÚRU" ? "t-fa" : "t-ok") + '">' + (dob ? "💶 DOBIERKA " + esc(eur(a.suma)) : a.platba === "NA FAKTÚRU" ? "🧾 NA FAKTÚRU" : "✅ ZAPLATENÉ") +
         '<span> · ' + esc(a.kusy) + " ks</span></div>" +
       (a.pozn_obj ? '<p class="s-varovanie t-akt-pozn">⚠️ ' + esc(a.pozn_obj) + "</p>" : "") +
+      odpovedeHtml(a) +
       (a.poznamka ? '<p class="t-z-moja">📝 ' + esc(a.poznamka) + "</p>" : "") +
       (vybav ? '<p class="f-sprava f-ok">' + (a.stav === "dorucene" ? "✓ Doručené " + esc(cas(a.cas)) : "✗ Nedoručené") + "</p>" : "") +
       (t.stav === "ukoncena" ? "" : !naMieste && !vybav ?
@@ -296,9 +307,43 @@
       T.prace--;
       if (!r || r.ok === false) { T.sprava = { typ: "chyba", text: (r && r.text) || "Neuložené" }; prekresli(); return r; }
       T.sprava = okText ? { typ: "ok", text: okText } : null; T.dialog = null;
+      if (args.p_stav === "dorucene" || args.p_stav === "nedorucene") smsDalsiemu();
       return nacitajTrasu(true).then(function () { return r; });
     }).catch(function (e) { T.prace--; T.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
   }
+  // po vybavení zastávky: SMS ďalšiemu zákazníkovi „furman je na ceste“ s presnejším časom (Edge Function gosms)
+  function smsDalsiemu() {
+    var id = T.id;
+    if (!DB || !DB.functions || id == null) return;
+    DB.functions.invoke("gosms", { body: { akcia: "cestou", furmanka_id: id } }).then(function (res) {
+      var d = res && res.data;
+      if (d && d.ok && /odoslan/i.test(d.text || "") && T.id === id) {
+        T.sprava = { typ: "ok", text: (T.sprava && T.sprava.text ? T.sprava.text + " · " : "") + "📱 " + d.text };
+        nacitajTrasu(true);
+      }
+    }).catch(function () {});
+  }
+  // karta na Prehľade: odpovede zákazníkov na SMS k dnešným rozvozom
+  var SMS = { d: null, cas: 0 };
+  function kartaSms() {
+    if (!DB || ["it", "ceo", "zakaznicky_servis", "furman"].indexOf(ROLA) === -1) return "";
+    if (!SMS.cas || (Date.now() - SMS.cas > 60000 && !SMS.nacitava)) {
+      SMS.cas = Date.now(); SMS.nacitava = true;
+      rpc("sms_odpovede_dnes").then(function (d) { SMS.nacitava = false; SMS.d = d && d.ok ? d.odpovede || [] : []; window.dispatchEvent(new Event("lbz-prekresli")); })
+        .catch(function () { SMS.nacitava = false; });
+    }
+    var o = SMS.d || [];
+    var dnes = new Date(), d0 = dnes.getFullYear() + "-" + String(dnes.getMonth() + 1).padStart(2, "0") + "-" + String(dnes.getDate()).padStart(2, "0");
+    var dnesTrasa = (T.zoznam || []).some(function (t) { return String(t.datum).slice(0, 10) === d0; });
+    if (!o.length && !dnesTrasa) return "";
+    return '<section class="card t-sms-karta"><h3>💬 SMS odpovede – dnešný rozvoz' + (o.length ? ' <span class="pill num">' + o.length + "</span>" : "") + "</h3>" +
+      (o.length ? '<div class="rows">' + o.map(function (x) {
+        return '<div class="row t-sms-row"><span><b>' + esc(x.meno || x.cislo) + '</b> <span class="muted">· ' + esc(x.cislo) + " · " + esc(x.furmanka || "") + "</span><br>" + esc(x.text) + "</span>" +
+          '<span class="num muted">' + esc(cas(x.prijata)) + (x.zastavka === "dorucene" ? "<br>✅" : x.zastavka === "nedorucene" ? "<br>❌" : "") + "</span></div>";
+      }).join("") + "</div>" : '<p class="muted" style="margin:0">Zatiaľ žiadne odpovede zákazníkov.</p>') +
+      '<button class="btn" data-mod="trasa">Otvoriť trasu</button></section>';
+  }
+
   // tlač ako starý skript (hárok trasy): Č. | Meno/Firma | Telefón | Č. faktúry | Suma | Adresa | Čas (+ prestávky) | Platba a poznámka | QR pre kasu
   function tlacTrasu() {
     var d = T.data, t = d.trasa, z = d.zastavky || [];
@@ -433,6 +478,7 @@
       if (T.id == null) nacitajZoznam(); else { nacitajTrasu(true); zapniJazdu(); }
     },
     otvor: function (id) { T.id = id; T.data = null; },
+    kartaSms: kartaSms,
     karta: function () {
       if (!T.zoznam && DB && !T._karta) { T._karta = true; rpc("trasa_zoznam").then(function (d) { if (d && d.ok) { T.zoznam = d.trasy || []; window.dispatchEvent(new Event("lbz-prekresli")); } }).catch(function () {}); }
       var z = (T.zoznam || []).filter(function (t) { return t.stav !== "ukoncena"; }).slice(0, 3);

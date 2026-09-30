@@ -93,8 +93,42 @@
         : '<p class="muted" style="margin:0">Furman už je na ceste – trasa sa nedá prepočítať.</p>') +
       (z.length ? "<ol>" + z.map(function (x) {
         return "<li>" + (x.eta ? '<b class="num">' + esc(hhmm(x.eta)) + "</b> " : "") + esc(x.meno || x.firma || x.cislo) + ' <span class="muted">' + esc(x.adresa || "") + "</span>" +
-          (x.bez_gps ? ' <span class="pill warn">adresa nenájdená</span>' : "") + (x.stav === "dorucene" ? " ✅" : x.stav === "nedorucene" ? " ❌" : "") + "</li>";
+          (x.bez_gps ? ' <span class="pill warn">adresa nenájdená</span>' : "") + (x.stav === "dorucene" ? " ✅" : x.stav === "nedorucene" ? " ❌" : "") +
+          (x.sms_den ? ' <span class="muted" title="SMS deň vopred odoslaná ' + esc(casSk(x.sms_den)) + '">📱</span>' : "") +
+          ((x.odpovede || []).length ? '<div class="f-sms-odp">💬 ' + x.odpovede.map(function (o) { return esc(o.text); }).join(" · ") + "</div>" : "") + "</li>";
       }).join("") + "</ol>" : "") + "</details>";
+  }
+  // ---------- SMS deň vopred (GoSMS) – text a časové okno ako v starom skripte: ETA −15 min až +90 min ----------
+  function hm(d) { return d.toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" }); }
+  function smsText(x, datum) {
+    var eta = new Date(x.eta), od = new Date(eta.getTime() - 15 * 60000), po = new Date(eta.getTime() + 90 * 60000);
+    var p = String(datum).slice(0, 10).split("-"), den = +p[2] + "." + +p[1] + "." + p[0];
+    var dob = x.platba !== "ZAPLATENÉ" && x.platba !== "NA FAKTÚRU";
+    return "Dobrý deň " + (x.meno || x.firma || "") + ", vaša objednávka Legendárnych buchiet Zbojská č. " + x.cislo + " bude doručená na adresu " + (x.adresa || "") +
+      " dňa " + den + " v čase " + hm(od) + " - " + hm(po) + "." + (dob ? " Suma na úhradu je " + eur(x.suma) + ". Možná platba kartou aj v hotovosti." : "") +
+      " S pozdravom Tím Legendárne buchty ZBOJSKÁ";
+  }
+  function smsKandidati() {
+    var z = (F.trasa && F.trasa.zastavky) || [];
+    return z.filter(function (x) { return x.eta && x.telefon && x.stav === "caka" && !x.sms_den; });
+  }
+  function smsPocet() { var n = smsKandidati().length; return n ? ' <span class="pill num">' + n + "</span>" : " ✓"; }
+  function posliSms() {
+    var t = F.trasa && F.trasa.trasa; if (!t) { lbzInfo("Najprv vytvorte trasu pre furmana."); return; }
+    var z = smsKandidati(), vsetky = (F.trasa.zastavky || []);
+    var bezTel = vsetky.filter(function (x) { return !x.telefon; }).length, bezCasu = vsetky.filter(function (x) { return x.telefon && !x.eta; }).length;
+    if (!z.length) { lbzInfo("Všetkým zákazníkom s telefónom v tejto trase už bola SMS odoslaná." + (bezTel ? "\n\nBez telefónu: " + bezTel : "")); return; }
+    if (!lbzPotvrd("Poslať " + z.length + " SMS zákazníkom furmanky " + F.data.furmanka.nazov + "?" +
+        (bezTel ? "\nBez telefónu (nedostanú SMS): " + bezTel : "") + (bezCasu ? "\nBez času príchodu (adresa nenájdená): " + bezCasu : "") +
+        "\n\nUkážka:\n" + smsText(z[0], t.datum))) return;
+    F.sprava = { typ: "info", text: "Posielam " + z.length + " SMS…" }; prekresli();
+    var pol = z.map(function (x) { return { cislo: x.cislo, furmanka_id: t.id, telefon: x.telefon, text: smsText(x, t.datum), typ: "den_vopred" }; });
+    DB.functions.invoke("gosms", { body: { akcia: "posli", polozky: pol } }).then(function (res) {
+      var d = res.data;
+      var hotovo = function (j) { F.sprava = { typ: j && j.ok ? "ok" : "chyba", text: (j && j.text) || "SMS sa neodoslali" }; nacitajTrasu(t.id); };
+      if (res.error && !d) { var ctx = res.error.context; if (ctx && ctx.json) return ctx.json().then(hotovo, function () { hotovo({ text: chybaText(res.error) }); }); return hotovo({ text: chybaText(res.error) }); }
+      hotovo(d);
+    }).catch(function (e) { F.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
   }
   function vytvorTrasu(odchod) {
     var id = F.data.furmanka.id;
@@ -344,7 +378,8 @@
         (f.id && f.rozvoz && f.stav !== "rozvezena" ? (f.naplanovane ? '<span class="pill ok f-napl">✓ Naplánované ' + esc(casSk(f.naplanovane)) + "</span>" :
           (F.trasa && F.trasa.trasa ? '<button class="btn f-tl-napl" data-f="naplanovane">✅ Naplánované</button>'
             : '<button class="btn f-tl-napl" type="button" disabled title="Najprv vytvorte trasu pre furmana – podľa nej sa pripravia SMS">✅ Naplánované <small>(najprv trasa)</small></button>')) +
-          '<button class="btn f-tl-vrat" data-f="vrat-statusy">↩️ Vrátiť statusy</button>' : "") +
+          '<button class="btn f-tl-vrat" data-f="vrat-statusy">↩️ Vrátiť statusy</button>' +
+          (F.trasa && F.trasa.trasa && F.trasa.trasa.stav !== "ukoncena" ? '<button class="btn f-tl-sms" data-f="sms">📱 Poslať SMS' + smsPocet() + "</button>" : "") : "") +
         // Rozvezené nastaví furman v module Trasa (bez uzavretého rozvozu sa neodhlási z práce); ručne sa dá archivovať kedykoľvek
         (f.id && f.stav !== "rozvezena" ? '<button class="btn" data-f="stav" data-stav="rozvezena">🗄️ Archivovať</button>' : "") +
         (f.id && f.rozvoz && f.stav !== "rozvezena" ? '<button class="btn" data-f="poradie">↕️ Upraviť poradie</button>' : "") +
@@ -707,13 +742,14 @@
       case "archiv": F.id = "archiv"; F.zArchivu = true; F.sprava = null; F.archiv = null; prekresli(); nacitajArchiv(); break;
       case "naplanovane":
         if (!(F.trasa && F.trasa.trasa)) { lbzInfo("Najprv vytvorte trasu pre furmana (čas odchodu) – podľa nej sa pripravia SMS pre zákazníkov."); return; }
-        if (!lbzPotvrd("Potvrdiť, že furmanka " + F.data.furmanka.nazov + " je skontrolovaná a naplánovaná?\n\nPo ostrom štarte sa tým objednávky v Upgates označia ako Naplánované. Počas testu sa len zapíše v appke.")) return;
-        po(rpc("furmanka_naplanovana", { p_id: F.data.furmanka.id }), "Označené ako naplánované").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
+        if (!lbzPotvrd("Potvrdiť, že furmanka " + F.data.furmanka.nazov + " je skontrolovaná a naplánovaná?\n\nObjednávky sa v Upgates označia ako Naplánované a zákazníci dostanú e-mail „Doručujeme vašu objednávku“. SMS sa posielajú zvlášť tlačidlom 📱 Poslať SMS.")) return;
+        po(rpc("furmanka_naplanovana", { p_id: F.data.furmanka.id }), function (r) { return (r && r.text) || "Označené ako naplánované"; }).then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
         break;
       case "vrat-statusy":
-        if (!lbzPotvrd("Vrátiť statusy vo furmanke " + F.data.furmanka.nazov + "?\n\nZruší sa „Naplánované“. Po ostrom štarte sa tým v Upgates vrátia pôvodné statusy všetkých objednávok vo furmanke. Počas testu sa to len zapíše v appke.")) return;
-        po(rpc("furmanka_vrat_statusy", { p_id: F.data.furmanka.id }), "Statusy vrátené").then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
+        if (!lbzPotvrd("Vrátiť statusy vo furmanke " + F.data.furmanka.nazov + "?\n\nZruší sa „Naplánované“ a objednávkam, ktoré ešte nie sú doručené, sa v Upgates vráti pôvodný status.")) return;
+        po(rpc("furmanka_vrat_statusy", { p_id: F.data.furmanka.id }), function (r) { return (r && r.text) || "Statusy vrátené"; }).then(function (r) { if (r && r.ok) { nacitajFurmanku(true); nacitajZoznam(); } });
         break;
+      case "sms": posliSms(); break;
       case "dalsie": F.vsetky = !F.vsetky; prekresli(); break;
       case "sumar": tlacSumar(); break;
       case "poradie": F.poradieRezim = true; F.sprava = null; prekresli(); break;

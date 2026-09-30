@@ -349,8 +349,54 @@
     }).join("") + "</div></section>";
   }
 
+  // ---------- karta Denný prehľad a štatistiky (Prehľad – CEO, IT, zákaznícky servis) ----------
+  function percento(a, b) {
+    if (!b) return a ? '<span class="st-perc st-hore">nové</span>' : "";
+    var p = Math.round((a - b) / b * 100);
+    return '<span class="st-perc ' + (p >= 0 ? "st-hore" : "st-dole") + '">' + (p >= 0 ? "▲ " : "▼ ") + Math.abs(p) + " %</span>";
+  }
+  function kartaStat() {
+    if (!DB || ["it", "ceo", "zakaznicky_servis"].indexOf(ROLA) === -1) return "";
+    if (!O.stat || (O.stat.cas && Date.now() - O.stat.cas > 300000 && !O.stat.nacitava)) {
+      O.stat = { cas: Date.now(), nacitava: true, d: O.stat && O.stat.d };
+      rpc("obj_statistiky").then(function (d) { O.stat = { cas: Date.now(), d: d && d.ok ? d : null }; window.dispatchEvent(new Event("lbz-prekresli")); })
+        .catch(function () { O.stat = { cas: Date.now(), d: null }; });
+    }
+    var d = O.stat.d;
+    if (!d) return '<section class="card st-karta"><h3>📊 Denný prehľad</h3><p class="muted" style="margin:0">' + (O.stat.nacitava ? "Načítavam…" : "Nenačítané") + "</p></section>";
+    var ob = d.obdobia || {}, dnes = ob["1"] || {}, t = d.tyzden_spat || {};
+    var dni = d.dni || [], max = Math.max.apply(null, dni.map(function (x) { return Number(x.trzba) || 0; }).concat([1]));
+    var graf = '<div class="st-graf" role="img" aria-label="Tržby za 14 dní">' + dni.map(function (x) {
+      var h = Math.round((Number(x.trzba) || 0) / max * 100), dt = new Date(x.d + "T12:00:00");
+      return '<span class="st-stlpec" title="' + esc(dt.toLocaleDateString("sk-SK") + ": " + x.pocet + " obj. · " + eur(x.trzba)) + '"><i style="height:' + Math.max(h, 2) + '%"></i><small>' + dt.getDate() + "</small></span>";
+    }).join("") + "</div>";
+    var obd = function (k, nazov) {
+      var x = ob[k] || {};
+      return '<div class="st-obd"><span class="muted">' + nazov + '</span><b class="num">' + esc(eur(x.trzba || 0)) + "</b>" +
+        '<span class="num muted">' + (x.pocet || 0) + " obj." + (x.pocet ? " · ⌀ " + esc(eur((x.trzba || 0) / x.pocet)) : "") + "</span>" + (k !== "365" ? percento(Number(x.trzba) || 0, Number(x.trzba_pred) || 0) : "") + "</div>";
+    };
+    var tab = function (nadpis, zoz, ks) {
+      if (!zoz || !zoz.length) return "";
+      return "<h4>" + nadpis + '</h4><div class="rows">' + zoz.slice(0, 12).map(function (x) {
+        return '<div class="row"><span>' + esc(x.nazov) + '</span><span class="num">' + (ks ? cisloSk(x.ks) + " ks" : x.pocet + " obj.") + " · " + esc(eur(x.trzba)) + "</span></div>";
+      }).join("") + "</div>";
+    };
+    var viac = d.produkty ? '<details class="st-viac"><summary>📈 Štatistiky (30 dní)</summary>' +
+      tab("Najpredávanejšie produkty", d.produkty, true) + tab("Doprava", d.doprava) + tab("Platba", d.platba) + tab("Rozvozy (regióny)", d.regiony) +
+      (d.mesiace && d.mesiace.length ? '<h4>Po mesiacoch</h4><div class="rows">' + d.mesiace.slice().reverse().map(function (m) {
+        return '<div class="row"><span>' + esc(m.m.slice(5) + "/" + m.m.slice(0, 4)) + '</span><span class="num">' + m.pocet + " obj. · " + esc(eur(m.trzba)) + "</span></div>";
+      }).join("") + "</div>" : "") + "</details>" : "";
+    return '<section class="card st-karta"><h3>📊 Denný prehľad</h3>' +
+      '<div class="st-dnes"><div><span class="muted">Dnes objednávky</span><b class="num">' + (dnes.pocet || 0) + "</b>" + percento(dnes.pocet || 0, t.pocet || 0) + "</div>" +
+      '<div><span class="muted">Dnes tržba</span><b class="num">' + esc(eur(dnes.trzba || 0)) + "</b>" + percento(Number(dnes.trzba) || 0, Number(t.trzba) || 0) + "</div></div>" +
+      '<p class="muted st-pozn">% oproti rovnakému dňu minulý týždeň · bez storien</p>' + graf +
+      '<div class="st-obdobia">' + obd("7", "7 dní") + obd("30", "30 dní") + obd("365", "365 dní") + "</div>" + viac +
+      '<button class="btn" data-mod="objednavky">Otvoriť objednávky</button></section>';
+  }
+  function cisloSk(x) { return Number(x || 0).toLocaleString("sk-SK", { maximumFractionDigits: 1 }); }
+
   window.LBZ_OBJEDNAVKY = {
-    nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; O.zoznam = null; O.detail = null; O.cislo = null; O.odbery = null; O.produkty = null; O.cis = null; },
+    nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; O.zoznam = null; O.detail = null; O.cislo = null; O.odbery = null; O.produkty = null; O.cis = null; O.stat = null; },
     mozem: function () { return !!DB && ["it", "ceo", "zakaznicky_servis"].indexOf(ROLA) > -1; },
     mozemOdbery: function () { return !!DB && ROLA !== "zakaznik"; },
     mount: function (el) {
@@ -361,6 +407,7 @@
       if (!O.zoznam) nacitaj(); else kresli();
     },
     kartaOdbery: kartaOdbery,
+    kartaStat: kartaStat,
     obnovOdbery: function () { O.odbery = null; }
   };
 })();

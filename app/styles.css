@@ -1365,3 +1365,32 @@ body.pdfv-otvorene { overflow: hidden; }
 /* v0.29.4 – úvodný návod */
 .start-karta { border: 2px solid var(--lbz-zlata, #CBA75B); background: var(--lbz-zlata-svetla, #F5ECD9); grid-column: 1 / -1; }
 .start-kroky { margin: 0; padding-left: 20px; display: grid; gap: 8px; line-height: 1.45; }
+
+/* ---------- Denný prehľad (štatistiky objednávok) ---------- */
+.st-dnes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.st-dnes > div, .st-obd { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--lbz-zlata-svetla, #F5ECD9); min-width: 0; }
+.st-dnes b { font-size: 26px; line-height: 1.1; color: var(--lbz-hneda, #583934); }
+.st-obdobia { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.st-obd b { font-size: 17px; color: var(--lbz-hneda, #583934); }
+.st-obd .muted, .st-dnes .muted { font-size: 12px; }
+.st-perc { font-size: 12px; font-weight: 700; }
+.st-hore { color: #2e7d32; } .st-dole { color: #c62828; }
+.st-pozn { margin: 0; font-size: 12px; }
+.st-graf { display: flex; align-items: flex-end; gap: 4px; height: 90px; padding: 4px 0 0; }
+.st-stlpec { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+.st-stlpec i { display: block; width: 100%; max-width: 22px; background: var(--lbz-zlata, #CBA75B); border-radius: 4px 4px 0 0; }
+.st-stlpec:last-child i { background: var(--lbz-hneda, #583934); }
+.st-stlpec small { font-size: 10px; color: var(--muted, #777); }
+.st-viac > summary { cursor: pointer; font-weight: 700; color: var(--lbz-hneda, #583934); padding: 4px 0; }
+.st-viac h4 { margin: 12px 0 4px; font-size: 14px; }
+:root[data-theme="dark"] .st-dnes > div, :root[data-theme="dark"] .st-obd { background: rgba(203, 167, 91, .12); }
+:root[data-theme="dark"] .st-dnes b, :root[data-theme="dark"] .st-obd b { color: var(--lbz-zlata, #CBA75B); }
+@media (max-width: 480px) { .st-obdobia { grid-template-columns: 1fr; } }
+
+/* ---------- SMS odpovede zákazníkov ---------- */
+.t-sms-odp { border-left: 4px solid var(--lbz-zlata, #CBA75B); background: var(--lbz-zlata-svetla, #F5ECD9); border-radius: 10px; padding: 8px 10px; margin: 6px 0; display: grid; gap: 2px; }
+.t-sms-odp p { margin: 0; font-size: 15px; }
+.t-sms-info { margin: 2px 0; font-size: 12px; }
+.f-sms-odp { margin: 2px 0 4px; padding: 4px 8px; border-left: 3px solid var(--lbz-zlata, #CBA75B); background: var(--lbz-zlata-svetla, #F5ECD9); border-radius: 6px; font-size: 13px; }
+.t-sms-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+:root[data-theme="dark"] .t-sms-odp, :root[data-theme="dark"] .f-sms-odp { background: rgba(203, 167, 91, .12); }

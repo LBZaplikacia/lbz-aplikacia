@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.29.4 BETA";
+  var VERZIA = "0.29.5 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -140,17 +140,17 @@
   if (location.search) try { history.replaceState(null, "", location.pathname); } catch (e) {}
   // poradie kariet na Prehľade podľa roly (každý si ho môže upraviť – uloží sa v zariadení)
   var PORADIE = {
-    it: ["schvalenie", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
-    ceo: ["schvalenie", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
+    it: ["schvalenie", "statistiky", "sms", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
+    ceo: ["schvalenie", "statistiky", "sms", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
     prevadzkar: ["schvalenie", "dochadzka", "ulohy", "rozpis", "vybavit", "sklad", "balenie", "furmanky", "kniha"],
     zamestnanec: ["dochadzka", "zdrav", "ulohy", "furmanky", "rozpis", "vybavit"],
     prevadzka: ["ulohy", "dochadzka", "sklad", "balenie", "furmanky", "vybavit"],
-    furman: ["dochadzka", "rozpis", "trasa", "vybavit", "ulohy", "kniha"],
-    zakaznicky_servis: ["dochadzka", "ulohy", "zdrav", "furmanky", "balenie", "rozpis", "vybavit"],
+    furman: ["sms", "dochadzka", "rozpis", "trasa", "vybavit", "ulohy", "kniha"],
+    zakaznicky_servis: ["sms", "statistiky", "dochadzka", "ulohy", "zdrav", "furmanky", "balenie", "rozpis", "vybavit"],
     majitelka_arealu: ["kniha", "vybavit"]
   };
   var NAZVY_KARIET = { schvalenie: "🔔 Na schválenie", dochadzka: "🕒 Príchod a smeny", ulohy: "✅ Úlohy a Vybaviť", zdrav: "🩺 Zdravotné preukazy", vybavit: "📝 Vybaviť", kniha: "🚗 Kniha jázd", rozpis: "📅 Kto je v práci", furmanky: "🚚 Furmanky",
-    sklad: "🧊 Sklad", balenie: "📦 Balenie", trasa: "🗺️ Trasa" };
+    sklad: "🧊 Sklad", balenie: "📦 Balenie", trasa: "🗺️ Trasa", statistiky: "📊 Denný prehľad", sms: "💬 SMS odpovede" };
   var ZAM = window.LBZ_ZAMESTNANCI || null;
 
   var stav = {
@@ -481,12 +481,13 @@
       if (VYB && !ULO && r !== "majitelka_arealu") kh.vybavit = VYB.karta();   // Vybaviť je súčasťou karty Úlohy
       if (kody.indexOf("furmanky") > -1) kh.furmanky = kartaFurmanky();
       if (kody.indexOf("balenie") > -1 && balenieZapnute()) kh.balenie = BAL.karta();
-      if (kody.indexOf("trasa") > -1 && trasaZapnuta()) kh.trasa = TRA.karta();
+      if (kody.indexOf("trasa") > -1 && trasaZapnuta()) { kh.trasa = TRA.karta(); if (TRA.kartaSms) kh.sms = TRA.kartaSms(); }
+      if (OBJ && OBJ.kartaStat && OSTRY) kh.statistiky = OBJ.kartaStat();
       if (knihaZapnuta()) kh.kniha = KNIHA.karta();
       if (zamZapnute() && ZAM.karta) kh.zdrav = ZAM.karta();
       var por = poradieKariet(Object.keys(kh).filter(function (k) { return kh[k]; }));
       var karty = (kh.schvalenie ? ["schvalenie"] : []).concat(por.viditelne.filter(function (k) { return k !== "schvalenie"; })).map(function (k) { return kh[k]; });
-      var kOdb = OBJ && OBJ.mozemOdbery() && OSTRY ? OBJ.kartaOdbery() : "";
+      var kOdb = OBJ && OBJ.mozemOdbery() && OSTRY && r !== "ceo" ? OBJ.kartaOdbery() : "";
       if (kOdb) karty.splice(kh.schvalenie ? 1 : 0, 0, kOdb);
       if (kPush) karty.unshift(kPush);
       var kStart = OSTRY ? kartaStart() : ""; if (kStart) karty.unshift(kStart);
