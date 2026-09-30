@@ -211,7 +211,10 @@
         (!s.zmazane ? '<button class="chat-menu-tl" data-ch-menu="' + s.id + '" aria-label="Možnosti správy">⋮</button>' : "") + "</div>");
     });
     if ([].some.call(box.querySelectorAll("audio"), function (a) { return !a.paused; })) { C.odlozKresli = true; return; }   // nerušiť prehrávanie hlasovky
+    if (!box._lep) { box._lep = true; box.addEventListener("scroll", function () { LEP = box.scrollHeight - box.scrollTop - box.clientHeight < 80; }, { passive: true }); }
+    var predTop = box.scrollTop;
     box.innerHTML = out.join("");
+    if (LEP) box.scrollTop = box.scrollHeight; else box.scrollTop = predTop;
     box.querySelectorAll("img[data-ch-img]").forEach(nacitajObrazok);
     box.querySelectorAll("audio[data-ch-aud]").forEach(function (a) { if (!a.getAttribute("src")) podpisanaUrl(a.dataset.chAud).then(function (u) { a.src = u; }).catch(function () { /* */ }); });
   }
@@ -231,9 +234,17 @@
   }
   function nacitajObrazok(img) {
     if (img.getAttribute("src")) return;
+    img.addEventListener("load", naSpodok, { once: true });
     podpisanaUrl(img.dataset.chImg).then(function (u) { img.src = u; }).catch(function () { img.alt = "Fotka sa nenačítala"; });
   }
-  function dole() { var b = document.getElementById("chat-spravy"); if (b) { b.scrollTop = b.scrollHeight; setTimeout(function () { b.scrollTop = b.scrollHeight; }, 250); } }
+  // držať chat na spodku, kým používateľ sám neodroluje hore (fotky a hlasovky sa načítajú neskôr a zväčšia obsah)
+  var LEP = true;
+  function naSpodok() { var b = document.getElementById("chat-spravy"); if (b && LEP) b.scrollTop = b.scrollHeight; }
+  function dole() {
+    LEP = true; naSpodok();
+    if (window.requestAnimationFrame) requestAnimationFrame(naSpodok);
+    [150, 400, 900, 1600, 2500].forEach(function (ms) { setTimeout(naSpodok, ms); });
+  }
   function vyska(t) { t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 160) + "px"; }
 
   // ---------- dialógy ----------
