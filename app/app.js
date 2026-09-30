@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.25.3 BETA";
+  var VERZIA = "0.26.0 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -470,6 +470,9 @@
       var por = poradieKariet(Object.keys(kh).filter(function (k) { return kh[k]; }));
       var karty = (kh.schvalenie ? ["schvalenie"] : []).concat(por.viditelne.filter(function (k) { return k !== "schvalenie"; })).map(function (k) { return kh[k]; });
       if (kPush) karty.unshift(kPush);
+      var akt = window.lbzAktivita && lbzAktivita.dnes();
+      if (akt != null) karty.unshift('<section class="card akt-karta"><h3>⏱ Pracovný čas sa ráta automaticky</h3><p style="margin:0">Dnes: <b class="num">' + Math.floor(akt / 60) + " h " + (akt % 60) + " min</b></p>" +
+        '<p class="muted" style="margin:0">Ráta sa, kým máš appku otvorenú a pracuješ v nej. Po 5 min nečinnosti, minimalizovaní alebo zavretí sa zastaví.</p></section>');
       var dnes = new Date().toLocaleDateString("sk-SK", { weekday: "long", day: "numeric", month: "numeric" });
       var meno = String(stav.pouzivatel || "").split(" ").pop();
       return hlavicka("Dobrý deň" + (meno ? ", " + meno : "") + "!", "Dnes je " + dnes, true) + '<div class="grid">' + karty.join("") + "</div>" +
@@ -627,6 +630,7 @@
     }
     if (t.id === "btn-odhlasit" || t.id === "btn-odhlasit-m") {
       if (window.lbzPush) lbzPush.odznak(0);
+      if (window.lbzAktivita) lbzAktivita.stop();
       if (OSTRY) db.auth.signOut({ scope: "local" }); // odhlási len toto zariadenie, ostatné ostanú prihlásené
       if (window.lbzPamat) lbzPamat.zmaz();
       stav.rola = null; stav.pouzivatel = null; stav.modul = "prehlad"; stav.dbModuly = null; stav.login = "prihlasenie"; stav.sprava = null;
@@ -725,6 +729,7 @@
       }
       if (ZAM) ZAM.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
       if (window.lbzPush && stav.rola !== "zakaznik") lbzPush.obnov(db);
+      if (window.lbzAktivita && stav.rola !== "zakaznik") lbzAktivita.start(db);
       if (CHAT) { CHAT.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola); if (START_K) { CHAT.otvorKonv(START_K); START_K = null; } }
       render();
     }).catch(function () { stav.nacitavam = false; stav.sprava = { typ: "chyba", text: "Bez spojenia so serverom." }; render(); });
@@ -750,6 +755,7 @@
   // moduly si dotiahli údaje pre kartu na Prehľade
   root.addEventListener("toggle", function (e) { if (e.target.classList && e.target.classList.contains("prisposobit")) stav.prisposobit = e.target.open; }, true);
   window.addEventListener("lbz-prekresli", function () { if (stav.rola && stav.modul === "prehlad") render(); });
+  window.addEventListener("lbz-aktivita", function () { if (stav.rola && stav.modul === "prehlad" && !document.querySelector(".f-dialog, .lbz-dlg")) render(); });
 
   render();
   pripravGoogle();
