@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
       const skupina = s.chat_konv?.typ === "skupina";
       const n = await posli((cl || []).map((x: any) => x.uid), {
         title: skupina ? (s.chat_konv?.ikona || "💬") + " " + (s.chat_konv?.nazov || "Skupina") : "💬 " + meno,
-        body: skupina ? meno.split(" ")[0] + ": " + text : text, url: "/?m=chat&k=" + s.konv_id, tag: "chat-" + s.konv_id });
+        body: skupina ? meno.split(" ")[0] + ": " + text : text, url: "/?m=chat&k=" + s.konv_id, tag: "chat-" + s.konv_id + "-" + s.id });   // každá správa zvlášť → Android ukáže na ikone počet správ
       return odpoved({ ok: true, poslane: n });
     }
     if (akcia === "rozpis") {
