@@ -86,7 +86,11 @@
     if (!DB) return;
     var t = e.target.closest("[data-u-splnit], [data-u-zmaz], [data-u], [data-u-komu], [data-u-osoba]"); if (!t) return;
     if (t.dataset.uSplnit) {
-      rpc("ulohy_splnit", { p_id: +t.dataset.uSplnit, p_hotovo: t.dataset.uStav === "1" }).then(function (r) { if (r && !r.ok) lbzInfo(r.text); nacitaj(); }).catch(function (x) { lbzInfo((x && x.message) || "Bez spojenia"); });
+      var uid = +t.dataset.uSplnit;
+      rpc("ulohy_splnit", { p_id: uid, p_hotovo: t.dataset.uStav === "1" }).then(function (r) {
+        if (r && !r.ok) lbzInfo(r.text); nacitaj();
+        if (window.lbzPush && lbzPush.zavri) lbzPush.zavri("uloha-" + uid + "-"); if (window.lbzOdznakObnov) lbzOdznakObnov();
+      }).catch(function (x) { lbzInfo((x && x.message) || "Bez spojenia"); });
     } else if (t.dataset.uZmaz) {
       if (!lbzPotvrd("Zmazať túto úlohu pre všetkých?")) return;
       rpc("ulohy_zmaz", { p_id: +t.dataset.uZmaz }).then(nacitaj).catch(function (x) { lbzInfo((x && x.message) || "Bez spojenia"); });
@@ -117,7 +121,7 @@
       U.prace = true; kresliDialog();
       rpc("ulohy_zadaj", { p: { text: d.text, datum: d.datum, termin: d.termin || null, osoby: d.komu === "ludia" ? d.osoby : [] } }).then(function (r) {
         U.prace = false;
-        if (r && r.ok) { U.dialog = null; kresliDialog(); nacitaj(); } else { lbzInfo((r && r.text) || "Nepodarilo sa uložiť"); kresliDialog(); }
+        if (r && r.ok) { U.dialog = null; kresliDialog(); nacitaj(); if (r.id) DB.functions.invoke("upozornenia", { body: { akcia: "uloha", id: r.id } }).catch(function () { /* */ }); } else { lbzInfo((r && r.text) || "Nepodarilo sa uložiť"); kresliDialog(); }
       }).catch(function (x) { U.prace = false; kresliDialog(); lbzInfo((x && x.message) || "Bez spojenia"); });
     }
   });

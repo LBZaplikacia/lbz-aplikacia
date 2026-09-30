@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.26.0 BETA";
+  var VERZIA = "0.26.1 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -555,7 +555,27 @@
     google.accounts.id.renderButton(el, { type: "standard", theme: "outline", size: "large", text: "signin_with", shape: "rectangular", locale: "sk", logo_alignment: "center", width: Math.min(360, el.clientWidth || 320) });
   }
 
+  // číslo na ikone appky = neprečítané správy + čo čaká na potvrdenie + moje nesplnené úlohy
+  var odznakCas = 0, odznakTimer = null;
+  function odznakObnov() {
+    if (!OSTRY || !db || !stav.rola || !window.lbzPush) return;
+    clearTimeout(odznakTimer);
+    odznakTimer = setTimeout(function () {
+      odznakCas = Date.now();
+      db.rpc("odznak_pocet").then(function (r) { if (r.data && r.data.ok) lbzPush.odznak(r.data.spolu); }).catch(function () { /* */ });
+    }, 800);
+  }
+  window.lbzOdznakObnov = odznakObnov;
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") odznakObnov(); });
+  // otvorením modulu sa zatvoria jeho upozornenia v lište telefónu
+  var ZAVRI_PRI = { rozpis: ["roz-z-"], dochadzka: ["ziadost-", "doch-"], zamestnanci: ["udaje-", "zdrav-"] };
+  var poslModul = null;
   function render() {
+    if (stav.rola && stav.modul !== poslModul) {
+      poslModul = stav.modul;
+      if (window.lbzPush && lbzPush.zavri) (ZAVRI_PRI[stav.modul] || []).forEach(function (z) { lbzPush.zavri(z); });
+      if (Date.now() - odznakCas > 30000) odznakObnov();
+    }
     // spodná lišta v mobile: po prekreslení ostane posunutá tam, kde bola (a ťuknutá položka ostane viditeľná)
     var lista = document.querySelector("nav.bottom"), listaX = lista ? lista.scrollLeft : 0;
     if (stav.rola) renderApp(); else { renderLogin(); vykresliGoogle(); }
@@ -730,6 +750,7 @@
       if (ZAM) ZAM.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
       if (window.lbzPush && stav.rola !== "zakaznik") lbzPush.obnov(db);
       if (window.lbzAktivita && stav.rola !== "zakaznik") lbzAktivita.start(db);
+      odznakObnov();
       if (CHAT) { CHAT.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola); if (START_K) { CHAT.otvorKonv(START_K); START_K = null; } }
       render();
     }).catch(function () { stav.nacitavam = false; stav.sprava = { typ: "chyba", text: "Bez spojenia so serverom." }; render(); });

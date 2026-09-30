@@ -477,7 +477,7 @@
       Z.prace = true; prekresli();
       rpc(ziadost ? "zam_ziadost" : "zam_uloz", { p: p }).then(function (r) {
         Z.prace = false;
-        if (r && r.ok) { Z.uprav = null; Z.sprava = { typ: "ok", text: r.text }; otvor(Z.osoba); } else { Z.sprava = { typ: "chyba", text: (r && r.text) || "Nepodarilo sa uložiť" }; prekresli(); }
+        if (r && r.ok) { Z.uprav = null; Z.sprava = { typ: "ok", text: r.text }; otvor(Z.osoba); if (ziadost) DB.functions.invoke("upozornenia", { body: { akcia: "udaje" } }).catch(function () { /* */ }); } else { Z.sprava = { typ: "chyba", text: (r && r.text) || "Nepodarilo sa uložiť" }; prekresli(); }
       }).catch(function (x) { Z.prace = false; Z.sprava = { typ: "chyba", text: chybaText(x) }; prekresli(); });
     } else if (e.target.id === "zm-novy-form") {
       e.preventDefault();

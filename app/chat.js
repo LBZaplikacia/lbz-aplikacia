@@ -42,7 +42,7 @@
 
   // ---------- odznak s počtom neprečítaných (lišta na PC aj v mobile) ----------
   function odznak() {
-    if (window.lbzPush && DB) { lbzPush.odznak(C.neprecitane); if (!C.neprecitane && C.zoznam && lbzPush.zavri) lbzPush.zavri("chat-"); }
+    if (window.lbzPush && DB) { if (window.lbzOdznakObnov) lbzOdznakObnov(); if (!C.neprecitane && C.zoznam && lbzPush.zavri) lbzPush.zavri("chat-"); }
     document.querySelectorAll('[data-mod="chat"] .ri-ik').forEach(function (ik) {
       var b = ik.querySelector(".chat-odznak");
       if (!C.neprecitane) { if (b) b.remove(); return; }

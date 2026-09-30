@@ -383,6 +383,7 @@
       t.disabled = true;
       rpc("rozpis_ziadost_rozhodni", { p_id: +d.rZrozhodni, p_schval: ano, p_dovod: null }).then(function (r) {
         R.sprava = { typ: r && r.ok ? "ok" : "chyba", text: (r && r.text) || "Chyba" };
+        if (window.lbzPush && lbzPush.zavri) lbzPush.zavri("roz-z-" + d.rZrozhodni + "-"); if (window.lbzOdznakObnov) lbzOdznakObnov();
         if (r && (r.ok || /neplat/.test(r.text || ""))) DB.functions.invoke("upozornenia", { body: { akcia: "rozpis", id: +d.rZrozhodni, udalost: "rozhodnutie" } }).catch(function () { /* */ });
         R.karta = null; nacitaj();
       }).catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
