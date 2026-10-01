@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.29.14 BETA";
+  var VERZIA = "0.29.15 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -31,6 +31,7 @@
     { kod: "rozpis",          nazov: "Rozpis práce" },
     { kod: "dochadzka",       nazov: "Dochádzka a smeny" },
     { kod: "kniha_jazd",      nazov: "Kniha jázd" },
+    { kod: "cestovne",        nazov: "Cestovné príkazy" },
     { kod: "objednavky",      nazov: "Objednávky" },
     { kod: "komentare",       nazov: "Komentáre FB/IG" },
     { kod: "zamestnanci",     nazov: "Zamestnanci" },
@@ -43,7 +44,7 @@
   // ikony modulov (bočná lišta na PC, spodná lišta v mobile)
   var IKONY = {
     prehlad: "🏠", chat: "💬", sklad: "🧊", furmanky: "🚚", balenie: "📦", trasa: "🗺️", rozpis: "📅", dochadzka: "🕒", kniha_jazd: "🚗",
-    objednavky: "🧾", komentare: "💬", zamestnanci: "👥", exporty: "📊", moje_objednavky: "🛍️", sledovanie: "📍", nastavenia: "⚙️"
+    objednavky: "🧾", cestovne: "🧾", komentare: "💬", zamestnanci: "👥", exporty: "📊", moje_objednavky: "🛍️", sledovanie: "📍", nastavenia: "⚙️"
   };
   // jednotné čiarové ikony (SVG) – lišta na PC aj v mobile
   var P = {
@@ -56,6 +57,7 @@
     rozpis: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
     dochadzka: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     kniha_jazd: '<path d="M5 17h14M6 17l1.5-6h9L18 17M4 17v3h3v-3M17 17v3h3v-3"/><circle cx="8" cy="14" r=".6"/><circle cx="16" cy="14" r=".6"/>',
+    cestovne: '<path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 11h6M10 15h6M10 19h3"/>',
     objednavky: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
     komentare: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     zamestnanci: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
@@ -74,7 +76,7 @@
     zakaznicky_servis: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "objednavky"], uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci"],
     majitelka_arealu: ["aktivita", "odbery", "prehlad", "kniha_jazd"], zakaznik: ["prehlad", "moje_objednavky", "sledovanie"]
   };
-  var KRATKO = { rozpis: "Rozpis", balenie: "Balenie", trasa: "Trasa", dochadzka: "Dochádzka", kniha_jazd: "Jazdy", zamestnanci: "Ľudia", komentare: "Komentáre",
+  var KRATKO = { cestovne: "Cesťák", rozpis: "Rozpis", balenie: "Balenie", trasa: "Trasa", dochadzka: "Dochádzka", kniha_jazd: "Jazdy", zamestnanci: "Ľudia", komentare: "Komentáre",
     exporty: "Exporty", moje_objednavky: "Objednávky", sledovanie: "Furmanka", nastavenia: "Účet" };
 
   var PRISTUPY = {
@@ -82,9 +84,9 @@
     ceo: MODULY.map(function (m) { return m.kod; }),
     prevadzka: ["aktivita", "odbery", "prehlad", "chat", "sklad", "balenie", "dochadzka", "kniha_jazd", "zamestnanci", "nastavenia"],
     zamestnanec: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "nastavenia"],
-    furman: ["aktivita", "odbery", "prehlad", "chat", "trasa", "dochadzka", "rozpis", "zamestnanci", "nastavenia"],
+    furman: ["aktivita", "odbery", "prehlad", "chat", "trasa", "cestovne", "dochadzka", "rozpis", "zamestnanci", "nastavenia"],
     zakaznicky_servis: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "objednavky", "furmanky", "trasa", "komentare", "zamestnanci", "nastavenia"],
-    uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci", "nastavenia"],
+    uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci", "cestovne", "nastavenia"],
     prevadzkar: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "rozpis", "sklad", "balenie", "kniha_jazd", "zamestnanci", "nastavenia"],
     majitelka_arealu: ["aktivita", "odbery", "prehlad", "kniha_jazd", "nastavenia"],
     zakaznik: ["prehlad", "moje_objednavky", "sledovanie", "nastavenia"]
@@ -140,18 +142,19 @@
   if (location.search) try { history.replaceState(null, "", location.pathname); } catch (e) {}
   // poradie kariet na Prehľade podľa roly (každý si ho môže upraviť – uloží sa v zariadení)
   var PORADIE = {
-    it: ["aktivita", "odbery", "schvalenie", "statistiky", "sms", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
-    ceo: ["aktivita", "odbery", "schvalenie", "statistiky", "sms", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
+    it: ["aktivita", "odbery", "schvalenie", "cp", "statistiky", "sms", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
+    ceo: ["aktivita", "odbery", "schvalenie", "cp", "statistiky", "sms", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
     prevadzkar: ["aktivita", "odbery", "schvalenie", "dochadzka", "ulohy", "rozpis", "vybavit", "sklad", "balenie", "kniha"],
     zamestnanec: ["aktivita", "odbery", "dochadzka", "zdrav", "ulohy", "furmanky", "rozpis", "vybavit"],
     prevadzka: ["aktivita", "odbery", "ulohy", "dochadzka", "sklad", "balenie", "furmanky", "vybavit"],
-    furman: ["aktivita", "odbery", "sms", "dochadzka", "rozpis", "trasa", "vybavit", "ulohy"],
+    furman: ["aktivita", "odbery", "cp", "sms", "dochadzka", "rozpis", "trasa", "vybavit", "ulohy"],
     zakaznicky_servis: ["aktivita", "odbery", "sms", "dochadzka", "ulohy", "zdrav", "furmanky", "rozpis", "vybavit"],
     majitelka_arealu: ["aktivita", "odbery", "kniha", "vybavit"]
   };
   var NAZVY_KARIET = { schvalenie: "🔔 Na schválenie", dochadzka: "🕒 Príchod a smeny", ulohy: "✅ Úlohy a Vybaviť", zdrav: "🩺 Zdravotné preukazy", vybavit: "📝 Vybaviť", kniha: "🚗 Kniha jázd", rozpis: "📅 Kto je v práci", furmanky: "🚚 Furmanky",
-    sklad: "🧊 Sklad", balenie: "📦 Balenie", trasa: "🗺️ Trasa", statistiky: "📊 Denný prehľad", sms: "💬 SMS odpovede", odbery: "🛍️ Osobné odbery", aktivita: "⏱ Pracovný čas (automaticky)" };
+    sklad: "🧊 Sklad", balenie: "📦 Balenie", trasa: "🗺️ Trasa", statistiky: "📊 Denný prehľad", sms: "💬 SMS odpovede", odbery: "🛍️ Osobné odbery", aktivita: "⏱ Pracovný čas (automaticky)", cp: "🧾 Cestovný príkaz" };
   var ZAM = window.LBZ_ZAMESTNANCI || null;
+  var CES = window.LBZ_CESTY || null;
 
   var stav = {
     pouzivatel: null, email: null, rola: null,
@@ -206,8 +209,9 @@
       (stav.pouzivatelia === null || stav.pouzivatelia === undefined ? '<p class="muted" style="margin:0">Načítavam…</p>' :
         '<div class="pouz-zoznam">' + zoznam.map(function (u) {
           return '<div class="pouz-riadok' + (u.aktivny ? "" : " pouz-vyp") + '">' +
-            '<span class="pouz-meno"><strong>' + esc(u.meno || u.email) + '</strong><span class="muted">' + esc(u.email) + " · " +
-              (u.posledne_prihlasenie ? "prihlásený " + new Date(u.posledne_prihlasenie).toLocaleDateString("sk-SK") : u.ucet ? "účet založený" : "ešte sa neprihlásil") + "</span></span>" +
+            (stav.menoUpr === u.email ? '<span class="pouz-meno" style="display:flex;gap:6px;flex-wrap:wrap"><input id="in-p-premenuj" value="' + esc(u.meno || "") + '" placeholder="Priezvisko Meno" style="flex:1;min-width:140px;border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit"><button class="btn btn-primary" data-pouz-meno-ok="' + esc(u.email) + '">Uložiť</button><button class="btn" data-pouz-meno-zrus="1">✕</button></span>' :
+            '<span class="pouz-meno"><strong>' + esc(u.meno || u.email) + ' <button class="btn-link" data-pouz-meno="' + esc(u.email) + '" aria-label="Upraviť meno" style="font-size:13px">✏️</button></strong><span class="muted">' + esc(u.email) + " · " +
+              (u.posledne_prihlasenie ? "prihlásený " + new Date(u.posledne_prihlasenie).toLocaleDateString("sk-SK") : u.ucet ? "účet založený" : "ešte sa neprihlásil") + "</span></span>") +
             '<select data-pouz-rola="' + esc(u.email) + '" aria-label="Rola">' + moznostiRol(u.rola) + "</select>" + vyberOsoby(u) +
             '<label class="pouz-akt"><input type="checkbox" data-pouz-akt="' + esc(u.email) + '"' + (u.aktivny ? " checked" : "") + "> aktívny</label></div>";
         }).join("") + "</div>") + "</section>";
@@ -256,6 +260,7 @@
   function dochadzkaZapnuta() { return !!(DOCH && DOCH.mozem()); }
   function knihaZapnuta() { return !!(KNIHA && KNIHA.mozem()); }
   function zamZapnute() { return !!(ZAM && ZAM.mozem()); }
+  function cestyZapnute() { return !!(CES && CES.mozem()); }
   function chatZapnuty() { return !!(CHAT && CHAT.mozem()); }
 
   // ---------- prihlásenie ----------
@@ -329,6 +334,7 @@
       if (m.kod === "trasa") m.aktivny = trasaZapnuta();
       if (m.kod === "dochadzka") m.aktivny = dochadzkaZapnuta();
       if (m.kod === "kniha_jazd") m.aktivny = knihaZapnuta();
+      if (m.kod === "cestovne") m.aktivny = cestyZapnute();
       if (m.kod === "chat") m.aktivny = chatZapnuty();
       if (m.kod === "zamestnanci") { m.aktivny = zamZapnute(); KRATKO.zamestnanci = stav.rola === "zamestnanec" ? "Údaje" : "Ľudia"; if (stav.rola === "zamestnanec") m.nazov = "Moje údaje"; }
     });
@@ -511,6 +517,7 @@
       if (OBJ && OBJ.kartaStat && OSTRY) kh.statistiky = OBJ.kartaStat();
       if (knihaZapnuta()) kh.kniha = KNIHA.karta();
       if (zamZapnute() && ZAM.karta) kh.zdrav = ZAM.karta();
+      if (cestyZapnute()) { var kCp = CES.karta(); if (kCp) kh.cp = kCp; }
       // osobné odbery a automatický pracovný čas sa dajú tiež presúvať a skryť v „Prispôsobiť prehľad“
       var kOdb = OBJ && OBJ.mozemOdbery() && OSTRY && r !== "ceo" ? OBJ.kartaOdbery() : "";
       if (kOdb) kh.odbery = kOdb;
@@ -553,6 +560,7 @@
     if (dochadzkaZapnuta() && stav.modul === "dochadzka") return '<div id="doch-root"></div>';
     if (knihaZapnuta() && stav.modul === "kniha_jazd") return '<div id="kniha-root"></div>';
     if (zamZapnute() && stav.modul === "zamestnanci") return '<div id="zam-root"></div>';
+    if (cestyZapnute() && stav.modul === "cestovne") return '<div id="cp-root"></div>';
     if (chatZapnuty() && stav.modul === "chat") return '<div id="chat-root" class="chat-root"></div>';
     if (skladZapnuty() && stav.modul === "sklad") {
       return '<div id="sklad-root" data-modul="' + stav.modul + '"></div>';
@@ -655,6 +663,8 @@
     if (kn && KNIHA) KNIHA.mount(kn);
     var zr = document.getElementById("zam-root");
     if (zr && ZAM) ZAM.mount(zr);
+    var cpr = document.getElementById("cp-root");
+    if (cpr && CES) CES.mount(cpr);
     var ch = document.getElementById("chat-root");
     if (ch && CHAT) CHAT.mount(ch);
     if (CHAT && CHAT.odznak) CHAT.odznak();
@@ -665,6 +675,14 @@
     var t = e.target.closest("button");
     if (!t) return;
     if (t.dataset.viac) { stav.viac = t.dataset.viac === "1" && !stav.viac; render(); return; }
+    if (t.dataset.pouzMeno) { stav.menoUpr = t.dataset.pouzMeno; render(); var im = document.getElementById("in-p-premenuj"); if (im) im.focus(); return; }
+    if (t.dataset.pouzMenoZrus) { stav.menoUpr = null; render(); return; }
+    if (t.dataset.pouzMenoOk) {
+      var em = t.dataset.pouzMenoOk, nm = ((document.getElementById("in-p-premenuj") || {}).value || "").trim();
+      var uu = (stav.pouzivatelia || []).filter(function (x) { return x.email === em; })[0];
+      if (!nm || !uu) return;
+      stav.menoUpr = null; ulozPouzivatela(em, nm, uu.rola, uu.aktivny); return;
+    }
     if (t.dataset.mod) stav.viac = false;
     if (t.dataset.prispHore || t.dataset.prispDole || t.dataset.prispSkry || t.dataset.prispReset) {
       var kl = [];
@@ -719,6 +737,7 @@
       if (VYB) VYB.nastavDb(null, null);
       if (ULO) ULO.nastavDb(null, null);
       if (ZAM) ZAM.nastavDb(null, null);
+      if (CES) CES.nastavDb(null, null);
       if (CHAT) CHAT.nastavDb(null, null);
       render();
     }
@@ -773,6 +792,7 @@
       if (VYB) VYB.nastavDb(null, null);
       if (ULO) ULO.nastavDb(null, null);
       if (ZAM) ZAM.nastavDb(null, null);
+      if (CES) CES.nastavDb(null, null);
       if (CHAT) CHAT.nastavDb(null, null);
       render(); return;
     }
@@ -805,6 +825,7 @@
         }, 900);
       }
       if (ZAM) ZAM.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
+      if (CES) CES.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
       if (window.lbzPush && stav.rola !== "zakaznik") lbzPush.obnov(db);
       if (window.lbzAktivita && stav.rola !== "zakaznik") lbzAktivita.start(db);
       odznakObnov();
