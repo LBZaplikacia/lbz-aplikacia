@@ -149,6 +149,7 @@
       '<span class="head-tl"><button class="btn btn-ikona" data-d="mes-" aria-label="Predošlý mesiac">◀</button><button class="btn btn-ikona" data-d="mes+" aria-label="Ďalší mesiac">▶</button></span></div>' +
       '<div class="f-seg d-zalozky" role="group">' +
       (D.moja && D.moja.osoba ? '<button data-d-zal="mesiac" aria-pressed="' + (z === "mesiac") + '">Môj mesiac</button><button data-d-zal="ziadost" aria-pressed="' + (z === "ziadost") + '">Dovolenka / PN</button>' : "") +
+        ((D.moja && D.moja.osoba) || citatel() ? '<button data-d-zal="podpis" aria-pressed="' + (z === "podpis") + '">✍️ Na podpis</button>' : "") +
       (citatel() ? '<button data-d-zal="tim" aria-pressed="' + (z === "tim" || z === "osoba") + '">Tím</button>' : "") + "</div>" + (citatel() ? vyberZam() : "") +
       (D.sprava ? '<p class="f-sprava f-' + D.sprava.typ + '">' + esc(D.sprava.text) + ' <button class="btn-link" data-d="zavri-spravu">✕</button></p>' : "");
   }
@@ -427,8 +428,10 @@
   }
   function prekresli() {
     if (!koren || !koren.isConnected) return;
-    var z = D.zalozka, obsah = z === "tim" ? pohladTim() : z === "ziadost" ? pohladZiadost() : pohladMesiac();
-    koren.innerHTML = '<div class="d-modul">' + (D.moja && D.moja.osoba && z !== "tim" && z !== "osoba" ? '<div class="grid d-grid-karta">' + kartaHtml() + "</div>" : "") + hlava() + obsah + "</div>" + dialogHtml();
+    var z = D.zalozka, obsah = z === "podpis" ? '<div id="pm-root"></div>' : z === "tim" ? pohladTim() : z === "ziadost" ? pohladZiadost() : pohladMesiac();
+    koren.innerHTML = '<div class="d-modul' + (z === "podpis" ? " pm-zal" : "") + '">' + (D.moja && D.moja.osoba && z !== "tim" && z !== "osoba" && z !== "podpis" ? '<div class="grid d-grid-karta">' + kartaHtml() + "</div>" : "") + hlava() + obsah + "</div>" + dialogHtml();
+    var pmr = document.getElementById("pm-root");
+    if (pmr && window.LBZ_MESACNY) LBZ_MESACNY.mount(pmr, { citatel: citatel() });
     var typ = document.getElementById("d-z-typ");
     if (typ && D.predTyp) typ.value = D.predTyp;
     if (typ) { if (D.oprava && !D.opravaVypl) { D.opravaVypl = true; typ.value = "oprava"; document.getElementById("d-z-od").value = D.oprava.datum; document.getElementById("d-z-cod").value = cas(D.oprava.prichod); document.getElementById("d-z-cdo").value = cas(D.oprava.odchod); } polia(typ.value); }
@@ -615,16 +618,17 @@
   }
 
   window.LBZ_DOCHADZKA = {
-    nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; D.moja = null; D.data = null; D.prehlad = null; if (DB) nacitajMoju(); },
+    nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; if (window.LBZ_MESACNY) LBZ_MESACNY.nastavDb(klient, rola); D.moja = null; D.data = null; D.prehlad = null; if (DB) nacitajMoju(); },
     mozem: function () { return !!DB && ["prevadzka", "zakaznik"].indexOf(ROLA) === -1; },   // spoločný účet prevádzky si dochádzku nezapisuje; furman len so svojím osobným účtom (bez osoby sa karta neukáže)
     mount: function (el) {
       koren = el;
       el.addEventListener("click", klik); el.addEventListener("change", zmena); el.addEventListener("submit", odoslanie);
       if (!D.mesiac) D.mesiac = prvyDen(new Date());
-      if (D.moja && !D.moja.osoba && D.zalozka !== "tim" && D.zalozka !== "osoba") D.zalozka = citatel() ? "tim" : "mesiac";
+      if (D.moja && !D.moja.osoba && D.zalozka !== "tim" && D.zalozka !== "osoba" && D.zalozka !== "podpis") D.zalozka = citatel() ? "tim" : "mesiac";
       if (!D.moja && citatel() && D.zalozka === "mesiac") D.zalozka = "mesiac";
       prekresli(); obnov();
     },
+    zalozka: function (z) { D.zalozka = z; D.sprava = null; },
     karta: function () { return kartaHtml(); },
     maKartu: function () { return !D.moja || !!(D.moja && (D.moja.osoba || D.moja.chyba)); }
   };
