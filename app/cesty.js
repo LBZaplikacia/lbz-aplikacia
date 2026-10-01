@@ -62,19 +62,46 @@
   function kopia(c) { return JSON.parse(JSON.stringify(c)); }
 
   // ---------- km cez Google ----------
-  function prepocitajKm() {
-    var f = C.f; if (!f) return;
-    C.km = true; kresli();
+  // trasa cez Google: km aj čas jazdy medzi bodmi (min)
+  function googleTrasa(f, body) {
     var zac = f.miesto_zac && !/^Sedlo Zbojská/.test(f.miesto_zac) ? f.miesto_zac : START;
     var kon = f.miesto_kon && !/^Sedlo Zbojská/.test(f.miesto_kon) ? f.miesto_kon : START;
-    DB.functions.invoke("cesty", { body: { akcia: "km", start: zac, ciel: kon, body: (f.body || []).map(function (b) { return { lat: b.lat, lng: b.lng, adresa: b.adresa || b.miesto }; }) } })
-      .then(function (r) {
-        C.km = false;
-        var d = r && r.data; if (C.f !== f) return;
-        if (!d || !d.ok) { C.sprava = { typ: "chyba", text: (d && d.text) || "Kilometre sa nepodarilo vypočítať – zadajte ich ručne" }; kresli(); return; }
-        (f.body || []).forEach(function (b, i) { b.km = d.useky[i]; });
-        f.km_spat = d.useky[d.useky.length - 1]; f.km = d.km; kresli();
-      }).catch(function () { C.km = false; C.sprava = { typ: "chyba", text: "Kilometre sa nepodarilo vypočítať – zadajte ich ručne" }; kresli(); });
+    return DB.functions.invoke("cesty", { body: { akcia: "km", start: zac, ciel: kon, body: (body || []).map(function (b) { return { lat: b.lat, lng: b.lng, adresa: b.adresa || b.miesto }; }) } })
+      .then(function (r) { var d = r && r.data; if (!d || !d.ok) throw new Error((d && d.text) || "Google"); return d; });
+  }
+  function sucetJazdy(d) { return (d.casy || []).reduce(function (s, x) { return s + (x || 0); }, 0); }
+  function sucetMin(body) { return (body || []).reduce(function (s, b) { return s + (+b.min || 0); }, 0); }
+  function ulozCasy(f, d) { (f.body || []).forEach(function (b, i) { b.jazda = d.casy ? d.casy[i] : null; }); f.jazda_spat = d.casy ? d.casy[d.casy.length - 1] : null; }
+  // posun konca cesty o zmenu (jazda + zdržanie) – len pri úprave zastávok
+  function posunKoniec(f, minuty) {
+    if (!f.koniec || !minuty) return;
+    f.koniec = new Date(new Date(f.koniec).getTime() + Math.round(minuty) * 60000).toISOString();
+    C.sprava = { typ: "ok", text: "Čas návratu " + (minuty > 0 ? "posunutý o +" : "posunutý o −") + Math.abs(Math.round(minuty)) + " min (jazda + zdržanie) – skontroluj" };
+  }
+  function prepocitajKm(rezim, stare) {
+    var f = C.f; if (!f) return;
+    if (rezim !== "casy") { C.km = true; kresli(); }
+    var stareP = rezim === "posun" && stare ? googleTrasa(f, stare.body).then(sucetJazdy).catch(function () { return null; }) : Promise.resolve(null);
+    stareP.then(function (staraJazda) {
+      return googleTrasa(f, f.body).then(function (d) {
+        C.km = false; if (C.f !== f) return;
+        ulozCasy(f, d);
+        if (rezim !== "casy") { (f.body || []).forEach(function (b, i) { b.km = d.useky[i]; }); f.km_spat = d.useky[d.useky.length - 1]; f.km = d.km; }
+        if (rezim === "posun" && staraJazda != null) posunKoniec(f, (sucetJazdy(d) + sucetMin(f.body)) - (staraJazda + stare.min));
+        kresli();
+      });
+    }).catch(function () { C.km = false; if (rezim !== "casy") C.sprava = { typ: "chyba", text: "Kilometre sa nepodarilo vypočítať – zadajte ich ručne" }; kresli(); });
+  }
+  // odhad príchodu na každé miesto: jazda z Google + zadané zdržanie; zvyšný čas sa rozdelí na miesta bez zadaného zdržania
+  function odhadPrichodov(f) {
+    var b = f.body || [];
+    if (!f.zaciatok || !b.length || !b.every(function (x) { return x.jazda != null; })) return null;
+    var jazda = b.reduce(function (s, x) { return s + x.jazda; }, 0) + (f.jazda_spat || 0), zadane = sucetMin(b);
+    var bez = b.filter(function (x) { return !+x.min; }).length, celk = f.koniec ? (new Date(f.koniec) - new Date(f.zaciatok)) / 60000 : null;
+    var navyse = celk != null && bez ? Math.max(0, (celk - jazda - zadane) / bez) : 0;
+    var t = new Date(f.zaciatok).getTime(), out = [];
+    b.forEach(function (x) { t += x.jazda * 60000; out.push(new Date(t).toISOString()); t += ((+x.min) || navyse) * 60000; });
+    return out;
   }
 
   // ---------- zobrazenie ----------
@@ -121,10 +148,11 @@
       if (C.vloz === i) return '<li class="cp-vlozf"><input id="cp-vloz-txt" placeholder="Miesto, napr. Metro Banská Bystrica" autocomplete="off"><button class="btn btn-primary" data-cp="vloz-ok">Pridať</button><button class="btn" data-cp="vloz-zrus">✕</button></li>';
       return '<li style="padding:0;border:0"><button class="cp-vloz" data-cp-vloz="' + i + '">➕ vložiť miesto sem</button></li>';
     };
+    var odhad = odhadPrichodov(f);
     var zoznam = '<ul class="cp-body"><li><span class="cp-m"><b>Štart:</b> ' + esc(f.miesto_zac) + "</span></li>" + vloz(0) +
       b.map(function (x, i) {
         return '<li class="' + (x.typ === "doplnene" ? "cp-dopl" : "") + '"><span class="cp-m"><b>' + (i + 1) + ". " + esc(x.miesto || x.adresa) + "</b>" +
-          (x.adresa && x.adresa !== x.miesto ? "<small>" + esc(x.adresa) + "</small>" : "") + (x.typ === "doplnene" ? "<small>doplnené furmanom</small>" : "") + "</span>" +
+          (x.adresa && x.adresa !== x.miesto ? "<small>" + esc(x.adresa) + "</small>" : "") + (x.typ === "doplnene" ? "<small>doplnené furmanom</small>" : "") + (odhad ? '<small class="cp-odhad">príchod ≈ ' + esc(hm(odhad[i])) + (x.jazda != null ? " · jazda " + x.jazda + " min" : "") + "</small>" : "") + "</span>" +
           '<span class="cp-km">' + (x.km != null ? "+" + esc(kmTxt(x.km)) : "") + "</span>" +
           '<label class="cp-min" title="Ako dlho si sa tu zdržal (minúty)">⏱<input type="number" min="0" max="600" step="5" inputmode="numeric" data-cp-min="' + i + '" value="' + esc(x.min || "") + '" placeholder="min"' + (zamk ? " disabled" : "") + "></label>" +
           (zamk ? "" : '<button class="cp-ik" data-cp-hore="' + i + '" aria-label="Vyššie">↑</button><button class="cp-ik" data-cp-dole="' + i + '" aria-label="Nižšie">↓</button><button class="cp-ik" data-cp-zmaz="' + i + '" aria-label="Odstrániť">✕</button>') +
@@ -191,21 +219,22 @@
         nacitaj();
       }).catch(function (e) { C.prace = false; C.sprava = { typ: "chyba", text: chyba(e) }; kresli(); });
   }
-  function zmenaBodov() { C.f.km = null; C.f.km_spat = null; kresli(); prepocitajKm(); }
+  function zapamataj() { nacitajFormular(); C.stare = { body: kopia(C.f.body || []), min: sucetMin(C.f.body) }; }
+  function zmenaBodov() { var st = C.stare; C.stare = null; C.f.km = null; C.f.km_spat = null; kresli(); prepocitajKm("posun", st); }
 
   function klik(e) {
     var t = e.target.closest("button, [data-cp]"); if (!t || !koren.contains(t)) return;
     var ds = t.dataset;
-    if (ds.cpUprav) { var c = cesta(+ds.cpUprav); if (!c) return; C.uprav = c.id; C.f = kopia(c); C.vloz = null; C.sprava = null; kresli(); if (C.f.km == null && (C.f.body || []).length) prepocitajKm(); var ed = document.getElementById("cp-editor"); if (ed) ed.scrollIntoView({ block: "start", behavior: "smooth" }); return; }
+    if (ds.cpUprav) { var c = cesta(+ds.cpUprav); if (!c) return; C.uprav = c.id; C.f = kopia(c); C.vloz = null; C.sprava = null; kresli(); if ((C.f.body || []).length) prepocitajKm(C.f.km == null ? null : "casy"); var ed = document.getElementById("cp-editor"); if (ed) ed.scrollIntoView({ block: "start", behavior: "smooth" }); return; }
     if (ds.cpSchval) {
       rpc("cp_schval", { p_id: +ds.cpSchval, p_ano: ds.ano === "1" }).then(function (r) { C.sprava = { typ: r && r.ok ? "ok" : "chyba", text: r && r.ok ? (ds.ano === "1" ? "Schválené" : "Schválenie zrušené") : (r && r.text) || "Chyba" }; nacitaj(); window.dispatchEvent(new Event("lbz-prekresli")); })
         .catch(function (x) { lbzInfo(chyba(x)); });
       return;
     }
     if (ds.cpVloz != null && ds.cpVloz !== "") { nacitajFormular(); C.vloz = +ds.cpVloz; kresli(); var v = document.getElementById("cp-vloz-txt"); if (v) v.focus(); return; }
-    if (ds.cpHore != null && ds.cpHore !== "") { nacitajFormular(); var i = +ds.cpHore; if (i > 0) { var b = C.f.body; var x = b[i]; b[i] = b[i - 1]; b[i - 1] = x; zmenaBodov(); } return; }
-    if (ds.cpDole != null && ds.cpDole !== "") { nacitajFormular(); var j = +ds.cpDole, bb = C.f.body; if (j < bb.length - 1) { var y = bb[j]; bb[j] = bb[j + 1]; bb[j + 1] = y; zmenaBodov(); } return; }
-    if (ds.cpZmaz != null && ds.cpZmaz !== "") { nacitajFormular(); C.f.body.splice(+ds.cpZmaz, 1); zmenaBodov(); return; }
+    if (ds.cpHore != null && ds.cpHore !== "") { zapamataj(); var i = +ds.cpHore; if (i > 0) { var b = C.f.body; var x = b[i]; b[i] = b[i - 1]; b[i - 1] = x; zmenaBodov(); } return; }
+    if (ds.cpDole != null && ds.cpDole !== "") { zapamataj(); var j = +ds.cpDole, bb = C.f.body; if (j < bb.length - 1) { var y = bb[j]; bb[j] = bb[j + 1]; bb[j + 1] = y; zmenaBodov(); } return; }
+    if (ds.cpZmaz != null && ds.cpZmaz !== "") { zapamataj(); C.f.body.splice(+ds.cpZmaz, 1); zmenaBodov(); return; }
     var a = ds.cp;
     if (a === "mes-" || a === "mes+") {
       var p = C.m.split("-"), d = new Date(+p[0], +p[1] - 1 + (a === "mes+" ? 1 : -1), 1);
@@ -222,7 +251,7 @@
     else if (a === "vloz-ok") {
       var txt = (document.getElementById("cp-vloz-txt") || {}).value || ""; txt = txt.trim();
       if (!txt) return;
-      nacitajFormular(); C.f.body.splice(C.vloz, 0, { miesto: txt, adresa: txt, typ: "doplnene" }); C.vloz = null; zmenaBodov();
+      zapamataj(); C.f.body.splice(C.vloz, 0, { miesto: txt, adresa: txt, typ: "doplnene" }); C.vloz = null; zmenaBodov();
     }
     else if (a === "vloz-zrus") { C.vloz = null; kresli(); }
     else if (a === "km") { nacitajFormular(); prepocitajKm(); }
@@ -239,6 +268,9 @@
   function zmena(e) {
     if (e.target.id === "cp-osoba") { C.osoba = +e.target.value; C.uprav = null; C.f = null; nacitaj(); return; }
     if (["cp-zac", "cp-kon", "cp-km"].indexOf(e.target.id) > -1 && C.f) { nacitajFormular(); kresli(); }
+    if (e.target.dataset && e.target.dataset.cpMin != null && C.f) {
+      var pred = sucetMin(C.f.body); nacitajFormular(); posunKoniec(C.f, sucetMin(C.f.body) - pred); kresli();
+    }
   }
   function klaves(e) { if (e.target.id === "cp-vloz-txt" && e.key === "Enter") { e.preventDefault(); var b = koren.querySelector('[data-cp="vloz-ok"]'); if (b) b.click(); } }
 

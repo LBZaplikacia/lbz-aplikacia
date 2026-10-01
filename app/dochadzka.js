@@ -85,14 +85,17 @@
   function vykazHtml() {
     if (!D.vykaz) return "";
     var d = D.data;
-    if (!d || D.osoba) return '<div class="ds-vykaz"><p class="muted">Načítavam…</p></div>';
+    var nav = '<div class="ds-vmes"><button class="ds-vmes-tl" data-d="vmes-" aria-label="Predošlý mesiac">◀</button><b>' + esc(mesiacNazov(D.mesiac || prvyDen(new Date()))) +
+      '</b><button class="ds-vmes-tl" data-d="vmes+" aria-label="Ďalší mesiac"' + (D.mesiac >= prvyDen(new Date()) ? " disabled" : "") + ">▶</button></div>";
+    if (!d || D.osoba) return '<div class="ds-vykaz">' + nav + '<p class="muted">Načítavam…</p></div>';
     var r = (d.riadky || []).slice().sort(function (a, b) { return a.datum < b.datum ? 1 : -1; });
-    if (!r.length) return '<div class="ds-vykaz"><p class="muted">Tento mesiac zatiaľ bez záznamov.</p></div>';
+    if (!r.length) return '<div class="ds-vykaz">' + nav + '<p class="muted">V tomto mesiaci nie sú záznamy.</p></div>';
     var skrat = { "ADMINISTRATÍVA": "ADMIN.", "BUCHTOMOBIL": "BUCHTO." };
-    return '<div class="ds-vykaz"><table class="ds-tab"><thead><tr><th>Deň</th><th>Miesto</th><th>Čas</th><th>Spolu</th></tr></thead><tbody>' + r.map(function (x) {
+    return '<div class="ds-vykaz">' + nav + '<table class="ds-tab"><thead><tr><th>Deň</th><th>Miesto</th><th>Čas</th><th>Spolu</th></tr></thead><tbody>' + r.map(function (x) {
       var p = String(x.datum).split("-"), mi = x.typ === "praca" ? (x.miesto || "") : TYPY[x.typ];
       var c = x.prichod || x.odchod ? esc(cas(x.prichod) || "-") + " - " + esc(x.prichod && !x.odchod ? "…" : cas(x.odchod) || "-") : "-";
-      return '<tr><td class="ds-dat">' + +p[2] + "." + +p[1] + ".</td><td>" + esc(skrat[mi] || mi) + "</td><td>" + c +
+      var svv = window.lbzSviatok ? window.lbzSviatok(x.datum) : "";
+      return '<tr' + (svv ? ' class="ds-sviatok" title="' + esc(svv) + '"' : "") + '><td class="ds-dat">' + +p[2] + "." + +p[1] + ".</td><td>" + esc(skrat[mi] || mi) + "</td><td>" + c +
         (x.prestavka_min ? '<br><span class="ds-prest">(prest. ' + hodiny(x.prestavka_min) + ")</span>" : "") + '</td><td class="ds-hod">' + (x.odpracovane_min != null ? hodiny(x.odpracovane_min) : "") + "</td></tr>";
     }).join("") + "</tbody></table></div>";
   }
@@ -156,8 +159,9 @@
     r.forEach(function (x) { sum += Number(x.odpracovane_min || 0); str += Number(x.stravne || 0); if (x.typ === "praca") dni[x.datum] = 1; });
     var riadky = r.map(function (x) {
       var otv = x.typ === "praca" && x.prichod && !x.odchod;
-      return '<tr class="' + (vikend(x.datum) ? "d-vikend " : "") + (x.typ !== "praca" ? "d-abs" : "") + '">' +
-        '<td class="c-den">' + esc(denSk(x.datum)) + '</td><td class="c-miesto">' + esc(x.typ === "praca" ? (x.miesto || "") : TYPY[x.typ]) + "</td>" +
+      var sv = window.lbzSviatok ? window.lbzSviatok(x.datum) : "";
+      return '<tr class="' + (vikend(x.datum) ? "d-vikend " : "") + (sv ? "d-sviatok " : "") + (x.typ !== "praca" ? "d-abs" : "") + '">' +
+        '<td class="c-den">' + esc(denSk(x.datum)) + (sv ? '<br><span class="d-sv">🎉 ' + esc(sv) + "</span>" : "") + '</td><td class="c-miesto">' + esc(x.typ === "praca" ? (x.miesto || "") : TYPY[x.typ]) + "</td>" +
         '<td class="num c-cas">' + esc(cas(x.prichod)) + (x.prichod || x.odchod ? "–" : "") + esc(otv ? "…" : cas(x.odchod)) + "</td>" +
         '<td class="num c-prest">' + (x.prestavka_min ? '<span class="c-mob">prestávka </span>' + hodiny(x.prestavka_min) : "") + '</td><td class="num c-hod"><b>' + (x.odpracovane_min != null ? hodiny(x.odpracovane_min) + '<span class="c-mob"> h</span>' : "") + "</b></td>" +
         '<td class="num c-str">' + (Number(x.stravne) ? '<span class="c-mob">stravné </span>' + eur(x.stravne) : "") + "</td>" +
@@ -334,6 +338,10 @@
         D.prace++; kresli();
         poloha().then(function (g) { D.prace--; po(rpc("dochadzka_odchod", { p_gps: g, p_poznamka: null }), function () { if (koren) obnov(); }); });
         break;
+      case "vmes-": case "vmes+":
+        var pv = (D.mesiac || prvyDen(new Date())).split("-"), nv = new Date(+pv[0], +pv[1] - 1 + (d.d === "vmes+" ? 1 : -1), 1);
+        if (iso(nv) > prvyDen(new Date())) break;
+        D.mesiac = iso(nv); D.osoba = null; D.data = null; kresli(); nacitajMesiac(); break;
       case "mes-": case "mes+":
         var p = D.mesiac.split("-"), nd = new Date(+p[0], +p[1] - 1 + (d.d === "mes+" ? 1 : -1), 1); D.mesiac = iso(nd); D.data = null; D.prehlad = null; prekresli(); obnov(); break;
       case "zavri-spravu": D.sprava = null; kresli(); break;

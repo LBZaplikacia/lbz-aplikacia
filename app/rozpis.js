@@ -117,7 +117,8 @@
     if (!dni.length) return "";
     return '<div class="r-obal"><table class="r-tab"><thead><tr><th class="r-poz"></th>' + dni.map(function (d) {
       var mimo = mesiac && d.getMonth() !== mesiac.getMonth();
-      return '<th class="' + (iso(d) === dn ? "r-dnes" : "") + (mimo ? " r-mimo" : "") + '"><span class="r-den">' + DNI[(d.getDay() + 6) % 7] + '</span> <span class="num">' + kratkyDatum(d) + "</span></th>";
+      var sv = window.lbzSviatok ? window.lbzSviatok(iso(d)) : "";
+      return '<th class="' + (iso(d) === dn ? "r-dnes" : "") + (mimo ? " r-mimo" : "") + (sv ? " r-sviatok" : "") + '"' + (sv ? ' title="' + esc(sv) + '"' : "") + '><span class="r-den">' + DNI[(d.getDay() + 6) % 7] + '</span> <span class="num">' + kratkyDatum(d) + "</span>" + (sv ? '<span class="r-sv">' + esc(sv) + "</span>" : "") + "</th>";
     }).join("") + "</tr></thead><tbody>" + pozicie().map(function (p) {
       return '<tr><th class="r-poz">' + esc(p.nazov) + "</th>" + dni.map(function (d) { return bunka(iso(d), p); }).join("") + "</tr>";
     }).join("") + "</tbody></table></div>";
@@ -132,7 +133,8 @@
       }).join("");
       if (!riadky && di < dn) continue;
       if (di < dn && od < koniec && skryvamMinule()) continue;
-      out.push('<section class="card r-den-karta' + (di === dn ? " r-dnes-karta" : "") + '"><h3><span>' + DNI_DLHE[(d.getDay() + 6) % 7] + ' <span class="num">' + kratkyDatum(d) + "</span></span>" +
+      var svd = window.lbzSviatok ? window.lbzSviatok(di) : "";
+      out.push('<section class="card r-den-karta' + (di === dn ? " r-dnes-karta" : "") + (svd ? " r-sviatok-karta" : "") + '"><h3><span>' + DNI_DLHE[(d.getDay() + 6) % 7] + ' <span class="num">' + kratkyDatum(d) + "</span>" + (svd ? ' <span class="r-sv">🎉 ' + esc(svd) + "</span>" : "") + "</span>" +
         (mozemUpravovat() && !minule(di) ? '<button class="btn r-mini" data-r-pridat="' + di + '|">+ Smena</button>' : "") + "</h3>" +
         (riadky || '<p class="muted" style="margin:0">Nikto nie je zapísaný.</p>') + "</section>");
     }
@@ -150,7 +152,7 @@
       ms.forEach(function (m) { if (!vid[m.osoba]) { vid[m.osoba] = 1; var o = osoba(m.osoba); if (o) ludia.push(o); } });
       var volne = ((R.data && R.data.miesta) || []).some(function (m) { return m.datum === di && !m.osoba; });
       var max = 99;   // v kalendári vidno všetkých na smene (nie +N)
-      bunky.push('<button class="rk-den' + (mimo ? " rk-mimo" : "") + (di === dn ? " rk-dnes" : "") + (di === vyb ? " rk-vyb" : "") + ((d.getDay() + 6) % 7 >= 5 ? " rk-vikend" : "") + '" data-r-den="' + di + '">' +
+      bunky.push('<button class="rk-den' + (mimo ? " rk-mimo" : "") + (di === dn ? " rk-dnes" : "") + (di === vyb ? " rk-vyb" : "") + ((d.getDay() + 6) % 7 >= 5 ? " rk-vikend" : "") + (window.lbzSviatok && window.lbzSviatok(di) ? " rk-sviatok" : "") + '" data-r-den="' + di + '"' + (window.lbzSviatok && window.lbzSviatok(di) ? ' title="' + esc(window.lbzSviatok(di)) + '"' : "") + '>' +
         '<span class="rk-cislo">' + d.getDate() + "</span>" +
         '<span class="rk-ludia">' + ludia.slice(0, max).map(function (o) { return '<i style="background:' + esc(o.farba) + ";color:" + textNa(o.farba) + '">' + esc(String(o.meno).slice(0, 4)) + "</i>"; }).join("") +
         (ludia.length > max ? '<i class="rk-viac">+' + (ludia.length - max) + "</i>" : "") + "</span>" + (volne ? '<span class="rk-volne" title="Voľná smena"></span>' : "") + "</button>");
@@ -507,7 +509,8 @@
       else {
         var dn = iso(dnes()), osobaK = function (id) { return (k.osoby || []).filter(function (o) { return o.id === id; })[0]; };
         var pozK = function (kod) { return ((k.pozicie || []).filter(function (p) { return p.kod === kod; })[0] || {}).nazov || kod; };
-        if (k.ja) {
+        var vedenie = ["it", "ceo"].indexOf(ROLA) > -1;
+        if (k.ja && !vedenie) {
           var moje = (k.miesta || []).filter(function (m) { return m.osoba === k.ja; }).slice(0, 4);
           obsah = moje.length ? '<div class="rows">' + moje.map(function (m) {
             var d = zIso(m.datum);
@@ -519,11 +522,26 @@
             var o = osobaK(m.osoba) || {};
             return '<span class="r-leg" style="background:' + esc(o.farba) + ";color:" + textNa(o.farba) + '" title="' + esc(pozK(m.pozicia)) + '">' + esc(o.meno) + " · " + esc(pozK(m.pozicia)) + "</span>";
           }).join("") + "</div>" : '<p class="muted" style="margin:0">Dnes nie je nikto zapísaný.</p>';
+          if (vedenie) obsah = '<h4 class="r-k-pod">📅 Dnes podľa rozpisu</h4>' + obsah;
         }
       }
       if (R.kartaZ === undefined || R.kartaZ === null) { R.kartaZ = false; rpc("rozpis_ziadosti").then(function (z) { R.kartaZ = z && z.ok ? z : false; if (z && z.ok && (z.caka || []).length) window.dispatchEvent(new Event("lbz-prekresli")); }).catch(function () { /* */ }); }
       var nz = R.kartaZ ? (R.kartaZ.caka || []).filter(function (z) { return z.smiem; }).length : 0;
-      return '<section class="card"><h3>' + (k.ja ? "Moje smeny" : "Dnes v práci") + "</h3>" + obsah +
+      // vedenie (IT, CEO): naživo, kto je práve prihlásený v práci (z dochádzky)
+      var vedenie2 = ["it", "ceo"].indexOf(ROLA) > -1, teraz = "";
+      if (vedenie2 && DB) {
+        if (!R.kartaV || Date.now() - R.kartaV.kedy > 120000) {
+          R.kartaV = { kedy: Date.now(), d: R.kartaV && R.kartaV.d };
+          var m0 = dnes(); rpc("dochadzka_prehlad", { p_mesiac: iso(new Date(m0.getFullYear(), m0.getMonth(), 1, 12)) })
+            .then(function (d) { R.kartaV.d = d && d.ok !== false ? d : null; window.dispatchEvent(new Event("lbz-prekresli")); }).catch(function () { /* */ });
+        }
+        var vp = R.kartaV.d && R.kartaV.d.v_praci;
+        teraz = '<h4 class="r-k-pod">🟢 Teraz v práci' + (vp ? ' <span class="pill ok num">' + vp.length + "</span>" : "") + "</h4>" +
+          (!vp ? '<p class="muted" style="margin:0">Načítavam…</p>' : vp.length ? '<div class="rows">' + vp.map(function (x) {
+            return '<div class="row"><span><b>' + esc(x.osoba) + '</b> <span class="muted">' + esc(x.miesto || "") + '</span></span><span class="num">od ' + esc(String(new Date(x.prichod).toTimeString()).slice(0, 5)) + "</span></div>";
+          }).join("") + "</div>" : '<p class="muted" style="margin:0">Nikto nie je prihlásený v práci.</p>');
+      }
+      return '<section class="card"><h3>' + (k.ja && !vedenie2 ? "Moje smeny" : "Kto je v práci") + "</h3>" + teraz + obsah +
         (nz ? '<p class="s-varovanie" style="margin:0">🔄 ' + nz + (nz === 1 ? " žiadosť" : nz < 5 ? " žiadosti" : " žiadostí") + " o zmenu smien čaká na tvoje potvrdenie</p>" : "") +
         '<button class="btn" data-mod="rozpis">Otvoriť rozpis</button></section>';
     }

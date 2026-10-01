@@ -1410,3 +1410,18 @@ body.pdfv-otvorene { overflow: hidden; }
 .b-st-riadok input { width: 20px; height: 20px; vertical-align: middle; }
 .d-vyber-zam { margin: 8px 0 12px; max-width: 420px; }
 .d-vyber-zam select { width: 100%; }
+/* v0.29.23 – sviatky, výkaz po mesiacoch, kto je v práci */
+.r-tab th.r-sviatok, .rk-sviatok { background: #fbe0dc; }
+.r-sv { display: block; font-size: 11px; font-weight: 600; color: #b3261e; white-space: normal; }
+.r-den-karta.r-sviatok-karta { border-left: 4px solid #d9534f; }
+.r-den-karta h3 .r-sv { display: inline; }
+.d-tab tr.d-sviatok td { background: #fbe0dc; }
+.d-sv { font-size: 11px; font-weight: 600; color: #b3261e; }
+.ds-tab tr.ds-sviatok td { background: #fbe0dc; }
+.ds-vmes { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0 8px; text-transform: capitalize; }
+.ds-vmes-tl { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; min-width: 40px; min-height: 36px; font-size: 16px; cursor: pointer; }
+.ds-vmes-tl:disabled { opacity: .35; cursor: default; }
+.r-k-pod { margin: 10px 0 6px; font-size: 14px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .r-tab th.r-sviatok, :root:not([data-theme="light"]) .rk-sviatok, :root:not([data-theme="light"]) .d-tab tr.d-sviatok td, :root:not([data-theme="light"]) .ds-tab tr.ds-sviatok td { background: #4a2420; } }
+:root[data-theme="dark"] .r-tab th.r-sviatok, :root[data-theme="dark"] .rk-sviatok, :root[data-theme="dark"] .d-tab tr.d-sviatok td, :root[data-theme="dark"] .ds-tab tr.ds-sviatok td { background: #4a2420; }
+.cp-odhad { color: var(--muted); }
