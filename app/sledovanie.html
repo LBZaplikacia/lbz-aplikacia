@@ -76,6 +76,7 @@
       mapa = L.map(mapaEl, { zoomControl: true, attributionControl: true });
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenStreetMap" }).addTo(mapa);
       mapa.setView([48.7, 19.7], 7);
+      setTimeout(function () { mapa.invalidateSize(); }, 50);
     }
     if (d.cesta && d.cesta !== poslednaCesta) {
       poslednaCesta = d.cesta;
@@ -97,10 +98,9 @@
     if (prvy) {
       var hranice = ciara ? ciara.getBounds() : null;
       if (!hranice && d.auto && d.ciel) hranice = L.latLngBounds([[d.auto.lat, d.auto.lng], [d.ciel.lat, d.ciel.lng]]);
-      if (hranice) { mapa.fitBounds(hranice, { padding: [50, 50], maxZoom: 15 }); prvy = false; }
-      else if (d.auto || d.ciel) { var p = d.auto || d.ciel; mapa.setView([p.lat, p.lng], 13); prvy = false; }
+      if (hranice) { mapa.fitBounds(hranice, { padding: [50, 50], maxZoom: 15, animate: false }); prvy = false; }
+      else if (d.auto || d.ciel) { var p = d.auto || d.ciel; mapa.setView([p.lat, p.lng], 13, { animate: false }); prvy = false; }
     }
-    setTimeout(function () { mapa.invalidateSize(); }, 50);
   }
   function skryMapu() { mapaEl.style.display = "none"; }
 
@@ -153,11 +153,12 @@
         var f = Math.min(1, (Date.now() - start) / TRVANIE);
         if (f >= 1) { vykresli({ ok: true, stav: "dorucene", cislo: "UKÁŽKA", cas: new Date().toISOString() }); setTimeout(function () { location.reload(); }, 6000); return; }
         var p = bodNa(f), zostava = (1 - f) * (d.trvanie_s || 3600);
-        var ki = 1; while (ki < dlzky.length - 1 && dlzky[ki] < f * spolu) ki++; var zbytok = body.slice(ki);
+        var ki = 1; while (ki < dlzky.length - 1 && dlzky[ki] < f * spolu) ki++; var zv = [p].concat(body.slice(ki));
+        if (!mapa) { mapaEl.style.display = "block"; mapa = L.map(mapaEl).setView([d.ciel.lat, d.ciel.lng], 10, { animate: false }); L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenStreetMap" }).addTo(mapa); }
+        if (ciara) { ciara.setLatLngs(zv); ciaraObrys.setLatLngs(zv); }
+        else { ciaraObrys = L.polyline(zv, { color: "#583934", weight: 8, opacity: 0.35 }).addTo(mapa); ciara = L.polyline(zv, { color: "#d1a73a", weight: 5, opacity: 0.95 }).addTo(mapa); }
         vykresli({ ok: true, stav: "na_ceste", cislo: "UKÁŽKA", pred_vami: f < 0.33 ? 2 : f < 0.66 ? 1 : 0, ciel: d.ciel,
           auto: { lat: p[0], lng: p[1], kedy: new Date().toISOString() }, eta_live: new Date(Date.now() + zostava * 1000 + (f < 0.33 ? 10 : f < 0.66 ? 5 : 0) * 60000).toISOString() });
-        if (ciara) { var zv = [p].concat(zbytok); ciara.setLatLngs(zv); ciaraObrys.setLatLngs(zv); }
-        else { var zv2 = [p].concat(zbytok); ciaraObrys = L.polyline(zv2, { color: "#583934", weight: 8, opacity: 0.35 }).addTo(mapa); ciara = L.polyline(zv2, { color: "#d1a73a", weight: 5, opacity: 0.95 }).addTo(mapa); mapa.fitBounds(ciara.getBounds(), { padding: [50, 50] }); }
         setTimeout(krok, 250);
       }
       krok();
