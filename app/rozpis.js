@@ -1,13 +1,13 @@
 // LBZ aplikácia – modul Rozpis práce (smeny)
 // Týždeň / mesiac ako v tabuľke „Rozpis práce LBZ 2026“: pozície × dni, farby ľudí.
-// Vedenie (IT, CEO, prevádzkár) mení priamo. Zamestnanec posiela žiadosti: namiesto kolegu / výmena → potvrdí kolega,
+// Vedenie (IT, CEO, prevádzkár) mení priamo. IT/CEO: vzory smien → „Vygenerovať rozpis“ na mesiac (návrh → Zverejniť). Zamestnanec posiela žiadosti: namiesto kolegu / výmena → potvrdí kolega,
 // nová smena / odhlásenie → potvrdí vedenie. Spoločné účty rozpis len prezerajú. Každá zmena ide do histórie (rozpis_log).
 
 (function () {
   "use strict";
 
   var DB = null, ROLA = null, koren = null;
-  var R = { pohlad: "tyzden", od: null, data: null, dialog: null, sprava: null, nacitavam: false, historia: null, karta: null, ziadosti: null };
+  var R = { pohlad: "tyzden", od: null, data: null, dialog: null, sprava: null, nacitavam: false, historia: null, karta: null, ziadosti: null, navrh: [], bilancia: null, vzory: null };
   var DNI = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
   var DNI_DLHE = ["Pondelok", "Utorok", "Streda", "Štvrtok", "Piatok", "Sobota", "Nedeľa"];
   var MESIACE = ["január", "február", "marec", "apríl", "máj", "jún", "júl", "august", "september", "október", "november", "december"];
@@ -51,7 +51,64 @@
       else R.data = d;
       prekresli();
     }).catch(function (e) { R.nacitavam = false; R.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); })
-      .then(nacitajZiadosti);
+      .then(nacitajNavrh).then(nacitajZiadosti);
+  }
+  // ---------- generovaný návrh rozpisu (len IT a CEO) ----------
+  function vedenie() { return ["it", "ceo"].indexOf(ROLA) > -1; }
+  function nacitajNavrh() {
+    if (!DB || !vedenie()) { R.navrh = []; return; }
+    var r = rozsah(), m1 = r.mesiac, m2 = new Date(m1.getFullYear(), m1.getMonth() + 1, 0, 12);
+    return rpc("rozpis_navrh_data", { p_od: iso(r.od < m1 ? r.od : m1), p_do: iso(r.do > m2 ? r.do : m2) }).then(function (n) {
+      R.navrh = n || [];
+      if (R.bilancia && R.bilancia.mesiac) return nacitajBilanciu(R.bilancia.mesiac);
+      prekresli();
+    }).catch(function () { R.navrh = []; });
+  }
+  function nacitajBilanciu(mesiac) {
+    return rpc("rozpis_bilancia", { p_mesiac: mesiac }).then(function (b) { R.bilancia = { mesiac: mesiac, zoznam: b || [] }; prekresli(); })
+      .catch(function (e) { R.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
+  }
+  function navrhy(datum, poz) { return (R.navrh || []).filter(function (n) { return n.datum === datum && (!poz || n.pozicia === poz); }); }
+  function navrhMiesto(id) { return (R.navrh || []).filter(function (n) { return n.id === id; })[0] || null; }
+  function prekrytaMiesta() { var o = {}; (R.navrh || []).forEach(function (n) { if (n.miesto_id && n.osoba) o[n.miesto_id] = 1; }); return o; }
+  function navrhMesiaca(mesiac) { var m = iso(mesiac); return (R.navrh || []).filter(function (n) { return String(n.mesiac).slice(0, 10) === m; }); }
+  function cipNavrh(n) {
+    var o = osoba(n.osoba), za = n.za ? osoba(n.za) : null;
+    if (!o) return '<button class="r-cip r-volne r-navrh" data-r-navrh="' + n.id + '" title="Návrh – voľné miesto' + (za ? " (za " + esc(za.meno) + ")" : "") + '"><span>voľné</span><small>návrh</small></button>';
+    return '<button class="r-cip r-navrh" data-r-navrh="' + n.id + '" style="background:' + esc(o.farba) + ";color:" + textNa(o.farba) + '" title="Návrh' + (n.zdroj === "zaloha" ? " – zástup" : "") + '">' +
+      "<span>" + esc(o.meno) + "</span><small>návrh" + (n.zdroj === "zaloha" ? " · zástup" : "") + "</small></button>";
+  }
+  function navrhPanel(mesiac) {
+    if (!vedenie()) return "";
+    var mes = MESIACE[mesiac.getMonth()], nm = navrhMesiaca(mesiac), koniec = new Date(mesiac.getFullYear(), mesiac.getMonth() + 1, 0, 12);
+    if (!nm.length) {
+      if (iso(koniec) < iso(dnes())) return "";
+      return '<div class="r-lista r-gen"><button class="btn r-mini" data-r="generuj" data-m="' + iso(mesiac) + '">✨ Vygenerovať rozpis – ' + esc(mes) + "</button>" +
+        '<button class="btn r-mini" data-r-pohlad="vzory">🧩 Vzory smien</button></div>';
+    }
+    var obs = nm.filter(function (n) { return n.osoba; }).length, vol = nm.length - obs;
+    var B = R.bilancia && R.bilancia.mesiac === iso(mesiac) ? R.bilancia.zoznam : null;
+    return '<section class="card r-navrh-panel"><h3>✨ Návrh rozpisu – ' + esc(mes) + "</h3>" +
+      '<p style="margin:0">' + obs + " smien navrhnutých" + (vol ? ", <b>" + vol + " voľných miest</b> (nikto z dostupných nemôže)" : "") +
+      '. Návrh vidíte len vy (IT, CEO) – v rozpise je označený „návrh“. Ťuknutím ho upravíte, potom ho zverejnite.</p>' +
+      '<div class="r-lista"><button class="btn btn-primary r-mini" data-r="zverejni" data-m="' + iso(mesiac) + '">✅ Zverejniť rozpis</button>' +
+        '<button class="btn r-mini" data-r="bilancia" data-m="' + iso(mesiac) + '">' + (B ? "▲ Skryť bilanciu" : "📊 Bilancia hodín a dní") + "</button>" +
+        '<button class="btn r-mini" data-r="generuj" data-m="' + iso(mesiac) + '">🔁 Vygenerovať znova</button>' +
+        '<button class="btn r-mini" data-r="zahod" data-m="' + iso(mesiac) + '">🗑 Zahodiť návrh</button></div>' +
+      (B ? bilanciaHtml(B) : "") + "</section>";
+  }
+  function bilanciaHtml(B) {
+    var tpp = B.filter(function (x) { return x.tpp; }), ost = B.filter(function (x) { return !x.tpp && x.dni > 0; });
+    var tab1 = tpp.length ? '<h4 class="r-h4">TPP – fond</h4><table class="r-bil"><thead><tr><th>Kto</th><th>Dní</th><th>Plán h</th><th>Absencie h</th><th>Fond h</th><th>Rozdiel</th></tr></thead><tbody>' +
+      tpp.map(function (x) {
+        var roz = Math.round(((+x.plan_h || 0) + (+x.abs_h || 0) - (+x.fond || 0)) * 10) / 10;
+        return "<tr><td><b>" + esc(x.meno) + '</b></td><td class="num">' + x.dni + '</td><td class="num">' + esc(x.plan_h) + '</td><td class="num">' + esc(x.abs_h || 0) +
+          '</td><td class="num">' + esc(x.fond) + '</td><td class="num ' + (roz < -4 ? "r-bil-malo" : "") + '">' + (roz > 0 ? "+" : "") + roz + (roz < -4 ? " ⚠️" : "") + "</td></tr>";
+      }).join("") + "</tbody></table>" : "";
+    var tab2 = ost.length ? '<h4 class="r-h4">Brigádnici – počet dní</h4><div class="r-bil-brig">' + ost.sort(function (a, b) { return b.dni - a.dni; }).map(function (x) {
+      return '<span class="r-leg"><b>' + esc(x.meno) + '</b> <span class="num">' + x.dni + "</span>" + (x.student ? " 🎓" : "") + "</span>";
+    }).join("") + "</div>" : "";
+    return '<div class="r-bil-obal">' + tab1 + tab2 + '<p class="muted r-mala">Plán h = smeny × hodiny na smenu zo vzoru (ak nie sú, priemer z dochádzky za 2 mesiace, inak podľa pozície). Fond = pracovné dni mesiaca × týždenný úväzok / 5. ⚠️ = chýba viac ako 4 h – doplňte smenu. 🎓 = študent.</p></div>';
   }
   function nacitajZiadosti() {
     if (!DB) return;
@@ -80,7 +137,7 @@
   // ---------- zobrazenie ----------
   function prekresli() {
     if (!koren) return;
-    var html = R.pohlad === "ludia" ? pohladLudia() : R.pohlad === "historia" ? pohladHistoria() : pohladRozpis();
+    var html = R.pohlad === "ludia" ? pohladLudia() : R.pohlad === "historia" ? pohladHistoria() : R.pohlad === "vzory" ? pohladVzory() : pohladRozpis();
     koren.innerHTML = html + (R.dialog ? dialogHtml() : "");
     koren.classList.toggle("r-siroke", siroka() && (R.pohlad === "tyzden" || R.pohlad === "mesiac"));
     var fok = koren.querySelector("[data-r-fokus]"); if (fok) fok.focus();
@@ -99,9 +156,10 @@
       "<span>" + esc(o.meno) + "</span>" + (cas ? '<small class="num">' + esc(cas) + "</small>" : "") + (m.poznamka ? '<small title="' + esc(m.poznamka) + '">✎</small>' : "") + "</button>";
   }
   function bunka(datum, p) {
-    var ms = miesta(datum, p.kod);
+    var pk = prekrytaMiesta(), nv = navrhy(datum, p.kod);
+    var ms = miesta(datum, p.kod).filter(function (m) { return !pk[m.id]; });
     var plus = mozemUpravovat() && !minule(datum) ? '<button class="r-plus" data-r-pridat="' + datum + "|" + p.kod + '" aria-label="Pridať smenu – ' + esc(p.nazov) + " " + esc(datum) + '">+</button>' : "";
-    return '<td class="r-bunka' + (ms.length ? "" : " r-nerobi") + '"><div class="r-cipy">' + ms.map(cip).join("") + plus + "</div></td>";
+    return '<td class="r-bunka' + (ms.length || nv.length ? "" : " r-nerobi") + '"><div class="r-cipy">' + ms.map(cip).join("") + nv.map(cipNavrh).join("") + plus + "</div></td>";
   }
   // v období, kde je dnešok, sa minulé dni schovajú; ukážu sa až po ťuknutí na „Minulé dni“
   function obsahujeDnes() { var r = rozsah(), dn = iso(dnes()); return iso(R.pohlad === "mesiac" ? new Date(r.mesiac.getFullYear(), r.mesiac.getMonth(), 1, 12) : r.od) < dn && dn <= iso(R.pohlad === "mesiac" ? new Date(r.mesiac.getFullYear(), r.mesiac.getMonth() + 1, 0, 12) : r.do); }
@@ -126,10 +184,10 @@
   function dniZoznam(od, koniec) {                    // mobil: po dňoch
     var out = [], dn = iso(dnes());
     for (var d = new Date(od); d <= koniec; d = pridaj(d, 1)) {
-      var di = iso(d), riadky = pozicie().map(function (p) {
-        var ms = miesta(di, p.kod);
-        if (!ms.length) return "";
-        return '<div class="r-den-riadok"><span class="r-den-poz">' + esc(p.nazov) + '</span><span class="r-cipy">' + ms.map(cip).join("") + "</span></div>";
+      var pk = prekrytaMiesta(), di = iso(d), riadky = pozicie().map(function (p) {
+        var ms = miesta(di, p.kod).filter(function (m) { return !pk[m.id]; }), nv = navrhy(di, p.kod);
+        if (!ms.length && !nv.length) return "";
+        return '<div class="r-den-riadok"><span class="r-den-poz">' + esc(p.nazov) + '</span><span class="r-cipy">' + ms.map(cip).join("") + nv.map(cipNavrh).join("") + "</span></div>";
       }).join("");
       if (!riadky && di < dn) continue;
       if (di < dn && od < koniec && skryvamMinule()) continue;
@@ -150,11 +208,13 @@
       var ms = ((R.data && R.data.miesta) || []).filter(function (m) { return m.datum === di && m.osoba; });
       var ludia = [], vid = {};
       ms.forEach(function (m) { if (!vid[m.osoba]) { vid[m.osoba] = 1; var o = osoba(m.osoba); if (o) ludia.push(o); } });
-      var volne = ((R.data && R.data.miesta) || []).some(function (m) { return m.datum === di && !m.osoba; });
+      navrhy(di).forEach(function (n) { if (n.osoba && !vid[n.osoba]) { vid[n.osoba] = 1; var o = osoba(n.osoba); if (o) ludia.push({ meno: o.meno, farba: o.farba, navrh: true }); } });
+      var pkm = prekrytaMiesta();
+      var volne = ((R.data && R.data.miesta) || []).some(function (m) { return m.datum === di && !m.osoba && !pkm[m.id]; }) || navrhy(di).some(function (n) { return !n.osoba; });
       var max = 99;   // v kalendári vidno všetkých na smene (nie +N)
       bunky.push('<button class="rk-den' + (mimo ? " rk-mimo" : "") + (di === dn ? " rk-dnes" : "") + (di === vyb ? " rk-vyb" : "") + ((d.getDay() + 6) % 7 >= 5 ? " rk-vikend" : "") + (window.lbzSviatok && window.lbzSviatok(di) ? " rk-sviatok" : "") + '" data-r-den="' + di + '"' + (window.lbzSviatok && window.lbzSviatok(di) ? ' title="' + esc(window.lbzSviatok(di)) + '"' : "") + '>' +
         '<span class="rk-cislo">' + d.getDate() + "</span>" +
-        '<span class="rk-ludia">' + ludia.slice(0, max).map(function (o) { return '<i style="background:' + esc(o.farba) + ";color:" + textNa(o.farba) + '">' + esc(String(o.meno).slice(0, 4)) + "</i>"; }).join("") +
+        '<span class="rk-ludia">' + ludia.slice(0, max).map(function (o) { return '<i' + (o.navrh ? ' class="rk-n"' : "") + ' style="background:' + esc(o.farba) + ";color:" + textNa(o.farba) + '">' + esc(String(o.meno).slice(0, 4)) + "</i>"; }).join("") +
         (ludia.length > max ? '<i class="rk-viac">+' + (ludia.length - max) + "</i>" : "") + "</span>" + (volne ? '<span class="rk-volne" title="Voľná smena"></span>' : "") + "</button>");
       if (bunky.length > 42) break;
     }
@@ -247,6 +307,7 @@
         '<button class="btn btn-ikona" data-r="dalej" aria-label="Ďalšie">›</button></span></div>';
     var spravaTl = rola() === "sprava" || rola() === "spolocny" ? '<div class="r-lista">' +
       (rola() === "sprava" ? '<button class="btn r-mini" data-r-pohlad="ludia">👥 Ľudia a farby</button>' : "") +
+      (vedenie() ? '<button class="btn r-mini" data-r-pohlad="vzory">🧩 Vzory smien</button>' : "") +
       '<button class="btn r-mini" data-r-pohlad="historia">🕘 História zmien</button></div>' : "";
     if (!R.data) return head + spravaHtml() + '<div class="empty"><strong>' + (R.nacitavam ? "Načítavam rozpis…" : "Rozpis sa nenačítal") + "</strong></div>";
     var telo;
@@ -261,7 +322,7 @@
     }
     var upoz = rola() === "osobny" && !R.data.ja ? '<p class="s-varovanie">Váš účet ešte nie je spojený s menom v rozpise – vedenie ho spojí v „Ľudia a farby“ (podľa e-mailu).</p>' : "";
     var mTl = siroka() || R.pohlad !== "mesiac" ? minuleTl() : "";
-    return head + spravaHtml() + ziadostiHtml() + poznamkyHtml(r.mesiac) + upoz + mojeSmeny() + mTl + telo + legenda() + spravaTl;
+    return head + spravaHtml() + ziadostiHtml() + navrhPanel(r.mesiac) + poznamkyHtml(r.mesiac) + upoz + mojeSmeny() + mTl + telo + legenda() + spravaTl;
   }
 
   function pohladLudia() {
@@ -277,6 +338,61 @@
       '<form class="r-clovek r-novy" data-r-osoba=""><input type="color" name="farba" value="#cba75b" aria-label="Farba"><input name="meno" placeholder="Nové meno" aria-label="Meno" required>' +
         '<input name="email" type="email" placeholder="e-mail (nepovinné)" aria-label="E-mail"><span></span><button class="btn btn-primary r-mini" type="submit">Pridať</button></form>' +
       "</div></section>";
+  }
+  // ---------- vzory smien a potreba ľudí (generátor) ----------
+  var DRUH = { pevny: "Pevné smeny", brigada: "Brigáda (keď môže)", zaloha: "Záloha (len v núdzi)" };
+  function dniChk(meno, vyb) {
+    return '<span class="r-dni-chk">' + DNI.map(function (x, i) {
+      return '<label><input type="checkbox" name="' + meno + '" value="' + (i + 1) + '"' + ((vyb || []).indexOf(i + 1) > -1 ? " checked" : "") + "><span>" + x + "</span></label>";
+    }).join("") + "</span>";
+  }
+  function vzorForm(v) {
+    var V = R.vzory, poz = (V && V.pozicie) || pozicie(), nove = !v.id, strid = !!(v.dni_b && v.dni_b.length);
+    var osoby = aktivneOsoby();
+    return '<form class="card r-vzor" data-r-vzor="' + (v.id || "") + '">' +
+      '<div class="r-vzor-hl"><select name="osoba" class="r-select" aria-label="Kto">' + (nove ? '<option value="">– kto –</option>' : "") +
+        osoby.map(function (o) { return '<option value="' + o.id + '"' + (o.id === v.osoba_id ? " selected" : "") + ">" + esc(o.meno) + "</option>"; }).join("") + "</select>" +
+      '<select name="druh" class="r-select" aria-label="Druh">' + Object.keys(DRUH).map(function (k) { return '<option value="' + k + '"' + ((v.druh || "brigada") === k ? " selected" : "") + ">" + DRUH[k] + "</option>"; }).join("") + "</select>" +
+      (nove ? "" : '<label class="f-check"><input type="checkbox" name="aktivny"' + (v.aktivny !== false ? " checked" : "") + "> aktívny</label>") + "</div>" +
+      '<div class="r-vzor-r"><span class="r-vzor-l">Pozície</span><span class="r-dni-chk">' + poz.filter(function (p) { return p.kod !== "customer_service"; }).map(function (p) {
+        return '<label><input type="checkbox" name="pozicie" value="' + esc(p.kod) + '"' + ((v.pozicie || []).indexOf(p.kod) > -1 ? " checked" : "") + "><span>" + esc(p.nazov) + "</span></label>";
+      }).join("") + '</span></div><p class="muted r-mala" style="margin:0">Pri pevných smenách sa použije prvá zaškrtnutá pozícia.</p>' +
+      '<div class="r-vzor-r"><span class="r-vzor-l">' + (strid ? "Týždeň A" : "Dni") + "</span>" + dniChk("dni_a", v.dni_a) + "</div>" +
+      '<label class="f-check"><input type="checkbox" name="striedanie"' + (strid ? " checked" : "") + ' data-r-strid> striedanie každý druhý týždeň (A / B)</label>' +
+      '<div class="r-vzor-b"' + (strid ? "" : " hidden") + '><div class="r-vzor-r"><span class="r-vzor-l">Týždeň B</span>' + dniChk("dni_b", v.dni_b) + "</div>" +
+        '<label class="field"><span class="label">Niektorý deň v týždni A</span><input type="date" name="kotva" value="' + esc(v.kotva || "") + '"></label></div>' +
+      '<div class="r-vzor-za"' + ((v.druh || "brigada") === "zaloha" ? "" : " hidden") + '><div class="r-vzor-r"><span class="r-vzor-l">Zástup za</span><span class="r-dni-chk">' +
+        osoby.map(function (o) { return '<label><input type="checkbox" name="za_osoby" value="' + o.id + '"' + ((v.za_osoby || []).indexOf(o.id) > -1 ? " checked" : "") + "><span>" + esc(o.meno) + "</span></label>"; }).join("") +
+        '</span></div><p class="muted r-mala" style="margin:0">Nič nezaškrtnuté = príde len vtedy, keď na voľné miesto nikto iný nemôže.</p></div>' +
+      '<div class="f-2"><label class="field"><span class="label">Hodín na smenu (pre fond)</span><input name="hodiny" type="number" min="0" max="24" step="0.5" inputmode="decimal" value="' + esc(v.hodiny == null ? "" : v.hodiny) + '" placeholder="podľa dochádzky"></label>' +
+      '<label class="field"><span class="label">Poznámka</span><input name="poznamka" value="' + esc(v.poznamka || "") + '"></label></div>' +
+      '<div class="f-akcie"><button class="btn ' + (nove ? "btn-primary" : "") + ' r-mini" type="submit">' + (nove ? "Pridať vzor" : "Uložiť") + "</button>" +
+        (nove ? "" : '<button class="btn r-mini" type="button" data-r-vzor-zmaz="' + v.id + '">Odstrániť</button>') + "</div></form>";
+  }
+  function pohladVzory() {
+    var V = R.vzory, head = '<div class="head"><div><button class="btn-link spat" data-r-pohlad="mesiac">← Rozpis</button><h2>Vzory smien</h2>' +
+      '<div class="sub">Podľa nich „✨ Vygenerovať rozpis“ navrhne celý mesiac.</div></div></div>';
+    if (!V) return head + spravaHtml() + '<div class="empty"><strong>Načítavam…</strong></div>';
+    var poz = (V.pozicie || []).filter(function (p) { return p.kod !== "customer_service"; });
+    var pot = function (k, d) { var x = (V.potreba || []).filter(function (t) { return t.pozicia === k && t.den === d; })[0]; return x ? x.pocet : 0; };
+    var potreba = '<form class="card" id="r-potreba-form"><h3>Koľko ľudí treba</h3><div class="r-obal"><table class="r-tab r-pot"><thead><tr><th class="r-poz"></th>' +
+      DNI.map(function (x) { return "<th>" + x + "</th>"; }).join("") + '<th title="Čisté hodiny bežnej smeny – pre bilanciu fondu">h/smena</th></tr></thead><tbody>' +
+      poz.map(function (p) {
+        return '<tr><th class="r-poz">' + esc(p.nazov) + "</th>" + [1, 2, 3, 4, 5, 6, 7].map(function (d) {
+          return '<td><input type="number" min="0" max="10" inputmode="numeric" name="p_' + esc(p.kod) + "_" + d + '" value="' + pot(p.kod, d) + '" aria-label="' + esc(p.nazov) + " " + DNI[d - 1] + '"></td>';
+        }).join("") + '<td><input type="number" min="0" max="24" step="0.5" name="h_' + esc(p.kod) + '" value="' + esc(p.hodiny_smena == null ? "" : p.hodiny_smena) + '"></td></tr>';
+      }).join("") + '</tbody></table></div><p class="muted r-mala">0 = v ten deň sa na pozícii nerobí. Na udalosť (napr. Buchťáč) stačí v rozpise otvoriť voľné miesto – generátor ho obsadí.</p>' +
+      '<button class="btn btn-primary r-mini" type="submit">Uložiť potrebu</button></form>';
+    var skup = ["pevny", "brigada", "zaloha"].map(function (k) {
+      var zoz = (V.vzory || []).filter(function (v) { return v.druh === k; });
+      return '<h3 class="r-vzor-nad">' + DRUH[k] + ' <span class="pill num">' + zoz.length + "</span></h3>" + zoz.map(vzorForm).join("");
+    }).join("");
+    return head + spravaHtml() + potreba + skup + '<h3 class="r-vzor-nad">➕ Nový vzor</h3>' + vzorForm({}) +
+      '<p class="muted r-mala">Generátor: najprv pevné smeny, potom brigádnici (voľné miesta sa delia rovnomerne – kto má v mesiaci menej dní, ide prvý), nakoniec záloha. Schválené dovolenky, PN a OČR aj už zapísané smeny rešpektuje.</p>';
+  }
+  function nacitajVzory() {
+    return rpc("rozpis_vzory_data").then(function (v) { R.vzory = v && v.ok ? v : null; if (!R.vzory) R.sprava = { typ: "chyba", text: (v && v.text) || "Nenačítané" }; prekresli(); })
+      .catch(function (e) { R.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
   }
   function pohladHistoria() {
     var h = R.historia;
@@ -348,6 +464,16 @@
               (rola() === "sprava" ? '<button class="btn" data-r-akcia-tl="zmazat" data-id="' + m.id + '">Zrušiť miesto</button>' : "") + "</div>";
         }
       }
+    } else if (D.typ === "navrh") {
+      var n = navrhMiesto(D.id); if (!n) { R.dialog = null; return ""; }
+      var dn2 = zIso(n.datum), za = n.za ? osoba(n.za) : null;
+      nadpis = "Návrh · " + esc(pozicia(n.pozicia).nazov) + " · " + DNI_DLHE[(dn2.getDay() + 6) % 7].toLowerCase() + " " + kratkyDatum(dn2);
+      obsah = (za ? '<p class="s-varovanie s-varovanie-info" style="margin:0">Miesto po: ' + esc(za.meno) + " (schválená absencia)</p>" : "") +
+        '<form class="f-form" data-r-navrh-form="' + n.id + '"><label class="field"><span class="label">Kto</span><select name="osoba" class="r-select"><option value="">– voľné miesto –</option>' +
+        aktivneOsoby().map(function (o) { return '<option value="' + o.id + '"' + (o.id === n.osoba ? " selected" : "") + ">" + esc(o.meno) + "</option>"; }).join("") +
+        '</select></label><button class="btn btn-primary" type="submit" data-r-fokus>Uložiť do návrhu</button></form>' +
+        '<div class="f-akcie"><button class="btn" data-r-navrh-zmaz="' + n.id + '">Odstrániť z návrhu</button></div>' +
+        '<p class="muted r-mala">Zmena je len v návrhu – do rozpisu sa dostane po „Zverejniť rozpis“.</p>';
     } else if (D.typ === "pridat") {
       var dd = zIso(D.datum);
       nadpis = "Nová smena · " + DNI_DLHE[(dd.getDay() + 6) % 7].toLowerCase() + " " + kratkyDatum(dd);
@@ -397,6 +523,48 @@
       return;
     }
     if (d.r === "zavri-spravu") { R.sprava = null; prekresli(); return; }
+    if (d.r === "generuj") {
+      var mg = zIso(d.m), mgn = MESIACE[mg.getMonth()];
+      if (!lbzPotvrd("Vygenerovať návrh rozpisu – " + mgn + "?\n\nPodľa vzorov smien sa doplnia voľné dni. Už zapísané smeny ostanú. Predošlý návrh na tento mesiac sa nahradí. Zamestnanci návrh neuvidia, kým ho nezverejníte.")) return;
+      t.disabled = true; R.sprava = { typ: "ok", text: "Generujem…" }; prekresli();
+      rpc("rozpis_generuj", { p_mesiac: d.m }).then(function (g) {
+        R.sprava = { typ: g && g.ok ? "ok" : "chyba", text: (g && g.text) || "Nevygenerované" };
+        if (g && g.ok) { R.bilancia = { mesiac: d.m, zoznam: [] }; if (R.pohlad !== "mesiac") { R.pohlad = "mesiac"; } R.od = mg; }
+        nacitaj();
+      }).catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+      return;
+    }
+    if (d.r === "zverejni") {
+      if (!lbzPotvrd("Zverejniť rozpis – " + MESIACE[zIso(d.m).getMonth()] + "?\n\nNávrh sa prenesie do rozpisu a uvidia ho všetci zamestnanci.")) return;
+      rpc("rozpis_navrh_zverejni", { p_mesiac: d.m, p_zahod: false }).then(function (g) {
+        R.sprava = { typ: g && g.ok ? "ok" : "chyba", text: (g && g.text) || "Nezverejnené" }; R.bilancia = null; R.karta = null; nacitaj();
+      }).catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+      return;
+    }
+    if (d.r === "zahod") {
+      if (!lbzPotvrd("Zahodiť návrh rozpisu?\n\nRozpis sa nezmení, zmaže sa len návrh.")) return;
+      rpc("rozpis_navrh_zverejni", { p_mesiac: d.m, p_zahod: true }).then(function (g) {
+        R.sprava = { typ: g && g.ok ? "ok" : "chyba", text: (g && g.text) || "Chyba" }; R.bilancia = null; nacitaj();
+      }).catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+      return;
+    }
+    if (d.r === "bilancia") {
+      if (R.bilancia && R.bilancia.mesiac === d.m) { R.bilancia = null; prekresli(); return; }
+      R.bilancia = { mesiac: d.m, zoznam: [] }; nacitajBilanciu(d.m); return;
+    }
+    if (d.rNavrh) { R.dialog = { typ: "navrh", id: +d.rNavrh }; prekresli(); return; }
+    if (d.rNavrhZmaz) {
+      rpc("rozpis_navrh_zmen", { p: { id: +d.rNavrhZmaz, zmaz: true } }).then(function (g) {
+        R.sprava = { typ: g && g.ok ? "ok" : "chyba", text: (g && g.text) || "Chyba" }; R.dialog = null; nacitajNavrh();
+      }).catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+      return;
+    }
+    if (d.rVzorZmaz) {
+      if (!lbzPotvrd("Odstrániť tento vzor?")) return;
+      rpc("rozpis_vzor_uloz", { p: { id: d.rVzorZmaz, zmaz: true } }).then(function (g) { R.sprava = { typ: g && g.ok ? "ok" : "chyba", text: (g && g.text) || "Chyba" }; nacitajVzory(); })
+        .catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+      return;
+    }
     if (d.r === "pozn-upravit") { R.poznEdit = d.m; prekresli(); var ta = document.getElementById("r-pozn-text"); if (ta) ta.focus(); return; }
     if (d.r === "pozn-zrusit") { R.poznEdit = null; prekresli(); return; }
     if (d.r === "pozn-zmazat") {
@@ -414,6 +582,7 @@
       var bol = R.pohlad; R.pohlad = d.rPohlad; R.sprava = null;
       if (R.pohlad === "historia") { R.historia = null; prekresli(); nacitajHistoriu(); return; }
       if (R.pohlad === "ludia") { prekresli(); return; }
+      if (R.pohlad === "vzory") { R.vzory = null; prekresli(); nacitajVzory(); return; }
       if ((bol === "mesiac") !== (R.pohlad === "mesiac")) nacitaj(); else prekresli();
       return;
     }
@@ -441,6 +610,36 @@
     if (f.id === "r-pozn-form") {
       e.preventDefault();
       ulozPoznamku(f.dataset.mesiac, document.getElementById("r-pozn-text").value);
+      return;
+    }
+    if (f.hasAttribute("data-r-navrh-form")) {
+      e.preventDefault();
+      rpc("rozpis_navrh_zmen", { p: { id: +f.getAttribute("data-r-navrh-form"), osoba: f.elements.osoba.value } }).then(function (g) {
+        R.sprava = { typ: g && g.ok ? "ok" : "chyba", text: (g && g.text) || "Chyba" }; if (g && g.ok) R.dialog = null; nacitajNavrh(); prekresli();
+      }).catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+      return;
+    }
+    if (f.id === "r-potreba-form") {
+      e.preventDefault();
+      var pp = {};
+      ((R.vzory && R.vzory.pozicie) || []).forEach(function (p) {
+        if (!f.elements["h_" + p.kod]) return;
+        pp[p.kod] = { dni: [1, 2, 3, 4, 5, 6, 7].map(function (dd) { return +(f.elements["p_" + p.kod + "_" + dd].value || 0); }), hodiny: f.elements["h_" + p.kod].value };
+      });
+      rpc("rozpis_potreba_uloz", { p: { pozicie: pp } }).then(function (g) { R.sprava = { typ: g && g.ok ? "ok" : "chyba", text: (g && g.text) || "Chyba" }; nacitajVzory(); })
+        .catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+      return;
+    }
+    if (f.hasAttribute("data-r-vzor")) {
+      e.preventDefault();
+      var ch = function (n) { return Array.prototype.filter.call(f.querySelectorAll('input[name="' + n + '"]'), function (i) { return i.checked; }).map(function (i) { return i.value; }); };
+      var strid = f.elements.striedanie && f.elements.striedanie.checked;
+      var pv = { id: f.getAttribute("data-r-vzor"), osoba: f.elements.osoba.value, druh: f.elements.druh.value, pozicie: ch("pozicie"),
+        dni_a: ch("dni_a").map(Number), dni_b: strid ? ch("dni_b").map(Number) : null, kotva: strid ? f.elements.kotva.value : "",
+        za_osoby: f.elements.druh.value === "zaloha" ? ch("za_osoby").map(Number) : [], poznamka: f.elements.poznamka.value, hodiny: f.elements.hodiny.value,
+        aktivny: f.elements.aktivny ? f.elements.aktivny.checked : true };
+      rpc("rozpis_vzor_uloz", { p: pv }).then(function (g) { R.sprava = { typ: g && g.ok ? "ok" : "chyba", text: (g && g.text) || "Chyba" }; if (g && g.ok) nacitajVzory(); else prekresli(); })
+        .catch(function (er) { R.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
       return;
     }
     if (f.hasAttribute("data-r-osoba")) {
@@ -480,6 +679,11 @@
     if (akcia === "zapisat" && !p.id && p.datum && p.pozicia && !miesta(p.datum, p.pozicia).length) p.vynimka = true;
     zmena(p);
   }
+  function zmenaPola(e) {
+    var f = e.target.closest && e.target.closest("form[data-r-vzor]"); if (!f) return;
+    if (e.target.name === "striedanie") { f.querySelector(".r-vzor-b").hidden = !e.target.checked; }
+    if (e.target.name === "druh") { f.querySelector(".r-vzor-za").hidden = e.target.value !== "zaloha"; }
+  }
   function klaves(e) { if (e.key === "Escape" && R.dialog) { R.dialog = null; prekresli(); } }
   var poslednaSirka = null;
   window.addEventListener("resize", function () { var s = siroka(); if (koren && koren.isConnected && s !== poslednaSirka) { poslednaSirka = s; prekresli(); } });
@@ -493,6 +697,7 @@
       el.addEventListener("click", klik);
       el.addEventListener("submit", odoslanie);
       el.addEventListener("keydown", klaves);
+      el.addEventListener("change", zmenaPola);
       if (!R.od) R.od = dnes();
       prekresli(); nacitaj();
     },
