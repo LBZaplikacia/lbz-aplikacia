@@ -427,15 +427,28 @@ var zm = document.getElementById("t-zs-miesto"); if (zm) { mapaZsUkaz(zm); if (D
       '<table class="t-p-tab"><thead><tr><th>Č.</th><th>Meno/Firma</th><th>Telefón</th><th>Č. faktúry</th><th>Suma</th><th>Adresa</th><th>Čas</th><th>Platba a poznámka</th><th>QR</th></tr></thead><tbody>' +
       riadky.join("") + '<tr class="t-p-pauza"><td></td><td colspan="8">🏠 Návrat ' + esc(cas(t.navrat)) + "</td></tr></tbody></table>" +
       '<div class="t-p-nav">' + nav.map(function (x) { return '<div class="t-p-navbox">' + qr(x.url, 110) + "<div>Navigácia " + x.od + "–" + x.po + "</div></div>"; }).join("") + "</div></div>";
-    // len zobraziť na obrazovke (súkromný účet furmana): rovnaký formát ako tlač, adresy a navigácia klikateľné
+    // len zobraziť na obrazovke (súkromný účet furmana): presne ako tlač (A4, rovnaké štýly), adresy a navigačné QR klikateľné, tlačidlo Tlačiť
 if (lenUkaz) {
 var ov = document.getElementById("t-nahlad-tlac");
 if (!ov) { ov = document.createElement("div"); ov.id = "t-nahlad-tlac"; document.body.appendChild(ov); }
-ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:#fff;color:#222;overflow:auto;padding:12px";
-var navTl = nav.map(function (x) { return '<a class="btn" target="_blank" rel="noopener" href="' + x.url + '" style="margin:4px 6px 0 0">🧭 Navigácia ' + x.od + "–" + x.po + "</a>"; }).join("");
-ov.innerHTML = '<div style="position:sticky;top:0;background:#fff;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0 8px;z-index:2"><b>Trasa ' + esc(t.nazov) + '</b><button class="btn" type="button" id="t-nahlad-zavri">✕ Zavrieť</button></div>' +
-'<div style="overflow-x:auto">' + html.replace(/<a href="/g, '<a target="_blank" rel="noopener" href="') + "</div>" + (navTl ? '<div style="margin:10px 0 24px">' + navTl + "</div>" : "");
+ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:#e9e6df;overflow:auto";
+var N = "#t-nahlad-tlac ";
+var css = N + ".t-tlac-strana{background:#fff;color:#000;width:194mm;margin:0 auto 24px;padding:8mm;box-shadow:0 1px 6px rgba(0,0,0,.2);font:9pt/1.3 Montserrat,Arial,sans-serif}" +
+N + "h1{font-size:16pt;margin:0 0 2mm}" + N + ".t-datum{margin:0 0 4mm;font-size:9pt}" +
+N + "table{width:100%;border-collapse:collapse;font-size:9pt}" + N + "th," + N + "td{border:1px solid #999;padding:1.5mm 2mm;vertical-align:middle}" +
+N + "th{background:#f1e4c6;font-size:10pt}" + N + "th:first-child{text-align:left}" +
+N + ".t-p-c{font-weight:800;text-align:center}" + N + ".t-p-suma," + N + ".t-p-cas{white-space:nowrap;text-align:right;font-weight:700}" +
+N + ".t-p-dob{color:#b3261e;font-weight:700}" + N + ".t-p-pauza td{background:#f1e4c6;font-weight:700}" +
+N + ".t-p-qr svg{width:18mm;height:18mm}" + N + ".t-p-nav{display:flex;gap:6mm;flex-wrap:wrap;margin-top:5mm}" +
+N + ".t-p-navbox{text-align:center;font-size:8pt;color:inherit;text-decoration:none}" + N + ".t-p-navbox svg{width:28mm;height:28mm}" +
+N + "td a{color:inherit;text-decoration:underline dotted;text-underline-offset:2px}" +
+N + ".t-nahlad-lista{position:sticky;top:0;left:0;z-index:2;display:flex;justify-content:flex-end;gap:8px;padding:8px 12px;background:#e9e6df}";
+var iNav = html.indexOf('<div class="t-p-nav">');
+var obsah = (iNav > -1 ? html.slice(0, iNav) : html).replace(/<a href="/g, '<a target="_blank" rel="noopener" href="') +
+'<div class="t-p-nav">' + nav.map(function (x) { return '<a class="t-p-navbox" target="_blank" rel="noopener" href="' + x.url + '">' + qr(x.url, 110) + "<div>Navigácia " + x.od + "–" + x.po + "</div></a>"; }).join("") + "</div></div>";
+ov.innerHTML = "<style>" + css + '</style><div class="t-nahlad-lista"><button class="btn" type="button" id="t-nahlad-tlac-tl">🖨️ Tlačiť</button><button class="btn" type="button" id="t-nahlad-zavri">✕ Zavrieť</button></div><div class="t-tlac-strana">' + obsah + "</div>";
 document.getElementById("t-nahlad-zavri").onclick = function () { ov.remove(); };
+document.getElementById("t-nahlad-tlac-tl").onclick = function () { ov.remove(); tlacTrasu(d); };
 return;
 }
 var obal = document.getElementById("tlac-oblast");
@@ -672,7 +685,8 @@ return '<section class="card"><h3>🗺️ Moja trasa</h3>' + (z.length ? z.map(f
 var zs = T.nahlad[t.id];
 return '<p style="margin:8px 0 4px"><b>' + esc(datumSk(t.datum)) + " · " + esc(t.nazov) + '</b><br><span class="muted">odchod <b class="num">' + esc(cas(t.odchod)) + '</b> · návrat ~<span class="num">' + esc(cas(t.navrat)) + "</span>" +
 (t.hodiny ? " · " + String(t.hodiny).replace(".", ",") + " h" : "") + " · " + t.pocet + " zastávok</span></p>" +
-'<button class="btn" type="button" data-t-nahlad="' + t.id + '" style="margin:0 0 6px">📄 Zobraziť trasu</button>' +
+'<button class="btn" type="button" data-t-nahlad="' + t.id + '" style="margin:0 6px 6px 0">📄 Zobraziť trasu</button>' +
+'<button class="btn" type="button" data-t-nahlad="' + t.id + '" data-tlac="1" style="margin:0 0 6px">🖨️ Tlačiť</button>' +
 (zs == null ? '<p class="muted">Načítavam zastávky…</p>' : '<div class="rows">' + zs.map(function (x, i) {
 return '<div class="row"><span><b class="num">' + (x.poradie || i + 1) + ".</b> " + esc(x.meno || x.firma || x.cislo) +
 (x.adresa ? '<br><a href="' + mapa(x.adresa) + '" target="_blank" rel="noopener">📍 ' + esc(x.adresa) + "</a>" : "") +
@@ -686,7 +700,7 @@ return '<div class="row"><span><b class="num">' + (x.poradie || i + 1) + ".</b> 
 document.addEventListener("click", function (e) {
 var b = e.target.closest && e.target.closest("[data-t-nahlad]"); if (!b || !DB) return;
 e.preventDefault(); b.disabled = true;
-rpc("trasa_data", { p_id: +b.getAttribute("data-t-nahlad") }).then(function (d) { b.disabled = false; if (d && d.ok && d.trasa) tlacTrasu(d, true); })
+rpc("trasa_data", { p_id: +b.getAttribute("data-t-nahlad") }).then(function (d) { b.disabled = false; if (d && d.ok && d.trasa) tlacTrasu(d, !b.getAttribute("data-tlac")); })
 .catch(function () { b.disabled = false; });
 });
 
