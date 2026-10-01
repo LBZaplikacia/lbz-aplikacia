@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.29.12 BETA";
+  var VERZIA = "0.29.13 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -83,7 +83,7 @@
     prevadzka: ["aktivita", "odbery", "prehlad", "chat", "sklad", "balenie", "dochadzka", "kniha_jazd", "nastavenia"],
     zamestnanec: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "nastavenia"],
     furman: ["aktivita", "odbery", "prehlad", "chat", "trasa", "dochadzka", "kniha_jazd", "nastavenia"],
-    zakaznicky_servis: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "objednavky", "furmanky", "balenie", "trasa", "sklad", "komentare", "zamestnanci", "nastavenia"],
+    zakaznicky_servis: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "objednavky", "furmanky", "trasa", "komentare", "zamestnanci", "nastavenia"],
     uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci", "nastavenia"],
     prevadzkar: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "rozpis", "sklad", "balenie", "furmanky", "kniha_jazd", "zamestnanci", "nastavenia"],
     majitelka_arealu: ["aktivita", "odbery", "prehlad", "kniha_jazd", "nastavenia"],
@@ -146,7 +146,7 @@
     zamestnanec: ["aktivita", "odbery", "dochadzka", "zdrav", "ulohy", "furmanky", "rozpis", "vybavit"],
     prevadzka: ["aktivita", "odbery", "ulohy", "dochadzka", "sklad", "balenie", "furmanky", "vybavit"],
     furman: ["aktivita", "odbery", "sms", "dochadzka", "rozpis", "trasa", "vybavit", "ulohy", "kniha"],
-    zakaznicky_servis: ["aktivita", "odbery", "sms", "statistiky", "dochadzka", "ulohy", "zdrav", "furmanky", "balenie", "rozpis", "vybavit"],
+    zakaznicky_servis: ["aktivita", "odbery", "sms", "dochadzka", "ulohy", "zdrav", "furmanky", "rozpis", "vybavit"],
     majitelka_arealu: ["aktivita", "odbery", "kniha", "vybavit"]
   };
   var NAZVY_KARIET = { schvalenie: "🔔 Na schválenie", dochadzka: "🕒 Príchod a smeny", ulohy: "✅ Úlohy a Vybaviť", zdrav: "🩺 Zdravotné preukazy", vybavit: "📝 Vybaviť", kniha: "🚗 Kniha jázd", rozpis: "📅 Kto je v práci", furmanky: "🚚 Furmanky",

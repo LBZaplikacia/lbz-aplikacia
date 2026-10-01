@@ -356,7 +356,7 @@
     return '<span class="st-perc ' + (p >= 0 ? "st-hore" : "st-dole") + '">' + (p >= 0 ? "▲ " : "▼ ") + Math.abs(p) + " %</span>";
   }
   function kartaStat() {
-    if (!DB || ["it", "ceo", "zakaznicky_servis"].indexOf(ROLA) === -1) return "";
+    if (!DB || ["it", "ceo"].indexOf(ROLA) === -1) return "";
     if (!O.stat || (O.stat.cas && Date.now() - O.stat.cas > 300000 && !O.stat.nacitava)) {
       O.stat = { cas: Date.now(), nacitava: true, d: O.stat && O.stat.d };
       rpc("obj_statistiky").then(function (d) { O.stat = { cas: Date.now(), d: d && d.ok ? d : null }; window.dispatchEvent(new Event("lbz-prekresli")); })
