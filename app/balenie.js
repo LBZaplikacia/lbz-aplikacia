@@ -256,8 +256,7 @@
       var hotovo = p.hotovo >= p.ks;
       var ovl = p.sken ? '<span class="b-pol-tl">' + (hotovo ? "" : '<button class="btn b-lupa" data-b-lupa="' + esc(p.kod) + '" title="Balík bez štítku – vybrať podľa expirácie">🔍 bez štítku</button>') +
           '<button class="btn btn-ikona" data-b-rucne="' + esc(p.kod) + '" data-ks="' + Math.max(0, p.hotovo - 1) + '" aria-label="Menej (vráti balík na sklad)" title="Menej – vráti balík na sklad"' + (p.hotovo > 0 ? "" : " disabled") + ">−</button>" +
-          '<button class="btn btn-ikona" data-b-rucne="' + esc(p.kod) + '" data-ks="' + Math.min(p.ks, p.hotovo + 1) + '" aria-label="Potvrdiť 1 ks bez skenu" title="Potvrdiť 1 ks bez skenu (vydá najstarší zo skladu)"' + (hotovo ? " disabled" : "") + ">+</button>" +
-          (hotovo ? "" : '<button class="btn r-mini" data-b-rucne="' + esc(p.kod) + '" data-ks="' + p.ks + '" title="Potvrdiť všetky kusy bez skenu – vydajú sa najstaršie balíky zo skladu">✓ všetko</button>') + "</span>"
+          (hotovo ? "" : '<button class="btn r-mini" data-b-zadaj="' + esc(p.kod) + '" title="Napísať kód balíka aj s koncovkou (expirácia) zo štítku">⌨️ zadať kód</button>') + "</span>"
         : '<span class="b-pol-tl"><button class="btn btn-ikona" data-b-potvrd="' + esc(p.kod) + '" data-ks="' + Math.max(0, p.hotovo - 1) + '" aria-label="Menej"' + (p.hotovo > 0 ? "" : " disabled") + ">−</button>" +
           '<button class="btn btn-ikona" data-b-potvrd="' + esc(p.kod) + '" data-ks="' + Math.min(p.ks, p.hotovo + 1) + '" aria-label="Viac"' + (hotovo ? " disabled" : "") + ">+</button>" +
           (hotovo ? "" : '<button class="btn r-mini" data-b-potvrd="' + esc(p.kod) + '" data-ks="' + p.ks + '">✓ všetko</button>') + "</span>";
@@ -371,6 +370,7 @@
     }
     if (d.bVyber) { B.dialog = null; poslednyKod = ""; skenBalika(d.bVyber); return; }
     if (d.bPotvrd) { po(rpc("balenie_potvrd", { p_cislo: B.obj.cislo, p_kod: d.bPotvrd, p_ks: +d.ks })); return; }
+    if (d.bZadaj) { var vst = document.getElementById("b-kod"); if (vst) { vst.value = d.bZadaj + "-"; vst.focus(); vst.setSelectionRange(vst.value.length, vst.value.length); vst.scrollIntoView({ block: "center", behavior: "smooth" }); } return; }
     if (d.bRucne) { po(rpc("balenie_rucne", { p_cislo: B.obj.cislo, p_kod: d.bRucne, p_ks: +d.ks }), function (r) { if (r.upozornenie) pip(false); return r.text; }); return; }
     if (d.bVrat) {
       if (!lbzPotvrd("Zrušiť sken balíka " + d.bVrat + "? Vráti sa na sklad.")) return;
