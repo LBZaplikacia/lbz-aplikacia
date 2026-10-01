@@ -60,7 +60,7 @@
   function nacitajPrehlad() {
     D.nacitavam = true; prekresli();
     return rpc("dochadzka_prehlad", { p_mesiac: D.mesiac }).then(function (d) {
-      D.nacitavam = false; if (!d || d.ok === false) D.sprava = { typ: "chyba", text: (d && d.text) || "Nenačítané" }; else D.prehlad = d; prekresli();
+      D.nacitavam = false; if (!d || d.ok === false) D.sprava = { typ: "chyba", text: (d && d.text) || "Nenačítané" }; else { D.prehlad = d; D.ludia = d.ludia; } prekresli();
     }).catch(function (e) { D.nacitavam = false; D.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
   }
   function po(prom, hotovo) {
@@ -138,8 +138,18 @@
       '<span class="head-tl"><button class="btn btn-ikona" data-d="mes-" aria-label="Predošlý mesiac">◀</button><button class="btn btn-ikona" data-d="mes+" aria-label="Ďalší mesiac">▶</button></span></div>' +
       '<div class="f-seg d-zalozky" role="group">' +
       (D.moja && D.moja.osoba ? '<button data-d-zal="mesiac" aria-pressed="' + (z === "mesiac") + '">Môj mesiac</button><button data-d-zal="ziadost" aria-pressed="' + (z === "ziadost") + '">Dovolenka / PN</button>' : "") +
-      (citatel() ? '<button data-d-zal="tim" aria-pressed="' + (z === "tim" || z === "osoba") + '">Tím</button>' : "") + "</div>" +
+      (citatel() ? '<button data-d-zal="tim" aria-pressed="' + (z === "tim" || z === "osoba") + '">Tím</button>' : "") + "</div>" + (citatel() ? vyberZam() : "") +
       (D.sprava ? '<p class="f-sprava f-' + D.sprava.typ + '">' + esc(D.sprava.text) + ' <button class="btn-link" data-d="zavri-spravu">✕</button></p>' : "");
+  }
+  // výber zamestnanca – CEO/IT/účtovníčka otvorí jeho dochádzku priamo (úprava len CEO/IT)
+  function vyberZam() {
+    var l = D.ludia;
+    if (!l) {
+      if (DB && !D.ludiaNac) { D.ludiaNac = true; rpc("dochadzka_prehlad", { p_mesiac: D.mesiac }).then(function (d) { if (d && d.ludia) { D.ludia = d.ludia; prekresli(); } }).catch(function () { D.ludiaNac = false; }); }
+      return "";
+    }
+    return '<label class="field d-vyber-zam"><span class="label">👤 Dochádzka zamestnanca' + (spravca() ? " (zobraziť a upraviť)" : "") + '</span><select id="d-vyber-zam"><option value="">– vyber zamestnanca –</option>' +
+      l.map(function (x) { return '<option value="' + x.id + '"' + (D.zalozka === "osoba" && D.osoba === x.id ? " selected" : "") + ">" + esc(x.meno) + "</option>"; }).join("") + "</select></label>";
   }
   function tabulkaMesiaca(d, uprava) {
     var r = d.riadky || [], sum = 0, str = 0, dni = {};
@@ -152,7 +162,7 @@
         '<td class="num c-prest">' + (x.prestavka_min ? '<span class="c-mob">prestávka </span>' + hodiny(x.prestavka_min) : "") + '</td><td class="num c-hod"><b>' + (x.odpracovane_min != null ? hodiny(x.odpracovane_min) + '<span class="c-mob"> h</span>' : "") + "</b></td>" +
         '<td class="num c-str">' + (Number(x.stravne) ? '<span class="c-mob">stravné </span>' + eur(x.stravne) : "") + "</td>" +
         '<td class="c-pozn">' + (x.poznamka ? '<span class="muted">' + esc(x.poznamka) + "</span>" : "") +
-        (uprava && !x.len_citanie ? ' <button class="btn-link" data-d-upr="' + x.id + '">Upraviť</button>' : "") +
+        (uprava && !x.len_citanie ? ' <button class="btn-link" data-d-upr="' + x.id + '">✏️ Upraviť</button>' : "") +
         (x.len_citanie ? ' <span class="muted" title="Prenesené zo starej dochádzky">🔒</span>' : "") +
         (!uprava && D.zalozka === "mesiac" && !x.len_citanie && x.typ === "praca" ? ' <button class="btn-link" data-d-opr="' + x.id + '">Oprava</button>' : "") +
         (uprava && x.gps && (x.gps.prichod || x.gps.odchod) ? gpsOdkazy(x.gps) : "") + "</td></tr>";
@@ -258,7 +268,7 @@
       '<div class="tbl-wrap"><table class="d-tab d-tab-tim"><thead><tr><th>Zamestnanec</th><th>Norma/deň</th><th>Hodiny</th><th>Dni</th><th>Stravné</th><th></th></tr></thead><tbody>' +
       p.ludia.map(function (x) {
         return '<tr><td class="c-meno">' + esc(x.meno) + (x.ucet ? "" : ' <span class="muted" title="Nemá prepojený účet v appke">(bez účtu)</span>') + '</td><td class="num c-norma"><span class="c-mob">norma </span>' + String(x.norma_h || 8).replace(".", ",") + ' h</td><td class="num c-hod"><b>' + hodiny(x.min) +
-          '<span class="c-mob"> h</span></b></td><td class="num c-dni">' + x.dni + '<span class="c-mob"> dní</span></td><td class="num c-str"><span class="c-mob">stravné </span>' + eur(x.stravne) + '</td><td class="c-det"><button class="btn-link" data-d-osoba="' + x.id + '">Detail</button></td></tr>';
+          '<span class="c-mob"> h</span></b></td><td class="num c-dni">' + x.dni + '<span class="c-mob"> dní</span></td><td class="num c-str"><span class="c-mob">stravné </span>' + eur(x.stravne) + '</td><td class="c-det"><button class="btn-link" data-d-osoba="' + x.id + '">📅 ' + (p.uprava ? "Zobraziť / upraviť" : "Zobraziť") + '</button></td></tr>';
       }).join("") + "</tbody></table></div>";
   }
   function dialogHtml() {
@@ -347,7 +357,10 @@
     if (l1) l1.previousElementSibling.textContent = typ === "oprava" ? "Správny príchod" : "Čas od";
     if (l2) l2.previousElementSibling.textContent = typ === "oprava" ? "Správny odchod" : "Čas do";
   }
-  function zmena(e) { if (e.target.id === "d-z-typ") { D.predTyp = e.target.value; polia(e.target.value); } }
+  function zmena(e) {
+    if (e.target.id === "d-z-typ") { D.predTyp = e.target.value; polia(e.target.value); }
+    if (e.target.id === "d-vyber-zam") { var v = +e.target.value; if (!v) { D.zalozka = "tim"; D.osoba = null; prekresli(); nacitajPrehlad(); return; } D.zalozka = "osoba"; D.osoba = v; D.data = null; D.sprava = null; prekresli(); nacitajMesiac(); }
+  }
   function hodnota(id) { var el = document.getElementById(id); return el ? el.value : ""; }
   function odoslanie(e) {
     if (e.target.id === "d-ziadost-form") {

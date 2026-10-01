@@ -1408,3 +1408,5 @@ body.pdfv-otvorene { overflow: hidden; }
 .b-st-zoz { max-height: 50vh; overflow: auto; }
 .b-st-riadok { cursor: pointer; }
 .b-st-riadok input { width: 20px; height: 20px; vertical-align: middle; }
+.d-vyber-zam { margin: 8px 0 12px; max-width: 420px; }
+.d-vyber-zam select { width: 100%; }
