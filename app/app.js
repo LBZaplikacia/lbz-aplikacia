@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.30.10 BETA";
+  var VERZIA = "0.30.11 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -312,13 +312,15 @@
     } else {
       obsah = '<form class="panel" id="f-prihlasenie">' +
         (cfg.googleLogin ? '<div id="g-tlacidlo" class="g-tlacidlo">' + (gNonce ? "" : '<button class="btn btn-google" type="button" data-login="google">' + GOOGLE_IKONA + "Prihlásiť sa cez Google</button>") + "</div>" +
-          '<div class="divider">alebo e-mailom</div>' : "") +
+          '' : "") +
+        '<button class="btn" type="button" data-login="odkaz" style="width:100%;background:var(--gold);color:var(--ink);border:0;font-size:16px">✉️ Prvé prihlásenie – pošleme odkaz na e-mail</button>' +
+        '<p class="muted" style="margin:-4px 0 0;font-size:13px;text-align:center">Prvýkrát v appke alebo bez hesla? Zadáš e-mail a príde ti prihlasovací odkaz.</p>' +
+        '<div class="divider">alebo e-mailom a heslom</div>' +
         '<label class="field"><span class="label">E-mail</span><input id="in-email" type="email" autocomplete="username" placeholder="meno@legendarnebuchty.sk" required></label>' +
         '<label class="field"><span class="label">Heslo</span><input id="in-heslo" type="password" autocomplete="current-password" required></label>' +
         spravaHtml() +
         '<button class="btn btn-primary" type="submit">Prihlásiť sa</button>' +
         '<button class="btn-link" type="button" data-login="zabudnute">Zabudli ste heslo?</button>' +
-        '<button class="btn-link" type="button" data-login="odkaz">Prvé prihlásenie / prihlásenie bez hesla</button>' +
         '<p class="muted" style="margin:0;font-size:13px">Po prihlásení ostanete prihlásení aj po zatvorení appky.</p></form>';
     }
     el('<main class="login"><div class="login-card">' + hlavicka + obsah + "</div></main>");
