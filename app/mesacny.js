@@ -29,6 +29,7 @@
   function eur(x) { var n = Math.round(Number(x || 0) * 100) / 100; return n.toFixed(2).replace(".", ",") + " €"; }
   function eurZ(x) { var n = Number(x || 0); return (n > 0 ? "+" : n < 0 ? "−" : "") + eur(Math.abs(n)); }
   function hod(min) { var m = Math.round(Number(min || 0)), z = m < 0 ? "−" : ""; m = Math.abs(m); return z + Math.floor(m / 60) + " h" + (m % 60 ? " " + (m % 60) + " min" : ""); }
+  function hodZ(min) { var n = Math.round(Number(min || 0)); return (n > 0 ? "+" : "") + hod(n); }
   function chyba(e) { return (e && (e.message || e.text || e.error_description)) || String(e || "Chyba"); }
   function rpc(f, a) { return DB.rpc(f, a || {}).then(function (r) { if (r.error) throw r.error; return r.data; }); }
   function spravca() { return ROLA === "ceo" || ROLA === "it"; }
@@ -99,9 +100,10 @@
       (d.dni_pn ? "<dt>PN / OČR</dt><dd>" + d.dni_pn + " dní</dd>" : "") +
       (d.dni_lekar ? "<dt>Lekár</dt><dd>" + d.dni_lekar + " dní</dd>" : "") +
       (d.min_absencie ? "<dt>Absencie spolu</dt><dd>" + hod(d.min_absencie) + "</dd>" : "") +
-      (b ? "<dt>Plán podľa rozpisu</dt><dd>" + b.smeny + " smien = " + hod(b.plan_min) + "</dd>" +
-           (b.prenos_z_min ? "<dt>Prenos z minulého mesiaca</dt><dd>" + hod(b.prenos_z_min) + "</dd>" : "") +
-           "<dt>Rozdiel (prenáša sa)</dt><dd>" + hod(b.zostatok_min) + "</dd>" : "") +
+      (b && b.tpp ? "<dt>Fond (" + b.prac_dni + " prac. dní)</dt><dd>" + hod(b.fond_min) + "</dd>" +
+           "<dt>Rozdiel v mesiaci</dt><dd>" + hodZ(b.rozdiel_min) + "</dd>" +
+           "<dt>Prenos z minulého mesiaca</dt><dd>" + hodZ(b.prenos_z_min) + "</dd>" +
+           "<dt>Prenos do ďalšieho mesiaca</dt><dd><b>" + hodZ(b.zostatok_min) + "</b> " + (b.zostatok_min > 0 ? '<span class="muted">nadčas</span>' : b.zostatok_min < 0 ? '<span class="muted">chýba</span>' : "") + "</dd>" : "") +
       "</dl>" + (d.otvorene ? '<p class="pm-stav pm-chyba">⚠️ ' + d.otvorene + " záznam(y) bez odchodu – treba doplniť pred podpisom.</p>" : "");
     // 2. vyúčtovanie stravného
     h += "<h4>2. Vyúčtovanie stravného za " + esc(mNazov(l.mesiac)) + '</h4><dl class="pm-dl">' +
@@ -169,7 +171,7 @@
   // ---------- dokument (PDF) ----------
   function obsahListu(l) {
     var s = l.stravne || {};
-    return JSON.stringify([l.dokument, l.dochadzka, s.skutocne, s.zaloha, s.rozdiel, s.zaloha_dalsi, s.k_vyplate,
+    return JSON.stringify([l.dokument, l.dochadzka, l.bilancia && l.bilancia.zostatok_min, s.skutocne, s.zaloha, s.rozdiel, s.zaloha_dalsi, s.k_vyplate,
       ((s.plan_dalsi || {}).smeny || []).map(function (x) { return [x.datum, x.miesto, x.suma]; })]);
   }
   function listHtml(l, riadky, pod) {
@@ -179,7 +181,7 @@
       "<p>Zamestnanec: <b>" + esc(l.meno || "") + "</b><br>Zamestnávateľ: " + esc(ZAMESTNAVATEL) + "</p>" +
       "<h2>1. Dochádzka</h2><p>Odpracované: <b>" + hod(d.min_prace) + "</b> (" + (d.dni_prace || 0) + " dní)" +
       (d.dni_dovolenka ? " · dovolenka " + d.dni_dovolenka + " dní" : "") + (d.dni_pn ? " · PN/OČR " + d.dni_pn + " dní" : "") + (d.dni_lekar ? " · lekár " + d.dni_lekar + " dní" : "") +
-      (b ? "<br>Plán podľa rozpisu: " + b.smeny + " smien = " + hod(b.plan_min) + (b.prenos_z_min ? " · prenos z minulého mesiaca " + hod(b.prenos_z_min) : "") + " · rozdiel prenášaný do ďalšieho mesiaca: " + hod(b.zostatok_min) : "") + "</p>" +
+      (b && b.tpp ? "<br>Fond: " + hod(b.fond_min) + " (" + b.prac_dni + " prac. dní) · rozdiel v mesiaci " + hodZ(b.rozdiel_min) + " · prenos z minulého mesiaca " + hodZ(b.prenos_z_min) + " · <b>prenos do ďalšieho mesiaca " + hodZ(b.zostatok_min) + "</b> (+ nadčas, − chýba)" : "") + "</p>" +
       "<table><thead><tr><th>Deň</th><th>Miesto / druh</th><th>Príchod</th><th>Odchod</th><th>Prestávka</th><th>Hodiny</th><th>Stravné</th></tr></thead><tbody>" +
       (riadky || []).map(function (x) {
         return "<tr><td>" + den(x.datum) + " " + datumK(x.datum) + "</td><td>" + esc(x.typ === "praca" ? (x.miesto || "") : x.typ) + "</td><td>" + cas(x.prichod) + "</td><td>" + cas(x.odchod) +
