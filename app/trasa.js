@@ -2,7 +2,8 @@
 // Trasu vytvorí zákaznícky servis vo Furmankách (čas odchodu → poradie a časy príchodov cez Google Mapy).
 // Furman: navigácia (po 9 zastávkach), volanie, QR pre kasu pri dobierke, Doručené / Nedoručené, poznámka, fotka,
 // Ukončiť rozvoz → furmanka ide do Archívu, nedoručené do zvolenej furmanky alebo do najbližšej otvorenej furmanky regiónu.
-// Sledovanie: furman (po písomnom súhlase v appke) posiela v deň rozvozu polohu každých ~30 s – zákazník ju vidí na sledovanie.html.
+// Sledovanie: furman (po písomnom súhlase v appke) posiela v deň rozvozu polohu každých ~30 s – zákazník ju vidí na sledovanie.html,
+// zákaznícky servis / IT / CEO v režime 🗺️ Mapa (celá trasa, auto, cesta k ďalšej zastávke, meškanie).
 
 (function () {
   "use strict";
@@ -208,11 +209,12 @@
     if (!d) return head + spravaHtml() + '<div class="empty"><strong>Načítavam…</strong></div>';
     var z = d.zastavky || [];
     var caka = z.filter(function (x) { return x.stav === "caka"; }).length, hotovo = z.length - caka;
-    var rez = T.rezim || "jazda";
-    var prep = '<div class="f-seg t-rezim" role="group"><button data-t-rezim="jazda" aria-pressed="' + (rez === "jazda") + '">🚚 Jazda</button>' +
+    var rez = T.rezim || "jazda"; if (rez === "mapa" && ROLA === "furman") rez = "jazda";
+    var prep = '<div class="f-seg t-rezim" role="group">' + (ROLA !== "furman" ? '<button data-t-rezim="mapa" aria-pressed="' + (rez === "mapa") + '">🗺️ Mapa</button>' : "") + '<button data-t-rezim="jazda" aria-pressed="' + (rez === "jazda") + '">🚚 Jazda</button>' +
       '<button data-t-rezim="zoznam" aria-pressed="' + (rez === "zoznam") + '">📋 Zoznam (' + hotovo + "/" + z.length + ")</button></div>";
     var prog = '<div class="b-prog" aria-label="Vybavené ' + hotovo + " z " + z.length + '"><span style="width:' + (z.length ? Math.round(100 * hotovo / z.length) : 0) + '%"></span></div>';
-    if (rez === "jazda") return head + spravaHtml() + prog + prep + jazdaHtml(t) + (t.stav !== "ukoncena" ? navigacia(z, true) : "");
+    if (rez === "mapa") return head + spravaHtml() + prog + prep + mapaZsHtml(t);
+if (rez === "jazda") return head + spravaHtml() + prog + prep + jazdaHtml(t) + (t.stav !== "ukoncena" ? navigacia(z, true) : "");
     return head + spravaHtml() + prog + prep +
       (t.stav !== "ukoncena" ? navigacia(z) : "") +
       '<p class="muted t-dalsia">Ťuknite na zastávku, ktorou chcete pokračovať.</p>' +
@@ -266,6 +268,7 @@
     if (window.lbzPamat) lbzPamat.uloz("trasa", { id: T.id, rezim: T.rezim, akt: T.akt });
     window.scrollTo(0, y);
     var miesto = document.getElementById("t-gmapa-miesto"); if (miesto) mapaUkaz(miesto);
+var zm = document.getElementById("t-zs-miesto"); if (zm) { mapaZsUkaz(zm); if (Date.now() - ZM.cas > 25000) nacitajLive(); }
     var ta = document.getElementById("t-pozn"); if (ta && T.dialog && T.dialog.fokus) { T.dialog.fokus = false; ta.focus(); }
   }
 
@@ -325,7 +328,8 @@
   }
   // ---------- sledovanie rozvozu: poloha furmana pre zákazníkov (len furman, len so súhlasom, len v deň rozvozu) ----------
   var SUHLAS_TEXT = "Beriem na vedomie a súhlasím, že počas rozvozu (od otvorenia trasy v deň rozvozu do jej ukončenia) aplikácia zaznamenáva polohu môjho zariadenia približne každých 30 sekúnd. " +
-    "Poloha slúži na riadenie rozvozu a na to, aby zákazník, ktorému sa objednávka v daný deň doručuje, videl na mape, kde sa nachádza auto s jeho objednávkou a kedy približne príde. " +
+    "Poloha slúži na riadenie rozvozu: počas rozvozu ju v aplikácii na mape s trasou vidí zákaznícky servis a vedenie firmy, aby vedeli zákazníkom povedať, kedy furman príde, a pomôcť pri problémoch na ceste. " +
+"Zároveň ju vidí zákazník, ktorému sa objednávka v daný deň doručuje – na mape vidí, kde sa nachádza auto s jeho objednávkou a kedy približne príde. " +
     "Zákazník vidí polohu len v deň rozvozu a len kým jeho objednávka nie je doručená. Ukladá sa len posledná poloha (nie história jazdy) a po ukončení rozvozu sa zmaže, najneskôr do nasledujúceho dňa. " +
     "Mimo rozvozu sa poloha cez aplikáciu nesleduje. Som oboznámený(á) aj s tým, že firemné vozidlo je vybavené GPS sledovaním. Prevádzkovateľ: V sedle u Falťanov s.r.o.";
   var POLOHA = { posledna: 0 };
@@ -442,7 +446,7 @@
   function klik(e) {
     var t = e.target.closest("button, [data-t]"); if (!t || !koren.contains(t)) return;
     var d = t.dataset;
-    if (d.tOtvor) { T.id = +d.tOtvor; T.data = null; T.sprava = null; T.akt = null; T.rezim = "jazda"; prekresli(); window.scrollTo(0, 0); nacitajTrasu(); zapniJazdu(); return; }
+    if (d.tOtvor) { T.id = +d.tOtvor; T.data = null; T.sprava = null; T.akt = null; T.rezim = ROLA === "furman" ? "jazda" : "mapa"; prekresli(); window.scrollTo(0, 0); nacitajTrasu(); zapniJazdu(); return; }
     if (d.tRezim) { T.rezim = d.tRezim; prekresli(); window.scrollTo(0, 0); return; }
     if (d.tVyber) { T.akt = d.tVyber; T.drzAkt = false; T.naMieste = null; T.rezim = "jazda"; prekresli(); window.scrollTo(0, 0); return; }
     if (d.tMiesto) { T.naMieste = d.tMiesto; prekresli(); return; }
@@ -507,7 +511,105 @@
     if (T.id != null) nacitajTrasu(true); else nacitajZoznam();
   }, 60000);
 
-  // ---------- verejné rozhranie pre app.js ----------
+  // ---------- MAPA pre zákaznícky servis: kde je furman počas celej trasy (Edge Function sledovanie, { zs: id }) ----------
+var ZM = { el: null, mapa: null, vrstva: null, live: null, liveId: null, cas: 0, nacitava: false, fitId: null, libP: null };
+var FIAT = "https://buchty.s26.cdn-upgates.com/1/169c501e8598cd-fiat-s-buchtou.png";
+function leaflet() {
+if (window.L) return Promise.resolve();
+if (ZM.libP) return ZM.libP;
+ZM.libP = new Promise(function (ok, zle) {
+var c = document.createElement("link"); c.rel = "stylesheet"; c.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"; document.head.appendChild(c);
+var s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+s.onload = function () { ok(); }; s.onerror = function () { ZM.libP = null; zle(new Error("Mapa sa nenačítala (bez signálu?)")); };
+document.head.appendChild(s);
+});
+return ZM.libP;
+}
+function dekoduj(s) {
+var i = 0, lat = 0, lng = 0, out = [];
+while (i < s.length) {
+var b, sh = 0, r = 0;
+do { b = s.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; } while (b >= 32);
+lat += r & 1 ? ~(r >> 1) : r >> 1; sh = 0; r = 0;
+do { b = s.charCodeAt(i++) - 63; r |= (b & 31) << sh; sh += 5; } while (b >= 32);
+lng += r & 1 ? ~(r >> 1) : r >> 1;
+out.push([lat / 1e5, lng / 1e5]);
+}
+return out;
+}
+function nacitajLive() {
+if (!DB || !DB.functions || T.id == null || ZM.nacitava) return;
+ZM.nacitava = true; var id = T.id;
+DB.functions.invoke("sledovanie", { body: { zs: id } }).then(function (res) {
+ZM.nacitava = false; ZM.cas = Date.now();
+if (T.id !== id) return;
+var d = res && res.data;
+ZM.live = d && d.ok ? d : { ok: false, text: (d && d.text) || "Poloha furmana sa nenačítala" }; ZM.liveId = id;
+prekresli();
+}).catch(function () { ZM.nacitava = false; ZM.cas = Date.now(); });
+}
+function mapaZsHtml(t) {
+var z = zastavky(), live = ZM.liveId === T.id ? ZM.live : null, a = live && live.auto, info;
+if (t.stav === "ukoncena") info = '<p class="f-sprava f-ok">Rozvoz ukončený ' + esc(cas(t.ukoncena)) + ".</p>";
+else if (live && live.ok === false) info = '<p class="f-sprava f-chyba">' + esc(live.text) + "</p>";
+else if (!a) info = '<p class="muted">📍 Poloha furmana zatiaľ nie je. Zobrazí sa, keď furman v deň rozvozu otvorí trasu v appke (po potvrdení súhlasu).' + (live ? "" : " Načítavam…") + "</p>";
+else {
+var vek = Math.round((Date.now() - new Date(a.kedy).getTime()) / 60000);
+info = '<p>📍 Poloha auta z <b class="num">' + esc(cas(a.kedy)) + "</b>" + (vek >= 5 ? ' <span class="b-st b-st-odl">⚠️ pred ' + vek + " min – furman možno nemá otvorenú appku alebo je bez signálu</span>" : ' <span class="muted">· obnovuje sa každých 30 s</span>') + "</p>";
+}
+var m = live && live.meskanie_s != null ? Math.round(live.meskanie_s / 60) : null, posun = m ? m * 60000 : 0;
+var dal = live && live.dalsia ? najdi(live.dalsia) : null;
+if (dal && live.eta_dalsia && t.stav !== "ukoncena") info += "<p>➡️ Ďalšia zastávka: <b>" + esc(dal.meno || dal.firma || dal.cislo) + '</b> · podľa navigácie o <b class="num">' + esc(cas(live.eta_dalsia)) + "</b> " +
+(m == null ? "" : m >= 3 ? '<span class="b-st b-st-odl">meškanie ~' + m + " min</span>" : m <= -3 ? '<span class="b-st b-st-ok">náskok ~' + (-m) + " min</span>" : '<span class="b-st b-st-ok">podľa plánu</span>') + "</p>";
+var riadky = z.map(function (x, i) {
+var st = x.stav === "dorucene" ? "✅ " + cas(x.cas) : x.stav === "nedorucene" ? "❌ nedoručené" : x.eta ? (posun ? "~" + cas(new Date(x.eta).getTime() + posun) + " (plán " + cas(x.eta) + ")" : cas(x.eta)) : "—";
+return '<div class="row"><span><b class="num">' + (x.poradie || i + 1) + ".</b> " + esc(x.meno || x.firma || x.cislo) + ' <span class="muted">· ' + esc(String(x.adresa || "").split(", ").pop()) + '</span></span><span class="num">' + esc(st) + "</span></div>";
+}).join("");
+return '<section class="card">' + info + '<div id="t-zs-miesto"></div>' +
+(t.stav !== "ukoncena" ? '<p class="muted" style="margin:4px 0 0">Zlatá čiara = cesta auta k ďalšej zastávke, prerušovaná = poradie zvyšných zastávok. Časy zvyšných zastávok sú posunuté o aktuálne meškanie alebo náskok.</p>' : "") + "</section>" +
+'<section class="card"><h3>Zastávky</h3><div class="rows">' + riadky + "</div></section>";
+}
+function mapaZsUkaz(miesto) {
+if (!ZM.el) { ZM.el = document.createElement("div"); ZM.el.className = "t-zs-mapa"; ZM.el.style.cssText = "height:55vh;min-height:300px;border-radius:12px;overflow:hidden;margin:8px 0"; }
+var novy = ZM.el.parentNode !== miesto;
+if (novy) miesto.appendChild(ZM.el);
+leaflet().then(function () {
+if (!ZM.mapa) {
+ZM.mapa = L.map(ZM.el, { zoomControl: true });
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenStreetMap" }).addTo(ZM.mapa);
+ZM.mapa.setView([48.7, 19.7], 8, { animate: false });
+ZM.vrstva = L.layerGroup().addTo(ZM.mapa);
+}
+if (novy) ZM.mapa.invalidateSize(false);
+vykresliZs();
+}).catch(function (e) { if (!ZM.mapa) ZM.el.innerHTML = '<p class="muted" style="padding:12px">' + esc(chybaText(e)) + "</p>"; });
+}
+function vykresliZs() {
+if (!ZM.mapa || !ZM.vrstva) return;
+var z = zastavky(), live = ZM.liveId === T.id ? ZM.live : null, a = live && live.auto;
+ZM.vrstva.clearLayers();
+var body = [], caka = [];
+z.forEach(function (x, i) {
+if (x.lat == null || x.lng == null) return;
+var p = [x.lat, x.lng]; body.push(p); if (x.stav === "caka") caka.push(p);
+var farba = x.stav === "dorucene" ? "#2f7d4f" : x.stav === "nedorucene" ? "#a63d32" : "#d1a73a";
+L.marker(p, { icon: L.divIcon({ className: "", iconSize: [26, 26], iconAnchor: [13, 13],
+html: '<span style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:' + farba + ';color:#fff;font:700 12px Montserrat,sans-serif;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)">' + (x.poradie || i + 1) + "</span>" }) })
+.bindTooltip(esc((x.poradie || i + 1) + ". " + (x.meno || x.firma || x.cislo)) + " · " + esc(x.stav === "dorucene" ? "✓ " + cas(x.cas) : x.stav === "nedorucene" ? "✗ nedoručené" : cas(x.eta)))
+.addTo(ZM.vrstva);
+});
+if (caka.length > 1) L.polyline(caka, { color: "#583934", weight: 2, opacity: 0.5, dashArray: "6 6" }).addTo(ZM.vrstva);
+if (live && live.cesta) { var c = dekoduj(live.cesta); L.polyline(c, { color: "#583934", weight: 8, opacity: 0.3 }).addTo(ZM.vrstva); L.polyline(c, { color: "#d1a73a", weight: 5, opacity: 0.95 }).addTo(ZM.vrstva); }
+if (a) { var pa = [a.lat, a.lng]; body.push(pa); L.marker(pa, { icon: L.icon({ iconUrl: FIAT, iconSize: [72, 68], iconAnchor: [36, 60] }), zIndexOffset: 1000 }).bindTooltip("Furman · poloha z " + esc(cas(a.kedy))).addTo(ZM.vrstva); }
+var kluc = T.id + (a ? "a" : "");
+if (ZM.fitId !== kluc && body.length) { ZM.fitId = kluc; if (body.length === 1) ZM.mapa.setView(body[0], 13, { animate: false }); else ZM.mapa.fitBounds(body, { padding: [30, 30], maxZoom: 15, animate: false }); }
+}
+// mapa pre zákaznícky servis: poloha každých 30 s
+setInterval(function () {
+if (koren && koren.isConnected && !document.hidden && T.id != null && T.rezim === "mapa" && ROLA !== "furman") nacitajLive();
+}, 30000);
+
+// ---------- verejné rozhranie pre app.js ----------
   window.LBZ_TRASA = {
     nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; if (!DB) { T.zoznam = null; T.data = null; T.id = null; } },
     mozem: function () { return !!DB && ["it", "ceo", "zakaznicky_servis", "furman"].indexOf(ROLA) > -1; },
