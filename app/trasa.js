@@ -405,7 +405,7 @@ var zm = document.getElementById("t-zs-miesto"); if (zm) { mapaZsUkaz(zm); if (D
   }
 
   // tlač ako starý skript (hárok trasy): Č. | Meno/Firma | Telefón | Č. faktúry | Suma | Adresa | Čas (+ prestávky) | Platba a poznámka | QR pre kasu
-  function tlacTrasu(dd) {
+  function tlacTrasu(dd, lenUkaz) {
     var d = dd || T.data, t = d.trasa, z = d.zastavky || [];
     var n = z.filter(function (x) { return !x.bez_gps; }).length, i1 = 2, i2 = n - 2, spolu = i1 >= i2, stred = Math.floor(n / 2);
     var qr = function (text, px) { return window.LBZ_QR ? window.LBZ_QR.svg(text, px) : ""; };
@@ -427,7 +427,18 @@ var zm = document.getElementById("t-zs-miesto"); if (zm) { mapaZsUkaz(zm); if (D
       '<table class="t-p-tab"><thead><tr><th>Č.</th><th>Meno/Firma</th><th>Telefón</th><th>Č. faktúry</th><th>Suma</th><th>Adresa</th><th>Čas</th><th>Platba a poznámka</th><th>QR</th></tr></thead><tbody>' +
       riadky.join("") + '<tr class="t-p-pauza"><td></td><td colspan="8">🏠 Návrat ' + esc(cas(t.navrat)) + "</td></tr></tbody></table>" +
       '<div class="t-p-nav">' + nav.map(function (x) { return '<div class="t-p-navbox">' + qr(x.url, 110) + "<div>Navigácia " + x.od + "–" + x.po + "</div></div>"; }).join("") + "</div></div>";
-    var obal = document.getElementById("tlac-oblast");
+    // len zobraziť na obrazovke (súkromný účet furmana): rovnaký formát ako tlač, adresy a navigácia klikateľné
+if (lenUkaz) {
+var ov = document.getElementById("t-nahlad-tlac");
+if (!ov) { ov = document.createElement("div"); ov.id = "t-nahlad-tlac"; document.body.appendChild(ov); }
+ov.style.cssText = "position:fixed;inset:0;z-index:9999;background:#fff;color:#222;overflow:auto;padding:12px";
+var navTl = nav.map(function (x) { return '<a class="btn" target="_blank" rel="noopener" href="' + x.url + '" style="margin:4px 6px 0 0">🧭 Navigácia ' + x.od + "–" + x.po + "</a>"; }).join("");
+ov.innerHTML = '<div style="position:sticky;top:0;background:#fff;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0 8px;z-index:2"><b>Trasa ' + esc(t.nazov) + '</b><button class="btn" type="button" id="t-nahlad-zavri">✕ Zavrieť</button></div>' +
+'<div style="overflow-x:auto">' + html.replace(/<a href="/g, '<a target="_blank" rel="noopener" href="') + "</div>" + (navTl ? '<div style="margin:10px 0 24px">' + navTl + "</div>" : "");
+document.getElementById("t-nahlad-zavri").onclick = function () { ov.remove(); };
+return;
+}
+var obal = document.getElementById("tlac-oblast");
     if (!obal) { obal = document.createElement("div"); obal.id = "tlac-oblast"; document.body.appendChild(obal); }
     obal.className = "t-tlac-obal"; obal.innerHTML = html; document.body.classList.add("tlaci");
     var hotovo = function () { document.body.classList.remove("tlaci"); obal.innerHTML = ""; obal.className = ""; window.removeEventListener("afterprint", hotovo); };
@@ -661,6 +672,7 @@ return '<section class="card"><h3>🗺️ Moja trasa</h3>' + (z.length ? z.map(f
 var zs = T.nahlad[t.id];
 return '<p style="margin:8px 0 4px"><b>' + esc(datumSk(t.datum)) + " · " + esc(t.nazov) + '</b><br><span class="muted">odchod <b class="num">' + esc(cas(t.odchod)) + '</b> · návrat ~<span class="num">' + esc(cas(t.navrat)) + "</span>" +
 (t.hodiny ? " · " + String(t.hodiny).replace(".", ",") + " h" : "") + " · " + t.pocet + " zastávok</span></p>" +
+'<button class="btn" type="button" data-t-nahlad="' + t.id + '" style="margin:0 0 6px">📄 Zobraziť trasu</button>' +
 (zs == null ? '<p class="muted">Načítavam zastávky…</p>' : '<div class="rows">' + zs.map(function (x, i) {
 return '<div class="row"><span><b class="num">' + (x.poradie || i + 1) + ".</b> " + esc(x.meno || x.firma || x.cislo) +
 (x.adresa ? '<br><a href="' + mapa(x.adresa) + '" target="_blank" rel="noopener">📍 ' + esc(x.adresa) + "</a>" : "") +
@@ -669,6 +681,14 @@ return '<div class="row"><span><b class="num">' + (x.poradie || i + 1) + ".</b> 
 }).join("") + '<p class="muted" style="margin:8px 0 0">Len náhľad plánu – rozvoz sa robí na služobnom telefóne (účet furman@).</p>'
 : '<p class="muted" style="margin:0">Žiadna naplánovaná trasa.</p>') + "</section>";
 }
+
+// tlačidlo „📄 Zobraziť trasu“ v karte Moja trasa (karta je na Prehľade, mimo modulu)
+document.addEventListener("click", function (e) {
+var b = e.target.closest && e.target.closest("[data-t-nahlad]"); if (!b || !DB) return;
+e.preventDefault(); b.disabled = true;
+rpc("trasa_data", { p_id: +b.getAttribute("data-t-nahlad") }).then(function (d) { b.disabled = false; if (d && d.ok && d.trasa) tlacTrasu(d, true); })
+.catch(function () { b.disabled = false; });
+});
 
 // ---------- verejné rozhranie pre app.js ----------
   window.LBZ_TRASA = {
