@@ -226,11 +226,12 @@
   function podpisyVykazuHtml() {
     var p = (D.podV && D.podV.podpisy) || [], ma = function (rola) { return p.filter(function (x) { return x.rola === rola; }).slice(-1)[0]; };
     var zz = ma("zamestnanec"), zv = ma("zamestnavatel"), spr = D.data && D.data.uprava;
+    var hot = String(D.mesiac || prvyDen(new Date())).slice(0, 7) < String(prvyDen(new Date())).slice(0, 7), poMes = '<span class="d-podpisane" style="color:#888;white-space:nowrap">✍️ Podpis až po skončení mesiaca</span>';
     var t = function (x) { return x ? "✅ " + esc(x.meno || "") + " " + esc(new Date(x.cas).toLocaleDateString("sk-SK")) : "nepodpísané"; };
     return '<div class="d-podpisy"><span>✍️ Zamestnanec: ' + t(zz) + " · Zamestnávateľ: " + t(zv) + "</span>" +
       '<span class="d-podpisy-tl"><button class="btn" data-d="tlac-vykaz">🖨️ Tlačiť</button>' +
-      (D.zalozka === "mesiac" ? (zz ? '<span class="d-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Podpísané</span>' : '<button class="btn btn-primary" data-d="podpis-vykaz">✍️ Podpísať výkaz</button>') : "") +
-      (spr && D.zalozka === "osoba" ? (zv ? '<span class="d-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Podpísané zamestnávateľom</span>' : '<button class="btn" data-d="podpis-vykaz-v">✍️ Podpísať za zamestnávateľa</button>') : "") +
+      (D.zalozka === "mesiac" ? (zz ? '<span class="d-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Podpísané</span>' : (hot ? '<button class="btn btn-primary" data-d="podpis-vykaz">✍️ Podpísať výkaz</button>' : poMes)) : "") +
+      (spr && D.zalozka === "osoba" ? (zv ? '<span class="d-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Podpísané zamestnávateľom</span>' : (hot ? '<button class="btn" data-d="podpis-vykaz-v">✍️ Podpísať za zamestnávateľa</button>' : poMes)) : "") +
       (D.podV && D.podV.pdf ? '<button class="btn" data-d="pdf-vykaz">📄 Podpísané PDF</button>' : "") + "</span></div>";
   }
   function listokHtml(a, meno, pod) {
