@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.30.24 BETA";
+  var VERZIA = "0.30.25 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -221,7 +221,7 @@
   function vyberOsoby(u) {
     var uo = stav.uctyOsoby; if (!uo || !u.ucet) return "";
     var moja = (uo.ucty || {})[String(u.email || "").toLowerCase()];
-    if (moja == null && BEZ_KARTY.indexOf(u.rola) > -1) return "";
+    if (moja == null && (BEZ_KARTY.indexOf(u.rola) > -1 || String(u.email || "").toLowerCase() === "furman@legendarnebuchty.sk")) return ""; // spoločný účet furmana nemá kartu
     return '<select data-pouz-osoba="' + esc(u.email) + '" aria-label="Karta zamestnanca" style="grid-column:1/-1' + (moja == null ? ';border-color:#d9822b;border-width:2px' : "") + '">' +
       '<option value="">' + (moja == null ? "⚠️ priradiť kartu zamestnanca…" : "— bez karty —") + "</option>" +
       (uo.osoby || []).map(function (o) { return '<option value="' + o.id + '"' + (o.id === moja ? " selected" : "") + ">👤 " + esc(o.meno) + "</option>"; }).join("") + "</select>";
