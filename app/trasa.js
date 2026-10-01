@@ -161,19 +161,28 @@ function sluzobny() { return ROLA !== "furman" || String(EMAIL || "").toLowerCas
     var ciel = z.lat != null && z.lng != null ? z.lat + "," + z.lng : z.adresa;
     return "https://www.google.com/maps/dir/?api=1&travelmode=driving&dir_action=navigate&destination=" + encodeURIComponent(ciel);
   }
-  function jazdaHtml(t) {
+  // listovanie v Jazde: predchádzajúca / nasledujúca zastávka (aj vybavené a preskočené)
+function listovanieHtml(z, a) {
+var i = z.indexOf(a);
+return '<div class="t-listovanie" style="display:flex;gap:8px;justify-content:space-between;align-items:center;margin:0 0 8px">' +
+'<button class="btn" data-t-list="-1"' + (i <= 0 ? " disabled" : "") + ">◀ Predchádzajúca</button>" +
+'<span class="muted num">' + (i + 1) + " / " + z.length + "</span>" +
+'<button class="btn" data-t-list="1"' + (i >= z.length - 1 ? " disabled" : "") + ">Nasledujúca ▶</button></div>";
+}
+function jazdaHtml(t) {
     var z = zastavky(), a = aktualna();
     var hotovo = z.filter(function (x) { return x.stav !== "caka"; }).length;
-    if (a && a.stav !== "caka" && !dalsiaCaka(null)) a = null;   // posledná zastávka vybavená → rovno koniec rozvozu
+    if (a && a.stav !== "caka" && !dalsiaCaka(null) && !T.prezera) a = null;   // posledná zastávka vybavená → rovno koniec rozvozu
     if (!a) {
       var nDor = z.filter(function (x) { return x.stav === "dorucene"; }).length, nNie = z.filter(function (x) { return x.stav === "nedorucene"; }).length;
       return '<section class="card t-hotovo"><div class="t-velke">🎉</div><h3>Všetky zastávky sú vybavené</h3>' +
         '<p class="t-hotovo-suhrn"><span class="b-st b-st-ok">✓ doručené ' + nDor + "</span>" + (nNie ? ' <span class="b-st b-st-odl">✗ nedoručené ' + nNie + "</span>" : "") + "</p>" +
-        (t.stav === "ukoncena" ? '<p class="muted">Rozvoz ukončený ' + esc(cas(t.ukoncena)) + ".</p>" : '<button class="btn btn-primary t-velke-tl t-koniec" data-t="ukoncit">🏁 UKONČIŤ ROZVOZ</button>') + "</section>";
+        (t.stav === "ukoncena" ? '<p class="muted">Rozvoz ukončený ' + esc(cas(t.ukoncena)) + ".</p>" : '<button class="btn btn-primary t-velke-tl t-koniec" data-t="ukoncit">🏁 UKONČIŤ ROZVOZ</button>') +
+(z.length ? '<button class="btn" data-t-list="koniec" style="margin-top:8px">◀ Prezrieť zastávky</button>' : "") + "</section>";
     }
     var poradie = z.indexOf(a) + 1, dob = dobierka(a), vzd = vzdialenost(a), naMieste = T.naMieste === a.cislo || (vzd != null && vzd < NA_MIESTE_M);
     var vybav = a.stav !== "caka";
-    return '<section class="card t-akt' + (naMieste ? " t-akt-miesto" : "") + '">' +
+    return listovanieHtml(z, a) + '<section class="card t-akt' + (naMieste ? " t-akt-miesto" : "") + '">' +
       '<div class="t-akt-hore"><span class="t-z-cislo num">' + poradie + '</span><span class="muted">zastávka ' + poradie + " z " + z.length + (a.eta ? ' · príchod <b class="num">' + esc(cas(a.eta)) + "</b>" : "") + "</span>" +
         (vzd != null ? '<span class="t-vzd num">' + (vzd < 1000 ? Math.round(vzd) + " m" : (vzd / 1000).toFixed(1).replace(".", ",") + " km") + "</span>" : "") + "</div>" +
       '<h2 class="t-akt-meno">' + esc(a.meno || a.firma || "-") + "</h2>" +
@@ -450,7 +459,12 @@ var zm = document.getElementById("t-zs-miesto"); if (zm) { mapaZsUkaz(zm); if (D
     var d = t.dataset;
     if (d.tOtvor) { T.id = +d.tOtvor; T.data = null; T.sprava = null; T.akt = null; T.rezim = ROLA === "furman" ? "jazda" : "mapa"; prekresli(); window.scrollTo(0, 0); nacitajTrasu(); zapniJazdu(); return; }
     if (d.tRezim) { T.rezim = d.tRezim; prekresli(); window.scrollTo(0, 0); return; }
-    if (d.tVyber) { T.akt = d.tVyber; T.drzAkt = false; T.naMieste = null; T.rezim = "jazda"; prekresli(); window.scrollTo(0, 0); return; }
+    if (d.tList) {
+var zz = zastavky(), cur = aktualna(), n = d.tList === "koniec" ? zz.length - 1 : (cur ? zz.indexOf(cur) : 0) + Number(d.tList);
+if (zz[n]) { T.akt = zz[n].cislo; T.drzAkt = true; T.prezera = true; T.naMieste = null; T.sprava = null; prekresli(); window.scrollTo(0, 0); }
+return;
+}
+if (d.tVyber) { T.akt = d.tVyber; T.drzAkt = false; T.naMieste = null; T.rezim = "jazda"; prekresli(); window.scrollTo(0, 0); return; }
     if (d.tMiesto) { T.naMieste = d.tMiesto; prekresli(); return; }
     if (d.tAkcia) {
       var c = d.c;
@@ -479,7 +493,7 @@ var zm = document.getElementById("t-zs-miesto"); if (zm) { mapaZsUkaz(zm); if (D
       case "dalsia": case "preskocit":
         var dal = dalsiaCaka(T.akt);
         if (d.t === "preskocit" && !lbzPotvrd("Preskočiť túto zastávku? Vrátite sa k nej neskôr zo Zoznamu.")) return;
-        T.akt = dal ? dal.cislo : null; T.drzAkt = false; T.naMieste = null; T.sprava = null; prekresli(); window.scrollTo(0, 0); break;
+        T.akt = dal ? dal.cislo : null; T.drzAkt = false; T.prezera = false; T.naMieste = null; T.sprava = null; prekresli(); window.scrollTo(0, 0); break;
       case "ukoncit":
         if (!lbzPotvrd("Ukončiť rozvoz? Furmanka sa presunie do Archívu a nedoručené objednávky do ďalšej furmanky.")) return;
         T.prace++;
