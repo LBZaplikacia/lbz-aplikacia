@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.29.11 BETA";
+  var VERZIA = "0.29.12 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -68,11 +68,11 @@
   function ikona(k) { return '<svg class="ik" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (P[k] || P.viac) + "</svg>"; }
   // čo je v spodnej lište v mobile (max 4 + Viac)
   var LISTA = {
-    it: ["prehlad", "chat", "dochadzka", "kniha_jazd"], ceo: ["prehlad", "chat", "dochadzka", "kniha_jazd"],
-    prevadzkar: ["prehlad", "chat", "dochadzka", "rozpis"], prevadzka: ["prehlad", "chat", "sklad", "balenie"],
-    zamestnanec: ["prehlad", "chat", "dochadzka", "rozpis"], furman: ["prehlad", "chat", "trasa", "dochadzka"],
-    zakaznicky_servis: ["prehlad", "chat", "dochadzka", "objednavky"], uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci"],
-    majitelka_arealu: ["prehlad", "kniha_jazd"], zakaznik: ["prehlad", "moje_objednavky", "sledovanie"]
+    it: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "kniha_jazd"], ceo: ["prehlad", "chat", "dochadzka", "kniha_jazd"],
+    prevadzkar: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "rozpis"], prevadzka: ["prehlad", "chat", "sklad", "balenie"],
+    zamestnanec: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "rozpis"], furman: ["prehlad", "chat", "trasa", "dochadzka"],
+    zakaznicky_servis: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "objednavky"], uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci"],
+    majitelka_arealu: ["aktivita", "odbery", "prehlad", "kniha_jazd"], zakaznik: ["prehlad", "moje_objednavky", "sledovanie"]
   };
   var KRATKO = { rozpis: "Rozpis", balenie: "Balenie", trasa: "Trasa", dochadzka: "Dochádzka", kniha_jazd: "Jazdy", zamestnanci: "Ľudia", komentare: "Komentáre",
     exporty: "Exporty", moje_objednavky: "Objednávky", sledovanie: "Furmanka", nastavenia: "Účet" };
@@ -80,13 +80,13 @@
   var PRISTUPY = {
     it: MODULY.map(function (m) { return m.kod; }),
     ceo: MODULY.map(function (m) { return m.kod; }),
-    prevadzka: ["prehlad", "chat", "sklad", "balenie", "dochadzka", "kniha_jazd", "nastavenia"],
-    zamestnanec: ["prehlad", "chat", "dochadzka", "nastavenia"],
-    furman: ["prehlad", "chat", "trasa", "dochadzka", "kniha_jazd", "nastavenia"],
-    zakaznicky_servis: ["prehlad", "chat", "dochadzka", "objednavky", "furmanky", "balenie", "trasa", "sklad", "komentare", "zamestnanci", "nastavenia"],
+    prevadzka: ["aktivita", "odbery", "prehlad", "chat", "sklad", "balenie", "dochadzka", "kniha_jazd", "nastavenia"],
+    zamestnanec: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "nastavenia"],
+    furman: ["aktivita", "odbery", "prehlad", "chat", "trasa", "dochadzka", "kniha_jazd", "nastavenia"],
+    zakaznicky_servis: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "objednavky", "furmanky", "balenie", "trasa", "sklad", "komentare", "zamestnanci", "nastavenia"],
     uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci", "nastavenia"],
-    prevadzkar: ["prehlad", "chat", "dochadzka", "rozpis", "sklad", "balenie", "furmanky", "kniha_jazd", "zamestnanci", "nastavenia"],
-    majitelka_arealu: ["prehlad", "kniha_jazd", "nastavenia"],
+    prevadzkar: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "rozpis", "sklad", "balenie", "furmanky", "kniha_jazd", "zamestnanci", "nastavenia"],
+    majitelka_arealu: ["aktivita", "odbery", "prehlad", "kniha_jazd", "nastavenia"],
     zakaznik: ["prehlad", "moje_objednavky", "sledovanie", "nastavenia"]
   };
 
@@ -140,17 +140,17 @@
   if (location.search) try { history.replaceState(null, "", location.pathname); } catch (e) {}
   // poradie kariet na Prehľade podľa roly (každý si ho môže upraviť – uloží sa v zariadení)
   var PORADIE = {
-    it: ["schvalenie", "statistiky", "sms", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
-    ceo: ["schvalenie", "statistiky", "sms", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
-    prevadzkar: ["schvalenie", "dochadzka", "ulohy", "rozpis", "vybavit", "sklad", "balenie", "furmanky", "kniha"],
-    zamestnanec: ["dochadzka", "zdrav", "ulohy", "furmanky", "rozpis", "vybavit"],
-    prevadzka: ["ulohy", "dochadzka", "sklad", "balenie", "furmanky", "vybavit"],
-    furman: ["sms", "dochadzka", "rozpis", "trasa", "vybavit", "ulohy", "kniha"],
-    zakaznicky_servis: ["sms", "statistiky", "dochadzka", "ulohy", "zdrav", "furmanky", "balenie", "rozpis", "vybavit"],
-    majitelka_arealu: ["kniha", "vybavit"]
+    it: ["aktivita", "odbery", "schvalenie", "statistiky", "sms", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
+    ceo: ["aktivita", "odbery", "schvalenie", "statistiky", "sms", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
+    prevadzkar: ["aktivita", "odbery", "schvalenie", "dochadzka", "ulohy", "rozpis", "vybavit", "sklad", "balenie", "furmanky", "kniha"],
+    zamestnanec: ["aktivita", "odbery", "dochadzka", "zdrav", "ulohy", "furmanky", "rozpis", "vybavit"],
+    prevadzka: ["aktivita", "odbery", "ulohy", "dochadzka", "sklad", "balenie", "furmanky", "vybavit"],
+    furman: ["aktivita", "odbery", "sms", "dochadzka", "rozpis", "trasa", "vybavit", "ulohy", "kniha"],
+    zakaznicky_servis: ["aktivita", "odbery", "sms", "statistiky", "dochadzka", "ulohy", "zdrav", "furmanky", "balenie", "rozpis", "vybavit"],
+    majitelka_arealu: ["aktivita", "odbery", "kniha", "vybavit"]
   };
   var NAZVY_KARIET = { schvalenie: "🔔 Na schválenie", dochadzka: "🕒 Príchod a smeny", ulohy: "✅ Úlohy a Vybaviť", zdrav: "🩺 Zdravotné preukazy", vybavit: "📝 Vybaviť", kniha: "🚗 Kniha jázd", rozpis: "📅 Kto je v práci", furmanky: "🚚 Furmanky",
-    sklad: "🧊 Sklad", balenie: "📦 Balenie", trasa: "🗺️ Trasa", statistiky: "📊 Denný prehľad", sms: "💬 SMS odpovede" };
+    sklad: "🧊 Sklad", balenie: "📦 Balenie", trasa: "🗺️ Trasa", statistiky: "📊 Denný prehľad", sms: "💬 SMS odpovede", odbery: "🛍️ Osobné odbery", aktivita: "⏱ Pracovný čas (automaticky)" };
   var ZAM = window.LBZ_ZAMESTNANCI || null;
 
   var stav = {
@@ -437,13 +437,18 @@
     return '<section class="card"><h3>Sklad</h3><p class="muted" style="margin:0">Ukážkový režim.</p></section>';
   }
   function poradieKariet(dostupne) {
-    var ul = (window.lbzPamat && lbzPamat.nacitaj("prehlad_karty")) || {};
+    var ul = nacitajPoradie();
     var zaklad = PORADIE[stav.rola] || PORADIE.it;
     var poradie = (ul.poradie || []).concat(zaklad).concat(dostupne).filter(function (k, i, a) { return a.indexOf(k) === i && dostupne.indexOf(k) > -1; });
     var skryte = ul.skryte || [];
     return { vsetky: poradie, skryte: skryte, viditelne: poradie.filter(function (k) { return skryte.indexOf(k) === -1; }) };
   }
-  function ulozPoradie(por) { if (window.lbzPamat) lbzPamat.uloz("prehlad_karty", { poradie: por.vsetky, skryte: por.skryte }); }
+  // poradie a skryté karty Prehľadu – trvalo v tomto zariadení (pamäť obrazovky lbzPamat platí len 12 h)
+  function nacitajPoradie() {
+    try { var x = JSON.parse(localStorage.getItem("lbz_prehlad_karty") || "null"); if (x && typeof x === "object") return x; } catch (e) {}
+    return (window.lbzPamat && lbzPamat.nacitaj("prehlad_karty")) || {};
+  }
+  function ulozPoradie(por) { try { localStorage.setItem("lbz_prehlad_karty", JSON.stringify(por ? { poradie: por.vsetky, skryte: por.skryte } : {})); } catch (e) {} }
   function kartaPrisposobit(por) {
     if (por.vsetky.length < 2) return "";
     return '<details class="prisposobit"' + (stav.prisposobit ? " open" : "") + '><summary data-prisp="1">⚙️ Prispôsobiť prehľad</summary><ul class="prisp-zoz">' + por.vsetky.map(function (k, i) {
@@ -485,15 +490,17 @@
       if (OBJ && OBJ.kartaStat && OSTRY) kh.statistiky = OBJ.kartaStat();
       if (knihaZapnuta()) kh.kniha = KNIHA.karta();
       if (zamZapnute() && ZAM.karta) kh.zdrav = ZAM.karta();
+      // osobné odbery a automatický pracovný čas sa dajú tiež presúvať a skryť v „Prispôsobiť prehľad“
+      var kOdb = OBJ && OBJ.mozemOdbery() && OSTRY && r !== "ceo" ? OBJ.kartaOdbery() : "";
+      if (kOdb) kh.odbery = kOdb;
+      var akt = window.lbzAktivita && lbzAktivita.dnes();
+      if (akt != null) kh.aktivita = '<section class="card akt-karta"><h3>⏱ Pracovný čas sa ráta automaticky</h3><p style="margin:0">Dnes: <b class="num">' + Math.floor(akt / 60) + " h " + (akt % 60) + " min</b></p>" +
+        '<p class="muted" style="margin:0">Ráta sa, kým máš appku otvorenú a pracuješ v nej. Po 5 min nečinnosti, minimalizovaní alebo zavretí sa zastaví.</p></section>';
       var por = poradieKariet(Object.keys(kh).filter(function (k) { return kh[k]; }));
       var karty = (kh.schvalenie ? ["schvalenie"] : []).concat(por.viditelne.filter(function (k) { return k !== "schvalenie"; })).map(function (k) { return kh[k]; });
-      var kOdb = OBJ && OBJ.mozemOdbery() && OSTRY && r !== "ceo" ? OBJ.kartaOdbery() : "";
-      if (kOdb) karty.splice(kh.schvalenie ? 1 : 0, 0, kOdb);
       if (kPush) karty.unshift(kPush);
       var kStart = OSTRY ? kartaStart() : ""; if (kStart) karty.unshift(kStart);
-      var akt = window.lbzAktivita && lbzAktivita.dnes();
-      if (akt != null) karty.unshift('<section class="card akt-karta"><h3>⏱ Pracovný čas sa ráta automaticky</h3><p style="margin:0">Dnes: <b class="num">' + Math.floor(akt / 60) + " h " + (akt % 60) + " min</b></p>" +
-        '<p class="muted" style="margin:0">Ráta sa, kým máš appku otvorenú a pracuješ v nej. Po 5 min nečinnosti, minimalizovaní alebo zavretí sa zastaví.</p></section>');
+
       var dnes = new Date().toLocaleDateString("sk-SK", { weekday: "long", day: "numeric", month: "numeric" });
       var meno = String(stav.pouzivatel || "").split(" ").pop();
       return hlavicka("Dobrý deň" + (meno ? ", " + meno : "") + "!", "Dnes je " + dnes, true) + '<div class="grid">' + karty.join("") + "</div>" +
@@ -642,7 +649,7 @@
       var kl = [];
       root.querySelectorAll("[data-prisp-skry]").forEach(function (b) { kl.push(b.dataset.prispSkry); });
       var por = poradieKariet(kl);
-      if (t.dataset.prispReset) { if (window.lbzPamat) lbzPamat.uloz("prehlad_karty", {}); }
+      if (t.dataset.prispReset) { ulozPoradie(null); if (window.lbzPamat) lbzPamat.uloz("prehlad_karty", {}); }
       else {
         var k = t.dataset.prispHore || t.dataset.prispDole || t.dataset.prispSkry, ix = por.vsetky.indexOf(k);
         if (t.dataset.prispSkry) { var si = por.skryte.indexOf(k); if (si > -1) por.skryte.splice(si, 1); else por.skryte.push(k); }
