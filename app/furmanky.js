@@ -271,7 +271,7 @@
     return '<div class="f-sprava f-' + F.sprava.typ + '" role="status">' + esc(F.sprava.text) + ' <button class="btn-link" data-f="zavri-spravu" aria-label="Zavrieť">✕</button>' + zle + "</div>";
   }
   function testHtml() {
-    return '<p class="s-test" title="Appka z Upgates len číta – nevypína články, nepíše [NEPOSIELAT] ani statusy a neposiela e-maily. Ostrá práca zatiaľ v Správe objednávok.">🧪 Test – z Upgates len číta, ostrá práca v Správe objednávok</p>';
+    return '<p class="s-test" title="Statusy Naplánované / Rozvezené / Na faktúru zapisuje do Upgates appka. Presuny zákazníkov, vypínanie článkov furmaniek a ranný newsletter zatiaľ robí starý skript Správy objednávok.">🧪 Testovacia ostrá verzia – statusy zapisuje appka; presuny, články a newsletter zatiaľ starý skript</p>';
   }
   function behHtml() {
     var b = F.beh && F.beh.posledny;

@@ -268,7 +268,7 @@
       '<tr><td colspan="2">priezvisko, meno, titul:</td><td colspan="2"><b>' + esc(meno) + "</b></td></tr>" +
       '<tr><td colspan="2">bydlisko:</td><td colspan="2">' + esc(o.bydlisko || "") + "</td></tr></table>" +
       '<table><thead><tr><th>začiatok cesty (miesto, dátum)</th><th>miesto rokovania</th><th>účel cesty</th><th>koniec cesty (miesto, dátum)</th></tr></thead><tbody>' + hore + "</tbody></table>" +
-      '<table class="cp-hl-t"><tr><td style="width:30%">spolucestujúci</td><td>–</td></tr><tr><td>dopravný prostriedok</td><td>' + esc((cesty[0] && cesty[0].doprava) || "služobné vozidlo (SMV) FIAT DOBLO AA086TG") + "</td></tr></table>" +
+      '<table class="cp-hl-t"><tr><td style="width:30%">spolucestujúci</td><td>–</td></tr><tr><td>dopravný prostriedok</td><td>' + esc((cesty[0] && cesty[0].doprava) || "služobné vozidlo (SMV) FIAT DOBLO AA086TG") + " – náhrada za km sa neposkytuje</td></tr></table>" +
       '<p style="margin:3mm 0 1mm">Hromadný cestovný príkaz na ' + esc(mesiacNazov(C.m)) + " – opakované pracovné cesty (§ 3 ods. 3 zákona č. 283/2002 Z. z.). Zamestnávateľ: " + esc(ZAMESTNAVATEL) + "</p>" +
       '<p style="text-align:right;margin:8mm 0 2mm">.............................................<br>podpis prac. oprávneného na povolenie cesty</p>' +
       '<table style="width:60mm"><tr><th>hod</th><th>eur</th></tr><tr><td>0–5</td><td class="t-r">0,00</td></tr><tr><td>5–12</td><td class="t-r">' + eur(s.s5) + '</td></tr><tr><td>12–18</td><td class="t-r">' + eur(s.s12) + '</td></tr><tr><td>18+</td><td class="t-r">' + eur(s.s18) + "</td></tr></table>" +

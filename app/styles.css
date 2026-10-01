@@ -410,8 +410,8 @@ input.f-zla { outline: 2px solid var(--bad) !important; }
   #tlac-oblast.f-tlac-sumar tr.f-t-sucet td { font-weight: 800; }
   #tlac-oblast.f-tlac-sumar td.t-c { font-size: 12pt; width: 28mm; }
   #tlac-oblast.f-tlac-stitky .f-stitky { display: block; font-size: 0; }   /* nie grid – grid sa pri tlači nedelí na strany (1 strana, rozseknuté štítky) */
-  #tlac-oblast.f-tlac-stitky table.f-stitok { display: inline-table; width: 49%; margin: 0 0 5mm; vertical-align: top; border-collapse: collapse; break-inside: avoid; page-break-inside: avoid; table-layout: fixed; font: 8.5pt/1.25 Arial, sans-serif; color: #000; }
-  #tlac-oblast.f-tlac-stitky table.f-stitok:nth-child(odd) { margin-right: 2%; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok { display: inline-table; width: calc((100% - 16mm) / 2); margin: 0 0 5mm; vertical-align: top; border-collapse: collapse; break-inside: avoid; page-break-inside: avoid; table-layout: fixed; font: 8.5pt/1.25 Arial, sans-serif; color: #000; }
+  #tlac-oblast.f-tlac-stitky table.f-stitok:nth-child(odd) { margin-right: 16mm; }   /* medzera v strede (rez etikety) */
   #tlac-oblast.f-tlac-stitky col.f-s-c1 { width: 72%; } #tlac-oblast.f-tlac-stitky col.f-s-c2 { width: 28%; }
   #tlac-oblast.f-tlac-stitky table.f-stitok th, #tlac-oblast.f-tlac-stitky table.f-stitok td { border: 1px solid #000; padding: .8mm 1.2mm; text-align: center; vertical-align: middle; font-weight: 400; background: #fff; font-size: 8.5pt; overflow-wrap: anywhere; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #tlac-oblast.f-tlac-stitky table.f-stitok th { background: #fff !important; }

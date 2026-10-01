@@ -788,7 +788,7 @@
   // ----- furmanky -----
   function pohladFurmanky() {
     var st = S.stav;
-    var info = '<span class="muted">' + (SUPA ? "Furmanky na 7 dní z appky" + (st && st.furmankyCas ? " · Upgates " + esc(st.furmankyCas) : "") + " (sťahuje sa o 6:00, 11:30 a 14:00)" :
+    var info = '<span class="muted">' + (SUPA ? "Furmanky na 7 dní z appky" + (st && st.furmankyCas ? " · Upgates " + esc(st.furmankyCas) : "") + " (sťahuje sa každých 30 minút)" :
       st && st.furmankyCas ? "Z objednávok o " + esc(st.furmankyCas) : "Obnovujú sa samé každých 15 min.") + (S.nacitavam ? " · načítavam…" : "") + "</span>";
     var lista = '<div class="s-lista">' + info + '<span class="s-lista-tl"><button class="btn" data-s-akcia="obnov-furmanky"' + (S.nacitavam ? " disabled" : "") + ">" + (SUPA ? "Obnoviť" : "Obnoviť z objednávok") + "</button></span></div>";
     if (!st || !st.rozvozy) {

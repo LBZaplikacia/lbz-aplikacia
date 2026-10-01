@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.29.20 BETA";
+  var VERZIA = "0.29.21 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -268,7 +268,7 @@
 
   function renderLogin() {
     var hlavicka = '<div class="brand"><img class="brand-mark" src="icons/logo.svg" alt="">' +
-      '<div><h1>Legendárne buchty <span class="beta">BETA</span></h1><p>Aplikácia pre tím a zákazníkov – testovacia verzia</p></div></div>';
+      '<div><h1>Legendárne buchty <span class="beta">BETA</span></h1><p>Aplikácia pre tím a zákazníkov – testovacia ostrá verzia</p></div></div>';
 
     if (stav.nacitavam) {
       el('<main class="login"><div class="login-card">' + hlavicka + '<div class="panel"><p class="muted" style="margin:0">Načítavam…</p></div></div></main>');
@@ -388,7 +388,7 @@
 
   function hlavicka(nadpis, podnadpis, ozdobne) {
     return '<div class="head"><div><h2' + (ozdobne ? ' class="ozdobne"' : "") + ">" + esc(nadpis) + '</h2><div class="sub">' + esc(podnadpis) + "</div></div>" +
-      (OSTRY ? "" : '<span class="badge-demo">ukážkové údaje</span>') + "</div>";
+      (OSTRY ? '<span class="badge-demo" title="Appka už beží naostro, ale ešte ju dolaďujeme – ak niečo nesedí, napíšte do Chatu">🧪 testovacia ostrá verzia</span>' : '<span class="badge-demo">ukážkové údaje</span>') + "</div>";
   }
 
   function kartaFurmanky() {
@@ -875,7 +875,21 @@
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     // nová verzia appky sa zistí pri otvorení; po jej zapnutí sa stránka raz obnoví
     var malKontrolera = !!navigator.serviceWorker.controller;
-    navigator.serviceWorker.addEventListener("controllerchange", function () { if (malKontrolera) location.reload(); });
+    // nová verzia: nereloaduje sa uprostred práce ani pri prihlasovaní (appka „preskakovala“) –
+    // obnoví sa ťuknutím na pás „Nová verzia“ alebo pri ďalšom otvorení (pozor: aj fotoaparát dá appku do pozadia)
+    var novaVerzia = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (!malKontrolera) return;
+      novaVerzia = true;
+      if (!document.getElementById("nova-verzia")) {
+        var nv = document.createElement("button"); nv.id = "nova-verzia"; nv.type = "button";
+        nv.textContent = "🔄 Je nová verzia appky – ťuknite pre obnovenie";
+        nv.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:9999;background:#583934;color:#fff;border:0;border-radius:999px;padding:10px 16px;font:600 14px Montserrat,Arial,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer";
+        nv.addEventListener("click", function () { location.reload(); });
+        document.body.appendChild(nv);
+      }
+    });
+
     navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(function (reg) {
       document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") reg.update(); });
     }).catch(function () {});
