@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.30.13 BETA";
+  var VERZIA = "0.30.14 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -526,6 +526,7 @@
       if (kody.indexOf("furmanky") > -1) kh.furmanky = kartaFurmanky();
       if (kody.indexOf("balenie") > -1 && balenieZapnute()) kh.balenie = BAL.karta();
       if (kody.indexOf("trasa") > -1 && trasaZapnuta()) { kh.trasa = TRA.karta(); if (TRA.kartaSms) kh.sms = TRA.kartaSms(); }
+else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) kh.trasa = TRA.karta(); // súkromný účet furmana: len plán
       if (OBJ && OBJ.kartaStat && OSTRY) kh.statistiky = OBJ.kartaStat();
       if (knihaZapnuta()) kh.kniha = KNIHA.karta();
       if (zamZapnute() && ZAM.karta) kh.zdrav = ZAM.karta();
@@ -829,7 +830,7 @@
       if (ROZ) ROZ.nastavDb(db, stav.rola);
       if (OBJ) OBJ.nastavDb(db, stav.rola);
       if (BAL) BAL.nastavDb(interny() ? db : null, stav.rola);
-      if (TRA) TRA.nastavDb(interny() ? db : null, stav.rola);
+      if (TRA) TRA.nastavDb(interny() ? db : null, stav.rola, session.user.email);
       if (DOCH) DOCH.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
       if (KNIHA) KNIHA.nastavDb(db, stav.rola);
       if (VYB) VYB.nastavDb(db, stav.rola);

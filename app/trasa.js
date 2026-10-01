@@ -8,7 +8,9 @@
 (function () {
   "use strict";
 
-  var DB = null, ROLA = null, koren = null;
+  var DB = null, ROLA = null, EMAIL = "", koren = null;
+// rozvoz (GPS, vybavovanie zastávok) len na služobnom účte furman@; súkromný účet furmana vidí len plán trasy na Prehľade
+function sluzobny() { return ROLA !== "furman" || String(EMAIL || "").toLowerCase() === "furman@legendarnebuchty.sk"; }
   var T = { id: null, zoznam: null, data: null, sprava: null, nacitavam: false, dialog: null, fotky: {}, prace: 0 };
   (function () { var p = window.lbzPamat && lbzPamat.nacitaj("trasa"); if (p && p.id != null) { T.id = p.id; T.rezim = p.rezim || "jazda"; T.akt = p.akt || null; } })();
   var START = "Sedlo Zbojská, 976 56 Pohronská Polhora";
@@ -609,10 +611,38 @@ setInterval(function () {
 if (koren && koren.isConnected && !document.hidden && T.id != null && T.rezim === "mapa" && ROLA !== "furman") nacitajLive();
 }, 30000);
 
+// ---------- súkromný účet furmana: len náhľad naplánovanej trasy (dnes a ďalšie dni) ----------
+function kartaNahlad() {
+if (DB && (!T._kartaCas || Date.now() - T._kartaCas > 600000) && !T._kartaNac) {
+T._kartaNac = true;
+rpc("trasa_zoznam").then(function (d) { T._kartaNac = false; T._kartaCas = Date.now(); T.nahlad = {}; if (d && d.ok) T.zoznam = d.trasy || []; window.dispatchEvent(new Event("lbz-prekresli")); })
+.catch(function () { T._kartaNac = false; T._kartaCas = Date.now(); });
+}
+var dnes = dnesIso();
+var z = (T.zoznam || []).filter(function (t) { return t.stav !== "ukoncena" && String(t.datum).slice(0, 10) >= dnes; }).slice(0, 2);
+T.nahlad = T.nahlad || {};
+z.forEach(function (t) {
+if (T.nahlad[t.id] !== undefined) return;
+T.nahlad[t.id] = null;
+rpc("trasa_data", { p_id: t.id }).then(function (d) { T.nahlad[t.id] = d && d.ok ? d.zastavky || [] : []; window.dispatchEvent(new Event("lbz-prekresli")); })
+.catch(function () { T.nahlad[t.id] = []; });
+});
+return '<section class="card"><h3>🗺️ Moja trasa</h3>' + (z.length ? z.map(function (t) {
+var zs = T.nahlad[t.id];
+return '<p style="margin:8px 0 4px"><b>' + esc(datumSk(t.datum)) + " · " + esc(t.nazov) + '</b><br><span class="muted">odchod <b class="num">' + esc(cas(t.odchod)) + '</b> · návrat ~<span class="num">' + esc(cas(t.navrat)) + "</span>" +
+(t.hodiny ? " · " + String(t.hodiny).replace(".", ",") + " h" : "") + " · " + t.pocet + " zastávok</span></p>" +
+(zs == null ? '<p class="muted">Načítavam zastávky…</p>' : '<div class="rows">' + zs.map(function (x, i) {
+return '<div class="row"><span><b class="num">' + (x.poradie || i + 1) + ".</b> " + esc(x.meno || x.firma || x.cislo) + ' <span class="muted">· ' + esc(String(x.adresa || "").split(", ").pop()) + '</span></span><span class="num">' + esc(cas(x.eta)) + "</span></div>";
+}).join("") + "</div>");
+}).join("") + '<p class="muted" style="margin:8px 0 0">Len náhľad plánu – rozvoz sa robí na služobnom telefóne (účet furman@).</p>'
+: '<p class="muted" style="margin:0">Žiadna naplánovaná trasa.</p>') + "</section>";
+}
+
 // ---------- verejné rozhranie pre app.js ----------
   window.LBZ_TRASA = {
-    nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; if (!DB) { T.zoznam = null; T.data = null; T.id = null; } },
-    mozem: function () { return !!DB && ["it", "ceo", "zakaznicky_servis", "furman"].indexOf(ROLA) > -1; },
+    nastavDb: function (klient, rola, email) { DB = klient || null; ROLA = klient ? rola : null; EMAIL = klient ? email || "" : ""; if (!DB) { T.zoznam = null; T.data = null; T.id = null; } },
+    mozem: function () { return !!DB && ["it", "ceo", "zakaznicky_servis", "furman"].indexOf(ROLA) > -1 && sluzobny(); },
+lenNahlad: function () { return !!DB && ROLA === "furman" && !sluzobny(); },
     mount: function (el) {
       koren = el;
       el.addEventListener("click", klik);
@@ -634,6 +664,7 @@ if (koren && koren.isConnected && !document.hidden && T.id != null && T.rezim ==
     },
     kartaSms: kartaSms,
     karta: function () {
+      if (ROLA === "furman" && !sluzobny()) return kartaNahlad();
       if (!T.zoznam && DB && !T._karta) { T._karta = true; rpc("trasa_zoznam").then(function (d) { if (d && d.ok) { T.zoznam = d.trasy || []; window.dispatchEvent(new Event("lbz-prekresli")); } }).catch(function () {}); }
       var z = (T.zoznam || []).filter(function (t) { return t.stav !== "ukoncena"; }).slice(0, 3);
       return '<section class="card"><h3>Trasa</h3>' + (z.length ? '<div class="rows">' + z.map(function (t) {
