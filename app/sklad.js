@@ -121,6 +121,10 @@
     if (/^(IN|ÍŇ|PRIJEM|PRÍJEM)$/.test(kod)) return nastavRezim("Príjem");
     if (/^(OUT|VYDAJ|VÝDAJ)$/.test(kod)) return nastavRezim("Výdaj");
     if (/^(KRC|KRCMICKA|PREDAJNA)$/.test(kod)) return nastavRezim("Krčmička");
+    if (S.rezim === "Inventúra") {
+      if (!/^[A-Z0-9]+(-[A-Z0-9]+)+$/.test(kod)) { S.sprava = { typ: "chyba", text: "Neplatný kód: " + kod }; pip("chyba"); prekresli(); return; }
+      return inventuraSken(kod);
+    }
     if (kod.indexOf("QQQ") > -1) {
       S.sprava = { typ: "chyba", text: "Toto je štítok objednávky – skenujte ho v module Balenie." };
       pip("chyba"); prekresli(); return;
@@ -154,11 +158,73 @@
   }
 
   function nastavRezim(r) {
-    S.rezim = r; LS.set("lbz2_rezim", r);
+    S.rezim = r; if (r !== "Inventúra") LS.set("lbz2_rezim", r);   // inventúra sa nepamätá (aby bežné skeny nešli omylom do inventúry)
     S.sprava = { typ: "info", text: "Režim: " + r };
     pip("ok"); prekresli();
   }
-  function ikonaRezimu(r) { return r === "Príjem" ? "📥" : r === "Výdaj" ? "📤" : "🏪"; }
+  function ikonaRezimu(r) { return r === "Príjem" ? "📥" : r === "Výdaj" ? "📤" : r === "Inventúra" ? "📋" : "🏪"; }
+
+  // ---------- inventúra: skenujú sa balíky na mieste, vyhodnotenie = chýba / navyše, uzavretie opraví sklad ----------
+  var INV = { d: null, nacitavam: false, detail: false, miesto: "sklad", posledne: [] };
+  function inventuraNacitaj() {
+    if (!SUPA || !DB) return;
+    INV.nacitavam = true;
+    rpc("inventura_stav").then(function (r) { INV.nacitavam = false; INV.d = r; prekresli(); })
+      .catch(function (e) { INV.nacitavam = false; S.sprava = { typ: "chyba", text: (e && e.message) || "Inventúra sa nenačítala" }; prekresli(); });
+  }
+  function inventuraSken(kod) {
+    if (!SUPA || !DB) { S.sprava = { typ: "chyba", text: "Inventúra funguje len v appke s pripojením" }; pip("chyba"); prekresli(); return; }
+    if (navigator.onLine === false) { S.sprava = { typ: "chyba", text: "Bez signálu – inventúrny sken sa nezapísal, skúste znova" }; pip("chyba"); prekresli(); return; }
+    rpc("inventura_sken", { p_kod: kod }).then(function (r) {
+      if (!r || !r.ok) { S.sprava = { typ: "chyba", text: (r && r.text) || "Nezapísané", kod: kod }; pip("chyba"); prekresli(); return; }
+      S.sprava = { typ: r.typ === "ok" && r.nove ? "ok" : "info", text: "📋 " + r.text, kod: r.kod };
+      INV.posledne.unshift({ kod: r.kod, text: r.text, cas: Date.now(), typ: r.typ }); INV.posledne = INV.posledne.slice(0, 30);
+      if (INV.d && INV.d.inventura) INV.d.naskenovane = r.naskenovane;
+      pip(r.typ === "ok" && r.nove ? "ok" : "chyba"); prekresli();
+    }).catch(function (e) { S.sprava = { typ: "chyba", text: (e && e.message) || "Nezapísané" }; pip("chyba"); prekresli(); });
+  }
+  function inventuraHtml() {
+    var d = INV.d;
+    if (!d) { if (!INV.nacitavam) inventuraNacitaj(); return '<section class="card"><p class="muted" style="margin:0">Načítavam inventúru…</p></section>'; }
+    if (!d.ok) return '<section class="card"><p class="f-sprava f-chyba">' + esc(d.text || "Inventúra nie je dostupná") + "</p></section>";
+    var i = d.inventura;
+    if (!i) {
+      var p = d.posledna, v = p && p.vysledok;
+      return '<section class="card s-inv"><h3>📋 Inventúra</h3><p class="muted">Naskenujte všetky balíky, ktoré sú fyzicky na mieste. Na konci appka ukáže, čo v evidencii chýba a čo je navyše, a po potvrdení opraví sklad.</p>' +
+        '<div class="s-inv-miesto"><button class="btn" data-s-inv-miesto="sklad" aria-pressed="' + (INV.miesto === "sklad") + '">🧊 Hlavný sklad</button><button class="btn" data-s-inv-miesto="krcmicka" aria-pressed="' + (INV.miesto === "krcmicka") + '">🏪 Krčmička</button></div>' +
+        '<button class="btn btn-primary" data-s-inv="zacni">▶ Začať inventúru</button>' +
+        (v ? '<p class="muted" style="margin-top:10px">Posledná inventúra (' + esc(p.miesto === "krcmicka" ? "Krčmička" : "sklad") + ", " + esc(new Date(p.uzavreta).toLocaleDateString("sk-SK")) + "): naskenovaných " + esc(v.naskenovane) + " z " + esc(v.ocakavane) +
+          ", odpísané " + esc(v.odpisane) + ", vrátené " + esc(v.presunute) + ", pridané " + esc(v.pridane) + "</p>" : "") + "</section>";
+    }
+    var miesto = i.miesto === "krcmicka" ? "Krčmička" : "hlavný sklad";
+    var prod = d.produkty || [], chyb = 0, nav = 0;
+    prod.forEach(function (x) { chyb += x.chyba.length; nav += x.navyse.length; });
+    var detail = INV.detail ? '<div class="s-inv-zoz">' + prod.filter(function (x) { return x.chyba.length || x.navyse.length || x.naskenovane !== x.ocakavane; }).map(function (x) {
+        return '<div class="s-inv-pr" style="--pf:' + esc(x.farba) + '"><div class="s-inv-pr-h"><b>' + esc(x.nazov) + '</b><span class="num">' + x.naskenovane + " / " + x.ocakavane + "</span></div>" +
+          (x.chyba.length ? '<div class="s-inv-ch">❌ chýba (' + x.chyba.length + "): " + x.chyba.map(esc).join(", ") + "</div>" : "") +
+          (x.navyse.length ? '<div class="s-inv-na">➕ navyše (' + x.navyse.length + "): " + x.navyse.map(function (n) { return esc(n.kod) + " <i>(" + esc(n.stav === "vydany" ? "vydaný" : n.stav === "krcmicka" ? "Krčmička" : n.stav === "sklad" ? "sklad" : "nie je v evidencii") + ")</i>"; }).join(", ") + "</div>" : "") + "</div>";
+      }).join("") + (chyb || nav ? "" : '<p class="muted">Všetko sedí 👍</p>') + "</div>" : "";
+    return '<section class="card s-inv"><h3>📋 Inventúra – ' + esc(miesto) + '</h3>' +
+      '<div class="d-sumar"><span>Naskenované <b class="num">' + esc(d.naskenovane) + '</b></span><span>V evidencii <b class="num">' + esc(d.ocakavane) + "</b></span>" +
+      (INV.detail ? '<span>Chýba <b class="num">' + chyb + '</b></span><span>Navyše <b class="num">' + nav + "</b></span>" : "") + "</div>" +
+      '<div class="s-inv-tl"><button class="btn" data-s-inv="vyhodnot">' + (INV.detail ? "🔄 Obnoviť vyhodnotenie" : "📊 Vyhodnotiť") + "</button>" +
+      (d.smiem ? '<button class="btn btn-primary" data-s-inv="uzavri">✅ Uzavrieť a opraviť sklad</button><button class="btn" data-s-inv="zrus">✕ Zrušiť inventúru</button>' : '<span class="muted">Uzatvára IT, CEO alebo prevádzkár.</span>') + "</div>" +
+      detail +
+      (INV.posledne.length ? '<div class="s-zoznam">' + INV.posledne.map(function (x) {
+        return '<div class="s-riadok s-' + (x.typ === "ok" ? "ok" : "chyba") + '"><span class="s-cas num">' + cas(x.cas) + '</span><span class="s-telo"><strong>📋 ' + esc(x.text) + '</strong><span class="muted">' + esc(x.kod) + "</span></span></div>";
+      }).join("") + "</div>" : "") + "</section>";
+  }
+  function inventuraAkcia(a) {
+    if (a === "zacni") { rpc("inventura_zacni", { p_miesto: INV.miesto }).then(function (r) { INV.d = r; INV.posledne = []; INV.detail = false; S.sprava = { typ: "info", text: "Inventúra spustená – skenujte balíky" }; prekresli(); }).catch(function (e) { S.sprava = { typ: "chyba", text: (e && e.message) || "Nespustené" }; prekresli(); }); return; }
+    if (a === "vyhodnot") { INV.detail = true; inventuraNacitaj(); return; }
+    if (a === "uzavri" || a === "zrus") {
+      var opravit = a === "uzavri";
+      if (!lbzPotvrd(opravit ? "Uzavrieť inventúru a opraviť sklad? Chýbajúce balíky sa odpíšu, nájdené sa vrátia / pridajú." : "Zrušiť inventúru? Sklad sa nezmení.")) return;
+      rpc("inventura_uzavri", { p_opravit: opravit }).then(function (r) {
+        S.sprava = { typ: r && r.ok ? "ok" : "chyba", text: (r && r.text) || "Chyba" }; INV.d = null; INV.detail = false; INV.posledne = []; prekresli(); if (r && r.ok) nacitajStav(true);
+      }).catch(function (e) { S.sprava = { typ: "chyba", text: (e && e.message) || "Chyba" }; prekresli(); });
+    }
+  }
 
   // ---------- odosielanie fronty ----------
   var posielam = false, pokus = 0, casovac = null;
@@ -567,8 +633,8 @@
 
   function pohladSkener() {
     return '<div id="s-skener">' +
-      '<div class="s-rezimy">' + ["Príjem", "Krčmička", "Výdaj"].map(function (r) {
-        return '<button class="s-rezim s-' + (r === "Príjem" ? "prijem" : r === "Výdaj" ? "vydaj" : "krcmicka") + '" data-s-rezim="' + r + '" aria-pressed="' + (S.rezim === r) + '">' +
+      '<div class="s-rezimy">' + ["Príjem", "Krčmička", "Výdaj"].concat(SUPA ? ["Inventúra"] : []).map(function (r) {
+        return '<button class="s-rezim s-' + (r === "Príjem" ? "prijem" : r === "Výdaj" ? "vydaj" : r === "Inventúra" ? "inventura" : "krcmicka") + '" data-s-rezim="' + r + '" aria-pressed="' + (S.rezim === r) + '">' +
           '<span class="s-ikona">' + ikonaRezimu(r) + "</span>" + r + "</button>";
       }).join("") + "</div>" +
       '<div id="s-kamera" hidden></div>' +
@@ -582,6 +648,8 @@
     var panel = sp
       ? '<div class="s-sprava s-' + sp.typ + '" role="status">' + esc(sp.text) + (sp.kod ? '<span class="s-kod">' + esc(sp.kod) + "</span>" : "") + "</div>"
       : '<div class="s-sprava s-info" role="status"><span>Režim <strong>' + esc(S.rezim) + "</strong> – skenujte čítačkou alebo kamerou</span></div>";
+    if (S.rezim === "Inventúra") return panel + '<div class="s-ovladanie"><form class="s-rucne" data-s-form="rucne"><input id="s-rucny" autocomplete="off" autocapitalize="characters" placeholder="Kód ručne, napr. P00017-2-15" aria-label="Kód balíka ručne">' +
+      '<button class="btn btn-primary" type="submit">Zapísať</button></form></div>' + inventuraHtml();
     var dnesne = zoznamDnes();
     var ok = dnesne.filter(function (s) { return s.stav === "ok"; }).length;
     var vsetky = SUPA && S.vsetkySkeny;
@@ -699,7 +767,7 @@
   }
 
   // ----- správa skladu (IT a CEO) -----
-  var NAZVY_AKCII = { prijem: "📥 Príjem", krcmicka: "🏪 Krčmička", vydaj: "📤 Výdaj", rucny_vydaj: "✋ Ručný výdaj", uprava: "✏️ Úprava", zmazanie: "🗑️ Zmazanie", "import": "⤵️ Prenos zo starého skladu" };
+  var NAZVY_AKCII = { inventura: "📋 Inventúra", prijem: "📥 Príjem", krcmicka: "🏪 Krčmička", vydaj: "📤 Výdaj", rucny_vydaj: "✋ Ručný výdaj", uprava: "✏️ Úprava", zmazanie: "🗑️ Zmazanie", "import": "⤵️ Prenos zo starého skladu" };
   function pohladSprava() {
     if (!spravca()) return '<div class="empty"><strong>Len pre IT a CEO</strong></div>';
     var f = S.upravaForm || {};
@@ -862,7 +930,9 @@
     if (riadok && koren.contains(riadok) && !e.target.closest("button")) { otvorProdukt(riadok.getAttribute("data-s-produkt")); return; }
     var t = e.target.closest("button"); if (!t || !koren.contains(t)) return;
     var d = t.dataset;
-    if (d.sRezim) { t.blur(); nastavRezim(d.sRezim); return; }
+    if (d.sRezim) { t.blur(); nastavRezim(d.sRezim); if (d.sRezim === "Inventúra") inventuraNacitaj(); return; }
+    if (d.sInvMiesto) { INV.miesto = d.sInvMiesto; prekresli(); return; }
+    if (d.sInv) { inventuraAkcia(d.sInv); return; }
     if (d.sPohlad) {
       S.pohlad = d.sPohlad; S.sprava = null; prekresli();
       if (S.pohlad === "stav" || S.pohlad === "furmanky") nacitajStav(false);

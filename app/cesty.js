@@ -54,7 +54,7 @@
     var a = { p_mesiac: C.m }; if (C.osoba) a.p_osoba = C.osoba;
     return rpc("cp_mesiac", a).then(function (d) {
       if (!d || !d.ok) { C.d = { chyba: (d && d.text) || "Nenačítané" }; kresli(); return; }
-      C.d = d; if (!C.osoba) C.osoba = d.osoba_id; C.karta = null; kresli();
+      C.d = d; if (!C.osoba) C.osoba = d.osoba_id; C.karta = null; C.pod = null; kresli(); nacitajPodpisy();
       if (C.uprav) { var c = cesta(C.uprav); if (c) { C.f = kopia(c); if (C.f.km == null) prepocitajKm(); } else { C.uprav = null; C.f = null; } kresli(); }
     }).catch(function (e) { C.d = { chyba: chyba(e) }; kresli(); });
   }
@@ -121,11 +121,30 @@
     var cesty = d.cesty || [];
     var sumKm = cesty.reduce(function (s, c) { return s + Number(c.km || 0); }, 0), sumStr = cesty.reduce(function (s, c) { return s + Number(c.stravne || 0); }, 0);
     var nove = '<div class="cp-akcie" style="align-items:flex-end"><label class="field" style="margin:0"><span class="label">Pridať cestu (deň)</span><input type="date" id="cp-novy-den" value="' + dnes() + '" max="' + dnes() + '"></label>' +
-      '<button class="btn" data-cp="novy">➕ Pridať cestu</button>' + (cesty.length ? '<button class="btn" data-cp="tlac">🖨️ Tlačiť za mesiac</button>' : "") + "</div>";
+      '<button class="btn" data-cp="novy">➕ Pridať cestu</button>' + (cesty.length ? '<button class="btn" data-cp="tlac">🖨️ Tlačiť za mesiac</button>' : "") + "</div>" +
+      (cesty.length ? podpisyHtml(d, sumStr) : "");
     var info = '<p class="muted" style="font-size:13px;margin:6px 0">Hromadný cestovný príkaz na ' + esc(mesiacNazov(C.m)) + " (§ 3 ods. 3 zákona č. 283/2002 Z. z.). Každý deň rozvozu sa vytvorí sám z trasy – na konci dňa ho skontroluj, doplň miesta, kde si ešte bol (napr. po tovar), a potvrď. Služobné auto: kilometre sa len evidujú, stravné sa počíta samo.</p>";
     return hl + info + spr + nove +
       '<div class="cp-sum"><span>Ciest: ' + cesty.length + "</span><span>Spolu: " + esc(kmTxt(Math.round(sumKm * 10) / 10)) + "</span><span>Stravné spolu: " + eur(sumStr) + "</span></div>" +
       (cesty.length ? cesty.map(denHtml).join("") : '<div class="empty"><strong>V tomto mesiaci zatiaľ nie je žiadna cesta.</strong></div>');
+  }
+  function podpisyHtml(d, sumStr) {
+    var p = C.pod || {}, cp = (p.cp && p.cp.podpisy) || [], ho = (p.hot && p.hot.podpisy) || [];
+    var ma = function (l, rola) { return l.filter(function (x) { return x.rola === rola; }).slice(-1)[0]; };
+    var txt = function (x) { return x ? "✅ " + esc(x.meno || "") + " " + esc(new Date(x.cas).toLocaleDateString("sk-SK")) : "–"; };
+    var zz = ma(cp, "zamestnanec"), zv = ma(cp, "zamestnavatel"), hz = ma(ho, "zamestnanec");
+    return '<section class="card cp-podpisy"><h3>✍️ Podpisy za ' + esc(mesiacNazov(C.m)) + "</h3>" +
+      '<div class="rows"><div class="row"><span>Cestovný príkaz – zamestnanec</span><span>' + txt(zz) + "</span></div>" +
+      '<div class="row"><span>Cestovný príkaz – schválil (zamestnávateľ)</span><span>' + txt(zv) + "</span></div>" +
+      '<div class="row"><span>Stravné ' + eur(sumStr) + " prevzaté v hotovosti</span><span>" + txt(hz) + "</span></div></div>" +
+      '<div class="cp-akcie">' +
+        '<button class="btn' + (zz ? "" : " btn-primary") + '" data-cp="podpis-cp">✍️ ' + (zz ? "Podpísať znova" : "Podpísať cestovný príkaz") + "</button>" +
+        (d.spravca ? '<button class="btn" data-cp="podpis-cp-v">✍️ Schváliť a podpísať za zamestnávateľa</button>' : "") +
+        (Number(sumStr) > 0 ? '<button class="btn" data-cp="podpis-hot">💶 Potvrdiť prevzatie hotovosti</button>' : "") +
+        (d.spravca && hz ? '<button class="btn" data-cp="podpis-hot-v">✍️ Vyplatil (zamestnávateľ)</button>' : "") +
+        (p.cp && p.cp.pdf ? '<button class="btn" data-cp="pdf-cp">📄 Podpísaný príkaz (PDF)</button>' : "") +
+        (p.hot && p.hot.pdf ? '<button class="btn" data-cp="pdf-hot">📄 Potvrdenie hotovosti (PDF)</button>' : "") +
+      "</div></section>";
   }
   function stavPill(s) { var x = STAV[s] || STAV.navrh; return '<span class="pill ' + x[1] + '">' + x[0] + "</span>"; }
   function denHtml(c) {
@@ -264,6 +283,12 @@
         .catch(function (x) { lbzInfo(chyba(x)); });
     }
     else if (a === "tlac") tlac();
+    else if (a === "podpis-cp") podpis("cp", "zamestnanec");
+    else if (a === "podpis-cp-v") podpis("cp", "zamestnavatel");
+    else if (a === "podpis-hot") podpis("hotovost", "zamestnanec");
+    else if (a === "podpis-hot-v") podpis("hotovost", "zamestnavatel");
+    else if (a === "pdf-cp" && C.pod && C.pod.cp && C.pod.cp.pdf) lbzPodpis.otvor(DB, C.pod.cp.pdf.cesta, C.pod.cp.pdf.nazov);
+    else if (a === "pdf-hot" && C.pod && C.pod.hot && C.pod.hot.pdf) lbzPodpis.otvor(DB, C.pod.hot.pdf.cesta, C.pod.hot.pdf.nazov);
   }
   function zmena(e) {
     if (e.target.id === "cp-osoba") { C.osoba = +e.target.value; C.uprav = null; C.f = null; nacitaj(); return; }
@@ -275,8 +300,52 @@
   function klaves(e) { if (e.target.id === "cp-vloz-txt" && e.key === "Enter") { e.preventDefault(); var b = koren.querySelector('[data-cp="vloz-ok"]'); if (b) b.click(); } }
 
   // ---------- tlač – hromadný cestovný príkaz za mesiac ----------
-  function tlac() {
-    var d = C.d; if (!d || !d.cesty) return;
+  // dokumenty na podpis: cp:<osoba>:<YYYY-MM> (cestovný príkaz) a hotovost:<osoba>:<YYYY-MM> (prevzatie stravného v hotovosti)
+  function dokCp() { return "cp:" + C.d.osoba_id + ":" + C.m.slice(0, 7); }
+  function dokHot() { return "hotovost:" + C.d.osoba_id + ":" + C.m.slice(0, 7); }
+  function sucetStr() { return ((C.d && C.d.cesty) || []).reduce(function (s, c) { return s + Number(c.stravne || 0); }, 0); }
+  function nacitajPodpisy() {
+    if (!window.lbzPodpis || !C.d || !C.d.osoba_id) return;
+    var m = C.m, os = C.d.osoba_id;
+    Promise.all([lbzPodpis.nacitaj(DB, dokCp()), lbzPodpis.nacitaj(DB, dokHot())]).then(function (r) {
+      if (C.m !== m || !C.d || C.d.osoba_id !== os) return;
+      C.pod = { cp: r[0] && r[0].ok ? r[0] : null, hot: r[1] && r[1].ok ? r[1] : null, kluc: m + os }; kresli();
+    }).catch(function () { /* */ });
+  }
+  function obsahCp() { return JSON.stringify(((C.d && C.d.cesty) || []).map(function (c) { return [c.datum, c.zaciatok, c.koniec, c.km, c.stravne, (c.body || []).map(function (b) { return [b.miesto, b.min || 0]; })]; })); }
+  function meno() { var o = (C.d && C.d.osoba) || {}; return [o.priezvisko, o.meno, o.titul].filter(Boolean).join(" ") || o.prezyvka || ""; }
+  function podpis(typ, rola) {
+    if (!window.lbzPodpis) { lbzInfo("Podpis nie je dostupný – obnovte appku."); return; }
+    var hot = typ === "hotovost", suma = eur(sucetStr());
+    lbzPodpis.podpisat({
+      db: DB, typ: typ, rola: rola, osoba: C.d.osoba_id, dokument: hot ? dokHot() : dokCp(),
+      nazov: (hot ? "Prevzatie hotovosti – stravné " : "Cestovný príkaz ") + mesiacNazov(C.m) + " – " + meno(),
+      subor: (hot ? "hotovost_" : "cestovny_prikaz_") + C.m.slice(0, 7),
+      titul: hot ? (rola === "zamestnanec" ? "Prevzatie stravného v hotovosti" : "Vyplatenie stravného v hotovosti") : (rola === "zamestnanec" ? "Podpis cestovného príkazu" : "Schválenie cestovného príkazu"),
+      vyhlasenie: hot ? (rola === "zamestnanec" ? "Potvrdzujem, že som prevzal(a) v hotovosti stravné za " + mesiacNazov(C.m) + " vo výške " + suma + "." : "Potvrdzujem vyplatenie stravného " + suma + " v hotovosti.")
+        : rola === "zamestnanec" ? "Potvrdzujem, že údaje o pracovných cestách za " + mesiacNazov(C.m) + " sú správne, a žiadam o preplatenie " + suma + "." : "Schvaľujem pracovné cesty a vyúčtovanie za " + mesiacNazov(C.m) + " (" + suma + ").",
+      obsah: obsahCp() + "|" + suma,
+      html: function (pod) { return hot ? hotovostHtml(pod) : tlacHtml(pod); },
+      poPodpise: function () { if (typ === "cp") nacitaj(); }
+    }).then(function (r) {
+      if (r.zrusene) return;
+      C.sprava = r.ok ? { typ: "ok", text: "Podpísané – PDF je uložené v dokumentoch zamestnanca" } : { typ: "chyba", text: r.text || "Nepodarilo sa" };
+      nacitajPodpisy(); kresli();
+    });
+  }
+  function hotovostHtml(pod) {
+    var suma = eur(sucetStr());
+    return "<h1>POTVRDENIE O PREVZATÍ HOTOVOSTI</h1><p>Zamestnávateľ: " + esc(ZAMESTNAVATEL) + "</p>" +
+      "<table><tr><th style=\"width:40%\">Zamestnanec</th><td><b>" + esc(meno()) + "</b></td></tr>" +
+      "<tr><th>Účel</th><td>Stravné – hromadný cestovný príkaz za " + esc(mesiacNazov(C.m)) + " (" + ((C.d && C.d.cesty) || []).length + " ciest)</td></tr>" +
+      '<tr><th>Suma</th><td class="t-r"><b>' + suma + "</b></td></tr><tr><th>Spôsob vyplatenia</th><td>v hotovosti</td></tr></table>" +
+      "<p>Svojím podpisom potvrdzujem, že som uvedenú sumu prevzal(a) v hotovosti.</p>" +
+      '<div class="pdp-riadok">' + lbzPodpis.slot(pod, "zamestnanec", "prevzal(a) – zamestnanec") + lbzPodpis.slot(pod, "zamestnavatel", "vyplatil – za zamestnávateľa") + "</div>";
+  }
+  function tlac() { var h = tlacHtml(C.pod && C.pod.cp ? C.pod.cp.podpisy : null); if (!h) return; tlacitHtml('<div class="k-tlac cp-tlac">' + h + "</div>"); }
+  function tlacHtml(pod) {
+    var d = C.d; if (!d || !d.cesty) return "";
+    var P = window.lbzPodpis, sl = function (rola, popis) { return P ? P.slot(pod, rola, popis) : '<span>.............................................<br>' + popis + "</span>"; };
     var o = d.osoba || {}, meno = [o.priezvisko, o.meno, o.titul].filter(Boolean).join(" ") || o.prezyvka || "";
     var cesty = d.cesty, s = d.sadzby || {}, sumStr = 0, sumKm = 0;
     var dt = function (x) { var p = String(x).slice(0, 10).split("-"); return +p[2] + ". " + +p[1] + ". " + p[0]; };
@@ -295,23 +364,25 @@
     }).join("");
     var dopl = [];
     cesty.forEach(function (c) { (c.body || []).forEach(function (x) { if (x.typ === "doplnene") dopl.push(dt(c.datum) + " – " + (x.miesto || "") + zdrz(x)); }); });
-    var h = '<div class="k-tlac cp-tlac">' +
-      '<table class="cp-hl-t"><tr><th colspan="3" style="text-align:left;font-size:15pt">CESTOVNÝ PRÍKAZ</th><th style="font-size:12pt">Rozvoz buchiet</th></tr>' +
+    var h = '<table class="cp-hl-t"><tr><th colspan="3" style="text-align:left;font-size:15pt">CESTOVNÝ PRÍKAZ</th><th style="font-size:12pt">Rozvoz buchiet</th></tr>' +
       '<tr><td colspan="2">priezvisko, meno, titul:</td><td colspan="2"><b>' + esc(meno) + "</b></td></tr>" +
       '<tr><td colspan="2">bydlisko:</td><td colspan="2">' + esc(o.bydlisko || "") + "</td></tr></table>" +
       '<table><thead><tr><th>začiatok cesty (miesto, dátum)</th><th>miesto rokovania</th><th>účel cesty</th><th>koniec cesty (miesto, dátum)</th></tr></thead><tbody>' + hore + "</tbody></table>" +
       '<table class="cp-hl-t"><tr><td style="width:30%">spolucestujúci</td><td>–</td></tr><tr><td>dopravný prostriedok</td><td>' + esc((cesty[0] && cesty[0].doprava) || "služobné vozidlo (SMV) FIAT DOBLO AA086TG") + " – náhrada za km sa neposkytuje</td></tr></table>" +
       '<p style="margin:3mm 0 1mm">Hromadný cestovný príkaz na ' + esc(mesiacNazov(C.m)) + " – opakované pracovné cesty (§ 3 ods. 3 zákona č. 283/2002 Z. z.). Zamestnávateľ: " + esc(ZAMESTNAVATEL) + "</p>" +
-      '<p style="text-align:right;margin:8mm 0 2mm">.............................................<br>podpis prac. oprávneného na povolenie cesty</p>' +
+      '<p style="text-align:right;margin:8mm 0 2mm">' + sl("zamestnavatel", "podpis prac. oprávneného na povolenie cesty") + "</p>" +
       '<table style="width:60mm"><tr><th>hod</th><th>eur</th></tr><tr><td>0–5</td><td class="t-r">0,00</td></tr><tr><td>5–12</td><td class="t-r">' + eur(s.s5) + '</td></tr><tr><td>12–18</td><td class="t-r">' + eur(s.s12) + '</td></tr><tr><td>18+</td><td class="t-r">' + eur(s.s18) + "</td></tr></table>" +
       '<h2 style="margin-top:6mm;text-align:center">VYÚČTOVANIE PRACOVNEJ CESTY</h2>' +
       "<table><thead><tr><th>dátum</th><th>odchod / príchod</th><th>začiatok cesty</th><th>koniec cesty</th><th>stravné [EUR]</th><th>spolu</th><th>poznámka</th></tr></thead><tbody>" + dole +
       '</tbody><tfoot><tr><td colspan="5">Vyplatiť:</td><td class="t-r">' + eur(sumStr) + "</td><td>" + esc(kmTxt(Math.round(sumKm * 10) / 10)) + "</td></tr></tfoot></table>" +
       '<h2 style="margin-top:6mm">SPRÁVA Z PRACOVNEJ CESTY (popis účelu a výsledkov PC)</h2><p>Rozvoz objednávok zákazníkom podľa trás (' + cesty.length + " ciest, spolu " + esc(kmTxt(Math.round(sumKm * 10) / 10)) + ")." +
       (dopl.length ? "<br>Ďalšie miesta: " + esc(dopl.join("; ")) : "") + "</p>" +
-      '<p style="display:flex;justify-content:space-between;margin:10mm 0 4mm"><span>.............................................<br>dátum a podpis účastníka</span><span>.............................................<br>schválil</span></p>' +
+      '<div class="pdp-riadok" style="display:flex;justify-content:space-between;margin:10mm 0 4mm">' + sl("zamestnanec", "dátum a podpis účastníka") + sl("zamestnavatel", "schválil") + "</div>" +
       '<h2 style="margin-top:4mm">ŽIADOSŤ O PREPLATENIE CESTOVNÝCH NÁKLADOV</h2><p>Žiadam o preplatenie cestovných nákladov vo výške <b>' + eur(sumStr) + "</b>.</p>" +
-      '<p style="display:flex;justify-content:space-between;margin:10mm 0 0"><span>.............................................<br>dátum a podpis účastníka</span><span>.............................................<br>schválil</span></p></div>';
+      '<div class="pdp-riadok" style="display:flex;justify-content:space-between;margin:10mm 0 0">' + sl("zamestnanec", "dátum a podpis účastníka") + sl("zamestnavatel", "schválil") + "</div>";
+    return h;
+  }
+  function tlacitHtml(h) {
     var obal = document.getElementById("tlac-oblast");
     if (!obal) { obal = document.createElement("div"); obal.id = "tlac-oblast"; document.body.appendChild(obal); }
     obal.className = ""; obal.innerHTML = h; document.body.classList.add("tlaci");

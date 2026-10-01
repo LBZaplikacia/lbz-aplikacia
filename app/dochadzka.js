@@ -53,12 +53,20 @@
   }
   function nacitajMesiac() {
     D.nacitavam = true; prekresli();
+    var mes = D.mesiac, os = D.osoba;
+    D.bil = null;
+    rpc("dochadzka_bilancia", { p_mesiac: mes || prvyDen(new Date()), p_osoba: os || (D.moja && D.moja.osoba && D.moja.osoba.id) || null }).then(function (b) {
+      if (D.mesiac === mes && D.osoba === os) { D.bil = b && b.ok ? (b.ludia || [])[0] || null : null; kresli(); }
+    }).catch(function () { /* */ });
     return rpc("dochadzka_mesiac", { p_osoba: D.osoba, p_mesiac: D.mesiac }).then(function (d) {
-      D.nacitavam = false; if (!d || d.ok === false) D.sprava = { typ: "chyba", text: (d && d.text) || "Nenačítané" }; else D.data = d; kresli();
+      D.nacitavam = false; if (!d || d.ok === false) D.sprava = { typ: "chyba", text: (d && d.text) || "Nenačítané" }; else { D.data = d; nacitajPodpisVykazu(); } kresli();
     }).catch(function (e) { D.nacitavam = false; D.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
   }
   function nacitajPrehlad() {
     D.nacitavam = true; prekresli();
+    rpc("dochadzka_bilancia", { p_mesiac: D.mesiac || prvyDen(new Date()) }).then(function (b) {
+      D.bilT = {}; ((b && b.ludia) || []).forEach(function (x) { D.bilT[x.id] = x; }); prekresli();
+    }).catch(function () { /* */ });
     return rpc("dochadzka_prehlad", { p_mesiac: D.mesiac }).then(function (d) {
       D.nacitavam = false; if (!d || d.ok === false) D.sprava = { typ: "chyba", text: (d && d.text) || "Nenačítané" }; else { D.prehlad = d; D.ludia = d.ludia; } prekresli();
     }).catch(function (e) { D.nacitavam = false; D.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
@@ -154,6 +162,125 @@
     return '<label class="field d-vyber-zam"><span class="label">👤 Dochádzka zamestnanca' + (spravca() ? " (zobraziť a upraviť)" : "") + '</span><select id="d-vyber-zam"><option value="">– vyber zamestnanca –</option>' +
       l.map(function (x) { return '<option value="' + x.id + '"' + (D.zalozka === "osoba" && D.osoba === x.id ? " selected" : "") + ">" + esc(x.meno) + "</option>"; }).join("") + "</select></label>";
   }
+  // ---------- bilancia hodín (plán = smeny v rozpise × dĺžka smeny; rozdiel sa prenáša do ďalšieho mesiaca) ----------
+  function znak(min) { return (min > 0 ? "+" : min < 0 ? "−" : "") + hodiny(Math.abs(min)); }
+  function bilanciaHtml(b) {
+    if (!b) return "";
+    var z = b.zostatok_min;
+    return '<div class="d-bil"><div class="d-bil-h"><b>⚖️ Bilancia hodín</b>' + (b.beziaci ? ' <span class="muted">(priebežne – mesiac ešte beží)</span>' : "") + "</div>" +
+      '<div class="d-bil-r"><span>Plán podľa rozpisu</span><b class="num">' + hodiny(b.plan_min) + " h</b><small>" + b.smeny + " smien × " + String(b.smena_h).replace(".", ",") + " h – vypláca sa</small></div>" +
+      '<div class="d-bil-r"><span>Odpracované + neprítomnosť</span><b class="num">' + hodiny(b.odpracovane_min) + " h</b></div>" +
+      '<div class="d-bil-r"><span>Prenos z minulého mesiaca</span><b class="num">' + znak(b.prenos_z_min) + " h</b></div>" +
+      '<div class="d-bil-r d-bil-z ' + (z >= 0 ? "d-bil-plus" : "d-bil-minus") + '"><span>' + (b.beziaci ? "Zatiaľ" : "Prenos do ďalšieho mesiaca") + "</span><b class=\"num\">" + znak(z) + " h</b><small>" +
+        (z > 0 ? "nadčas – o toľko menej v ďalšom mesiaci" : z < 0 ? "chýba – o toľko viac v ďalšom mesiaci" : "presne podľa plánu") + "</small></div></div>";
+  }
+  function menoOsoby() { var d = D.data || {}; return (d.osoba && d.osoba.meno) || (D.moja && D.moja.osoba && D.moja.osoba.meno) || ""; }
+  function osobaId() { var d = D.data || {}; return (d.osoba && d.osoba.id) || D.osoba || (D.moja && D.moja.osoba && D.moja.osoba.id) || null; }
+  function dokVykaz() { return "dochadzka:" + osobaId() + ":" + String(D.mesiac || prvyDen(new Date())).slice(0, 7); }
+  function nacitajPodpisVykazu() {
+    D.podV = null; if (!window.lbzPodpis || !osobaId()) return;
+    var dok = dokVykaz();
+    lbzPodpis.nacitaj(DB, dok).then(function (r) { if (dok === dokVykaz()) { D.podV = r && r.ok ? r : null; kresli(); } }).catch(function () { /* */ });
+  }
+  function vykazTlacHtml(pod) {
+    var d = D.data || {}, r = d.riadky || [], sum = 0, str = 0, dni = {};
+    r.forEach(function (x) { sum += Number(x.odpracovane_min || 0); str += Number(x.stravne || 0); if (x.typ === "praca") dni[x.datum] = 1; });
+    var P = window.lbzPodpis, sl = function (rola, popis) { return P ? P.slot(pod, rola, popis) : "<span>.............................................<br>" + popis + "</span>"; };
+    var b = D.bil;
+    return "<h1>Dochádzka – " + esc(mesiacNazov(D.mesiac || prvyDen(new Date()))) + "</h1>" +
+      "<p>Zamestnanec: <b>" + esc(menoOsoby()) + "</b> · Zamestnávateľ: V sedle u Falťanov s.r.o., IČO 47206934</p>" +
+      "<table><thead><tr><th>Deň</th><th>Miesto / druh</th><th>Príchod</th><th>Odchod</th><th>Prestávka</th><th>Hodiny</th><th>Stravné</th><th>Poznámka</th></tr></thead><tbody>" +
+      r.map(function (x) {
+        var sv = window.lbzSviatok ? window.lbzSviatok(x.datum) : "";
+        return "<tr><td>" + esc(denSk(x.datum)) + (sv ? "<br><small>" + esc(sv) + "</small>" : "") + "</td><td>" + esc(x.typ === "praca" ? (x.miesto || "") : TYPY[x.typ]) + "</td><td>" + esc(cas(x.prichod)) +
+          "</td><td>" + esc(cas(x.odchod)) + '</td><td class="t-r">' + (x.prestavka_min ? hodiny(x.prestavka_min) : "") + '</td><td class="t-r">' + (x.odpracovane_min != null ? hodiny(x.odpracovane_min) : "") +
+          '</td><td class="t-r">' + (Number(x.stravne) ? eur(x.stravne) : "") + "</td><td>" + esc(x.poznamka || "") + "</td></tr>";
+      }).join("") + "</tbody></table>" +
+      "<table><tr><th>Odpracované + neprítomnosť</th><td class=\"t-r\"><b>" + hodiny(sum) + " h</b></td><th>Dní v práci</th><td class=\"t-r\">" + Object.keys(dni).length + "</td><th>Stravné</th><td class=\"t-r\">" + eur(str) + "</td></tr>" +
+      (b ? "<tr><th>Plán (" + b.smeny + " smien × " + String(b.smena_h).replace(".", ",") + " h)</th><td class=\"t-r\">" + hodiny(b.plan_min) + " h</td><th>Prenos z min. mesiaca</th><td class=\"t-r\">" + znak(b.prenos_z_min) +
+        " h</td><th>Prenos do ďalšieho</th><td class=\"t-r\"><b>" + znak(b.zostatok_min) + " h</b></td></tr>" : "") + "</table>" +
+      '<div class="pdp-riadok" style="display:flex;justify-content:space-between;margin:10mm 0 0">' + sl("zamestnanec", "podpis zamestnanca") + sl("zamestnavatel", "za zamestnávateľa") + "</div>";
+  }
+  function tlacHtml(h, trieda) {
+    var obal = document.getElementById("tlac-oblast");
+    if (!obal) { obal = document.createElement("div"); obal.id = "tlac-oblast"; document.body.appendChild(obal); }
+    obal.className = trieda || ""; obal.innerHTML = h; document.body.classList.add("tlaci");
+    var hotovo = function () { document.body.classList.remove("tlaci"); obal.innerHTML = ""; window.removeEventListener("afterprint", hotovo); };
+    window.addEventListener("afterprint", hotovo);
+    setTimeout(function () { window.print(); setTimeout(hotovo, 1500); }, 80);
+  }
+  function podpisVykazu(rola) {
+    if (!window.lbzPodpis) { lbzInfo("Podpis nie je dostupný – obnovte appku."); return; }
+    var m = mesiacNazov(D.mesiac || prvyDen(new Date()));
+    lbzPodpis.podpisat({
+      db: DB, typ: "dochadzka", rola: rola, osoba: osobaId(), dokument: dokVykaz(),
+      nazov: "Dochádzka " + m + " – " + menoOsoby(), subor: "dochadzka_" + String(D.mesiac || prvyDen(new Date())).slice(0, 7),
+      titul: rola === "zamestnanec" ? "Podpis dochádzky" : "Potvrdenie dochádzky za zamestnávateľa",
+      vyhlasenie: rola === "zamestnanec" ? "Potvrdzujem, že výkaz dochádzky za " + m + " je správny." : "Potvrdzujem výkaz dochádzky za " + m + ".",
+      obsah: JSON.stringify(((D.data && D.data.riadky) || []).map(function (x) { return [x.datum, x.typ, x.prichod, x.odchod, x.odpracovane_min, x.stravne]; })),
+      html: vykazTlacHtml
+    }).then(function (r) { if (r.zrusene) return; D.sprava = r.ok ? { typ: "ok", text: "Výkaz podpísaný – PDF je v dokumentoch zamestnanca" } : { typ: "chyba", text: r.text }; nacitajPodpisVykazu(); kresli(); });
+  }
+  function podpisyVykazuHtml() {
+    var p = (D.podV && D.podV.podpisy) || [], ma = function (rola) { return p.filter(function (x) { return x.rola === rola; }).slice(-1)[0]; };
+    var zz = ma("zamestnanec"), zv = ma("zamestnavatel"), spr = D.data && D.data.uprava;
+    var t = function (x) { return x ? "✅ " + esc(x.meno || "") + " " + esc(new Date(x.cas).toLocaleDateString("sk-SK")) : "nepodpísané"; };
+    return '<div class="d-podpisy"><span>✍️ Zamestnanec: ' + t(zz) + " · Zamestnávateľ: " + t(zv) + "</span>" +
+      '<span class="d-podpisy-tl"><button class="btn" data-d="tlac-vykaz">🖨️ Tlačiť</button>' +
+      (D.zalozka === "mesiac" ? '<button class="btn' + (zz ? "" : " btn-primary") + '" data-d="podpis-vykaz">✍️ ' + (zz ? "Podpísať znova" : "Podpísať výkaz") + "</button>" : "") +
+      (spr && D.zalozka === "osoba" ? '<button class="btn" data-d="podpis-vykaz-v">✍️ Podpísať za zamestnávateľa</button>' : "") +
+      (D.podV && D.podV.pdf ? '<button class="btn" data-d="pdf-vykaz">📄 Podpísané PDF</button>' : "") + "</span></div>";
+  }
+  function listokHtml(a, meno, pod) {
+    var P = window.lbzPodpis, sl = function (rola, popis) { return P ? P.slot(pod, rola, popis) : "<span>.............................................<br>" + popis + "</span>"; };
+    var dni = 0, d0 = new Date(a.od + "T12:00:00"), d1 = new Date(a.do + "T12:00:00");
+    for (var d = new Date(d0); d <= d1; d.setDate(d.getDate() + 1)) { var w = d.getDay(); var iso2 = iso(d); if (w !== 0 && w !== 6 && !(window.lbzSviatok && window.lbzSviatok(iso2))) dni++; }
+    return "<h1>" + (a.typ === "dovolenka" ? "DOVOLENKOVÝ LÍSTOK" : "ŽIADOSŤ – " + esc(String(TYPY[a.typ] || a.typ).toUpperCase())) + "</h1>" +
+      "<p>Zamestnávateľ: V sedle u Falťanov s.r.o., IČO 47206934</p>" +
+      "<table><tr><th style=\"width:40%\">Zamestnanec</th><td><b>" + esc(meno) + "</b></td></tr>" +
+      "<tr><th>Druh</th><td>" + esc(TYPY[a.typ] || a.typ) + "</td></tr>" +
+      "<tr><th>Od – do</th><td>" + esc(denSk(a.od)) + (a.do !== a.od ? " – " + esc(denSk(a.do)) : "") + (a.cas_od ? " " + String(a.cas_od).slice(0, 5) + "–" + String(a.cas_do || "").slice(0, 5) : "") + "</td></tr>" +
+      (a.typ === "dovolenka" ? "<tr><th>Pracovné dni Po–Pi bez sviatkov</th><td>" + dni + " (smeny cez víkend podľa rozpisu sa započítajú pri schválení)</td></tr>" : "") +
+      "<tr><th>Poznámka</th><td>" + esc(a.poznamka || "") + "</td></tr><tr><th>Stav</th><td>" + esc(a.stav === "schvalena" ? "schválená" : a.stav === "zamietnuta" ? "zamietnutá" : "čaká na schválenie") + "</td></tr></table>" +
+      '<div class="pdp-riadok" style="display:flex;justify-content:space-between;margin:10mm 0 0">' + sl("zamestnanec", "podpis zamestnanca") + sl("zamestnavatel", "schválil – za zamestnávateľa") + "</div>";
+  }
+  function podpisListka(a, meno, osoba, rola) {
+    if (!window.lbzPodpis) { lbzInfo("Podpis nie je dostupný – obnovte appku."); return; }
+    lbzPodpis.podpisat({
+      db: DB, typ: "absencia", rola: rola, osoba: osoba, dokument: "absencia:" + a.id,
+      nazov: (a.typ === "dovolenka" ? "Dovolenkový lístok " : (TYPY[a.typ] || "Žiadosť") + " ") + denSk(a.od) + " – " + meno, subor: "listok_" + a.id,
+      titul: a.typ === "dovolenka" ? "Podpis dovolenkového lístka" : "Podpis žiadosti",
+      vyhlasenie: rola === "zamestnanec" ? "Žiadam o " + String(TYPY[a.typ] || "").toLowerCase() + " " + denSk(a.od) + (a.do !== a.od ? " – " + denSk(a.do) : "") + "." : "Schvaľujem žiadosť.",
+      obsah: JSON.stringify([a.id, a.typ, a.od, a.do, a.cas_od, a.cas_do]),
+      html: function (pod) { return listokHtml(a, meno, pod); }
+    }).then(function (r) { if (r.zrusene) return; D.sprava = r.ok ? { typ: "ok", text: "Podpísané – PDF je v dokumentoch zamestnanca" } : { typ: "chyba", text: r.text }; kresli(); });
+  }
+  function zmensi(file) {
+    return new Promise(function (ok, zle) {
+      var img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        var m = Math.min(1, 1600 / Math.max(img.width, img.height)), c = document.createElement("canvas");
+        c.width = Math.round(img.width * m); c.height = Math.round(img.height * m); c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url); c.toBlob(function (b) { b ? ok(b) : zle(new Error("Fotku sa nepodarilo spracovať")); }, "image/jpeg", 0.85);
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); zle(new Error("Súbor nie je obrázok")); };
+      img.src = url;
+    });
+  }
+  function nahrajPriepustky(osoba, files) {
+    var t = Date.now();
+    return Promise.all(Array.prototype.slice.call(files || [], 0, 4).map(function (f, i) {
+      return zmensi(f).then(function (b) {
+        var cesta = osoba + "/priepustky/" + t + "_" + (i + 1) + ".jpg";
+        return DB.storage.from("zamestnanci").upload(cesta, b, { contentType: "image/jpeg" }).then(function (r) { if (r.error) throw r.error; return cesta; });
+      });
+    }));
+  }
+  function ukazPrilohy(cesty) {
+    Promise.all((cesty || []).map(function (c) { return DB.storage.from("zamestnanci").createSignedUrl(c, 600).then(function (r) { return r && r.data ? r.data.signedUrl : null; }); }))
+      .then(function (u) { u.filter(Boolean).forEach(function (x) { window.open(x, "_blank"); }); });
+  }
+  function prilohyTl(cesty) { return (cesty || []).length ? ' <button class="btn-link" data-d-prilohy="' + esc(JSON.stringify(cesty)) + '">📎 priepustka (' + cesty.length + ")</button>" : ""; }
   function tabulkaMesiaca(d, uprava) {
     var r = d.riadky || [], sum = 0, str = 0, dni = {};
     r.forEach(function (x) { sum += Number(x.odpracovane_min || 0); str += Number(x.stravne || 0); if (x.typ === "praca") dni[x.datum] = 1; });
@@ -165,7 +292,8 @@
         '<td class="num c-cas">' + esc(cas(x.prichod)) + (x.prichod || x.odchod ? "–" : "") + esc(otv ? "…" : cas(x.odchod)) + "</td>" +
         '<td class="num c-prest">' + (x.prestavka_min ? '<span class="c-mob">prestávka </span>' + hodiny(x.prestavka_min) : "") + '</td><td class="num c-hod"><b>' + (x.odpracovane_min != null ? hodiny(x.odpracovane_min) + '<span class="c-mob"> h</span>' : "") + "</b></td>" +
         '<td class="num c-str">' + (Number(x.stravne) ? '<span class="c-mob">stravné </span>' + eur(x.stravne) : "") + "</td>" +
-        '<td class="c-pozn">' + (x.poznamka ? '<span class="muted">' + esc(x.poznamka) + "</span>" : "") +
+        '<td class="c-pozn">' +
+        (x.poznamka ? '<span class="muted">' + esc(x.poznamka) + "</span>" : "") + prilohyTl(x.prilohy) +
         (uprava && !x.len_citanie ? ' <button class="btn-link" data-d-upr="' + x.id + '">✏️ Upraviť</button>' : "") +
         (x.len_citanie ? ' <span class="muted" title="Prenesené zo starej dochádzky">🔒</span>' : "") +
         (!uprava && D.zalozka === "mesiac" && !x.len_citanie && x.typ === "praca" ? ' <button class="btn-link" data-d-opr="' + x.id + '">Oprava</button>' : "") +
@@ -224,15 +352,21 @@
     return (D.zalozka === "osoba" ? '<div class="d-osoba-hl"><button class="btn-link" data-d-zal="tim">← Tím</button> <b>' + esc(d.osoba && d.osoba.meno) + "</b>" +
       (d.uprava ? ' <button class="btn" data-d="pridat">➕ Pridať záznam</button>' +
         '<form class="d-norma" id="d-norma-form"><label>Denná norma <input id="d-norma" type="number" step="0.25" min="1" max="24" value="' + esc(d.osoba && d.osoba.norma_h) + '"> h</label>' +
+        '<button class="btn" type="submit">Uložiť</button></form>' +
+        '<form class="d-norma" id="d-smena-form"><label>Dĺžka smeny (plán) <input id="d-smena" type="number" step="0.25" min="1" max="24" value="' + esc(D.bil ? D.bil.smena_h : 11.5) + '"> h</label>' +
         '<button class="btn" type="submit">Uložiť</button></form>' : "") + "</div>" : "") +
+      podpisyVykazuHtml() + bilanciaHtml(D.bil) +
       tabulkaMesiaca(d, d.uprava && D.zalozka === "osoba") +
-      (D.zalozka === "mesiac" && (d.absencie || []).length ? "<h3>Moje žiadosti</h3>" + ziadostiZoznam(d.absencie) : "");
+      ((D.zalozka === "mesiac" || D.zalozka === "osoba") && (d.absencie || []).length ? "<h3>" + (D.zalozka === "osoba" ? "Žiadosti (dovolenka, PN, lekár)" : "Moje žiadosti") + "</h3>" + ziadostiZoznam(d.absencie) : "");
   }
   function ziadostiZoznam(a) {
     var st = { ziadost: '<span class="pill">čaká</span>', schvalena: '<span class="pill ok">schválená</span>', zamietnuta: '<span class="pill bad">zamietnutá</span>' };
     return '<div class="rows">' + a.map(function (x) {
       return '<div class="row"><span>' + esc(TYPY[x.typ]) + " · " + esc(denSk(x.od)) + (x.do !== x.od ? " – " + esc(denSk(x.do)) : "") +
-        (x.cas_od ? " " + String(x.cas_od).slice(0, 5) + "–" + String(x.cas_do || "").slice(0, 5) : "") + (x.dovod ? ' <span class="muted">(' + esc(x.dovod) + ")</span>" : "") + "</span>" + (st[x.stav] || "") + "</div>";
+        (x.cas_od ? " " + String(x.cas_od).slice(0, 5) + "–" + String(x.cas_do || "").slice(0, 5) : "") + (x.dovod ? ' <span class="muted">(' + esc(x.dovod) + ")</span>" : "") + prilohyTl(x.prilohy) +
+        (x.typ !== "oprava" && x.stav !== "zamietnuta" ? ' <button class="btn-link" data-d-listok="' + x.id + '">✍️ ' + (x.typ === "dovolenka" ? "podpísať lístok" : "podpísať") + "</button>" : "") +
+        (x.typ === "lekar" ? ' <label class="btn-link d-prilozit">📷 priložiť priepustku<input type="file" accept="image/*" multiple hidden data-d-priloz="' + x.id + '"></label>' : "") +
+        "</span>" + (st[x.stav] || "") + "</div>";
     }).join("") + "</div>";
   }
   function pohladZiadost() {
@@ -246,6 +380,7 @@
       '<div class="d-riadok d-z-casy" hidden><p class="muted d-cela">Ak čas nezadáš, započíta sa celá denná norma.</p><label class="field"><span class="label">Čas od</span><input type="time" id="d-z-cod"></label>' +
       '<label class="field"><span class="label">Čas do</span><input type="time" id="d-z-cdo"></label></div>' +
       '<label class="field d-z-miesto" hidden><span class="label">Miesto</span><select id="d-z-miesto">' + MIESTA.map(function (m) { return "<option" + (o && o.miesto === m ? " selected" : "") + ">" + m + "</option>"; }).join("") + "</select></label>" +
+      '<label class="field d-z-foto" hidden><span class="label">📷 Priepustka od lekára (odfoťte obe strany – môžete priložiť aj neskôr)</span><input type="file" id="d-z-foto" accept="image/*" multiple></label>' +
       '<label class="field"><span class="label">Poznámka / dôvod</span><input id="d-z-pozn" maxlength="200"></label>' +
       '<p class="muted">Po schválení vedením sa dni zapíšu do dochádzky v rozsahu tvojej dennej normy (lekár podľa času) a započítajú sa do fondu.</p>' +
       '<button class="btn btn-primary" type="submit"' + (D.prace ? " disabled" : "") + ">Odoslať žiadosť</button></form>" +
@@ -265,14 +400,15 @@
       '<section class="card"><h3>📝 Žiadosti <span class="pill num">' + p.ziadosti.length + "</span></h3>" +
       zoz(p.ziadosti, function (x) {
         return '<div class="row d-ziad"><span><b>' + esc(x.osoba) + "</b> · " + esc(TYPY[x.typ]) + (x.typ === "oprava" ? (x.oprava_zaznamu ? " (zmena záznamu)" : " (chýbajúci deň)") + (x.miesto ? " " + esc(x.miesto) : "") : "") + " " + esc(denSk(x.od)) + (x.do !== x.od ? " – " + esc(denSk(x.do)) : "") +
-          (x.cas_od ? " " + String(x.cas_od).slice(0, 5) + "–" + String(x.cas_do || "").slice(0, 5) : "") + (x.poznamka ? ' <span class="muted">' + esc(x.poznamka) + "</span>" : "") + "</span>" +
+          (x.cas_od ? " " + String(x.cas_od).slice(0, 5) + "–" + String(x.cas_do || "").slice(0, 5) : "") + (x.poznamka ? ' <span class="muted">' + esc(x.poznamka) + "</span>" : "") + prilohyTl(x.prilohy) + "</span>" +
           (p.uprava ? '<span class="d-ziad-tl"><button class="btn btn-primary" data-d-schval="' + x.id + '">Schváliť</button><button class="btn" data-d-zamietni="' + x.id + '">Zamietnuť</button></span>' : "") + "</div>";
       }) + "</section></div>" +
       "<h3>Mesiac – " + esc(mesiacNazov(D.mesiac)) + "</h3>" +
-      '<div class="tbl-wrap"><table class="d-tab d-tab-tim"><thead><tr><th>Zamestnanec</th><th>Norma/deň</th><th>Hodiny</th><th>Dni</th><th>Stravné</th><th></th></tr></thead><tbody>' +
+      '<div class="tbl-wrap"><table class="d-tab d-tab-tim"><thead><tr><th>Zamestnanec</th><th>Norma/deň</th><th>Hodiny</th><th>Dni</th><th>Stravné</th><th title="Prenos hodín do ďalšieho mesiaca (plán = smeny × dĺžka smeny)">Bilancia</th><th></th></tr></thead><tbody>' +
       p.ludia.map(function (x) {
+        var bl = D.bilT && D.bilT[x.id];
         return '<tr><td class="c-meno">' + esc(x.meno) + (x.ucet ? "" : ' <span class="muted" title="Nemá prepojený účet v appke">(bez účtu)</span>') + '</td><td class="num c-norma"><span class="c-mob">norma </span>' + String(x.norma_h || 8).replace(".", ",") + ' h</td><td class="num c-hod"><b>' + hodiny(x.min) +
-          '<span class="c-mob"> h</span></b></td><td class="num c-dni">' + x.dni + '<span class="c-mob"> dní</span></td><td class="num c-str"><span class="c-mob">stravné </span>' + eur(x.stravne) + '</td><td class="c-det"><button class="btn-link" data-d-osoba="' + x.id + '">📅 ' + (p.uprava ? "Zobraziť / upraviť" : "Zobraziť") + '</button></td></tr>';
+          '<span class="c-mob"> h</span></b></td><td class="num c-dni">' + x.dni + '<span class="c-mob"> dní</span></td><td class="num c-str"><span class="c-mob">stravné </span>' + eur(x.stravne) + '</td><td class="num c-bil' + (bl && bl.zostatok_min < 0 ? " d-bil-minus" : "") + '"><span class="c-mob">bilancia </span>' + (bl ? znak(bl.zostatok_min) + " h" : "") + '</td><td class="c-det"><button class="btn-link" data-d-osoba="' + x.id + '">📅 ' + (p.uprava ? "Zobraziť / upraviť" : "Zobraziť") + '</button></td></tr>';
       }).join("") + "</tbody></table></div>";
   }
   function dialogHtml() {
@@ -304,8 +440,19 @@
 
   // ---------- akcie (klik na karte Prehľadu aj v module) ----------
   function klik(e) {
-    var t = e.target.closest("[data-d-abs],[data-d],[data-d-miesto],[data-d-zal],[data-d-osoba],[data-d-schval],[data-d-zamietni],[data-d-upr],[data-d-opr]"); if (!t) return;
+    var t = e.target.closest("[data-d-abs],[data-d],[data-d-miesto],[data-d-zal],[data-d-osoba],[data-d-schval],[data-d-zamietni],[data-d-upr],[data-d-opr],[data-d-listok],[data-d-prilohy],[data-d-podpis-ziad]"); if (!t) return;
     var d = t.dataset;
+    if (d.dPrilohy) { try { ukazPrilohy(JSON.parse(d.dPrilohy)); } catch (x) { /* */ } return; }
+    if (d.dListok) {
+      var ab = ((D.data && D.data.absencie) || []).filter(function (x) { return String(x.id) === d.dListok; })[0];
+      if (ab) podpisListka(ab, menoOsoby(), osobaId(), D.zalozka === "osoba" ? "zamestnavatel" : "zamestnanec");
+      return;
+    }
+    if (d.dPodpisZiad) {
+      var zz = ((D.prehlad && D.prehlad.ziadosti) || []).filter(function (x) { return String(x.id) === d.dPodpisZiad; })[0];
+      if (zz) podpisListka(zz, zz.osoba, zz.osoba_id, "zamestnavatel");
+      return;
+    }
     if (d.dMiesto) { D.miesto = d.dMiesto; Array.prototype.forEach.call(document.querySelectorAll("[data-d-miesto]"), function (b) { b.setAttribute("aria-pressed", String(b.dataset.dMiesto === D.miesto)); }); return; }
     if (d.dZal) { D.predTyp = null; D.zalozka = d.dZal; D.sprava = null; if (d.dZal !== "osoba") D.osoba = null; D.data = d.dZal === "tim" ? D.data : null; prekresli(); obnov(); return; }
     if (d.dOsoba) { D.zalozka = "osoba"; D.osoba = +d.dOsoba; D.data = null; prekresli(); nacitajMesiac(); window.scrollTo(0, 0); return; }
@@ -342,6 +489,10 @@
         var pv = (D.mesiac || prvyDen(new Date())).split("-"), nv = new Date(+pv[0], +pv[1] - 1 + (d.d === "vmes+" ? 1 : -1), 1);
         if (iso(nv) > prvyDen(new Date())) break;
         D.mesiac = iso(nv); D.osoba = null; D.data = null; kresli(); nacitajMesiac(); break;
+      case "tlac-vykaz": tlacHtml('<div class="k-tlac">' + vykazTlacHtml(D.podV ? D.podV.podpisy : null) + "</div>"); break;
+      case "podpis-vykaz": podpisVykazu("zamestnanec"); break;
+      case "podpis-vykaz-v": podpisVykazu("zamestnavatel"); break;
+      case "pdf-vykaz": if (D.podV && D.podV.pdf) lbzPodpis.otvor(DB, D.podV.pdf.cesta, D.podV.pdf.nazov); break;
       case "mes-": case "mes+":
         var p = D.mesiac.split("-"), nd = new Date(+p[0], +p[1] - 1 + (d.d === "mes+" ? 1 : -1), 1); D.mesiac = iso(nd); D.data = null; D.prehlad = null; prekresli(); obnov(); break;
       case "zavri-spravu": D.sprava = null; kresli(); break;
@@ -359,6 +510,7 @@
     var c = koren.querySelector(".d-z-casy"), m = koren.querySelector(".d-z-miesto"), doEl = document.getElementById("d-z-do"), cela = koren.querySelector(".d-cela");
     if (c) c.hidden = typ !== "lekar" && typ !== "oprava";
     if (m) m.hidden = typ !== "oprava";
+    var ff = koren.querySelector(".d-z-foto"); if (ff) ff.hidden = typ !== "lekar";
     if (doEl) doEl.closest(".field").hidden = typ === "oprava" || typ === "lekar";
     if (cela) cela.hidden = typ === "oprava";
     var l1 = koren.querySelector("#d-z-cod"), l2 = koren.querySelector("#d-z-cdo");
@@ -366,6 +518,14 @@
     if (l2) l2.previousElementSibling.textContent = typ === "oprava" ? "Správny odchod" : "Čas do";
   }
   function zmena(e) {
+    if (e.target.dataset && e.target.dataset.dPriloz) {
+      var aid = +e.target.dataset.dPriloz, osM = osobaId(), fl = e.target.files;
+      if (!fl || !fl.length || !osM) return;
+      D.prace++; kresli();
+      nahrajPriepustky(osM, fl).then(function (c) { D.prace--; return po(rpc("dochadzka_priloha", { p_id: aid, p_cesty: c }), function () { nacitajMesiac(); }); },
+        function (er) { D.prace--; D.sprava = { typ: "chyba", text: "Fotka sa nenahrala: " + chybaText(er) }; kresli(); });
+      return;
+    }
     if (e.target.id === "d-z-typ") { D.predTyp = e.target.value; polia(e.target.value); }
     if (e.target.id === "d-vyber-zam") { var v = +e.target.value; if (!v) { D.zalozka = "tim"; D.osoba = null; prekresli(); nacitajPrehlad(); return; } D.zalozka = "osoba"; D.osoba = v; D.data = null; D.sprava = null; prekresli(); nacitajMesiac(); }
   }
@@ -373,7 +533,18 @@
   function odoslanie(e) {
     if (e.target.id === "d-ziadost-form") {
       e.preventDefault();
-      po(rpc("dochadzka_ziadost", { p: { typ: hodnota("d-z-typ"), od: hodnota("d-z-od"), do: hodnota("d-z-do") || hodnota("d-z-od"), cas_od: hodnota("d-z-cod"), cas_do: hodnota("d-z-cdo"), poznamka: hodnota("d-z-pozn"),
+      var fe = document.getElementById("d-z-foto"), fotky = hodnota("d-z-typ") === "lekar" && fe && fe.files && fe.files.length ? fe.files : null;
+      var osM = D.moja && D.moja.osoba && D.moja.osoba.id;
+      var prip = fotky && osM ? nahrajPriepustky(osM, fotky) : Promise.resolve([]);
+      D.prace++; kresli();
+      prip.then(function (prilohy) { D.prace--; odosliZiadost(prilohy); }, function (er) { D.prace--; D.sprava = { typ: "chyba", text: "Fotka sa nenahrala: " + chybaText(er) }; kresli(); });
+    }
+    if (e.target.id === "d-smena-form") {
+      e.preventDefault();
+      po(rpc("dochadzka_smena_h", { p_osoba: D.osoba, p_h: Number(String(hodnota("d-smena")).replace(",", ".")) }), function () { nacitajMesiac(); });
+    }
+    function odosliZiadost(prilohy) {
+      po(rpc("dochadzka_ziadost", { p: { prilohy: prilohy, typ: hodnota("d-z-typ"), od: hodnota("d-z-od"), do: hodnota("d-z-do") || hodnota("d-z-od"), cas_od: hodnota("d-z-cod"), cas_do: hodnota("d-z-cdo"), poznamka: hodnota("d-z-pozn"),
         miesto: hodnota("d-z-typ") === "oprava" ? hodnota("d-z-miesto") : "", dochadzka_id: hodnota("d-z-typ") === "oprava" && D.oprava ? D.oprava.id : null } }),
         function () { D.zalozka = "mesiac"; D.oprava = null; nacitajMesiac(); try { DB.functions.invoke("upozornenia", { body: { akcia: "ziadost" } }); } catch (x) {} });
     }

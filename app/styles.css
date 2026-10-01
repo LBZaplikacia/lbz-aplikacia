@@ -1425,3 +1425,29 @@ body.pdfv-otvorene { overflow: hidden; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .r-tab th.r-sviatok, :root:not([data-theme="light"]) .rk-sviatok, :root:not([data-theme="light"]) .d-tab tr.d-sviatok td, :root:not([data-theme="light"]) .ds-tab tr.ds-sviatok td { background: #4a2420; } }
 :root[data-theme="dark"] .r-tab th.r-sviatok, :root[data-theme="dark"] .rk-sviatok, :root[data-theme="dark"] .d-tab tr.d-sviatok td, :root[data-theme="dark"] .ds-tab tr.ds-sviatok td { background: #4a2420; }
 .cp-odhad { color: var(--muted); }
+/* v0.29.24 – inventúra, ručné potvrdenie pri balení */
+.s-rezimy:has(.s-inventura) { grid-template-columns: repeat(4, 1fr); }
+.s-inventura[aria-pressed="true"] { background: #6b4fa0; border-color: #4b357a; }
+.s-inv h3 { margin-top: 0; }
+.s-inv-miesto, .s-inv-tl { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
+.s-inv-miesto .btn[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.s-inv-zoz { display: grid; gap: 8px; margin: 10px 0; }
+.s-inv-pr { border-left: 6px solid var(--pf, #fff); background: var(--surface-2); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+.s-inv-pr-h { display: flex; justify-content: space-between; gap: 8px; }
+.s-inv-ch { color: #b3261e; margin-top: 4px; word-break: break-word; }
+.s-inv-na { color: #1e6b34; margin-top: 4px; word-break: break-word; }
+/* karty na Prehľade sa nesmú roztiahnuť cez susednú kartu (✕ z Vybaviť presahovali do „Kto je v práci“) */
+.grid > .card { min-width: 0; }
+.v-nova { min-width: 0; }
+.v-nova input { min-width: 0; flex: 1 1 auto; width: auto; }
+.u-karta h3 { flex-wrap: wrap; }
+section.card { grid-template-columns: minmax(0, 1fr); }
+.d-bil { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 10px 0; background: var(--surface); display: grid; gap: 6px; }
+.d-bil-r { display: grid; grid-template-columns: 1fr auto; gap: 0 10px; align-items: baseline; }
+.d-bil-r small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.d-bil-z { border-top: 1px solid var(--line); padding-top: 6px; }
+.d-bil-plus b { color: #1e6b34; } .d-bil-minus b, td.d-bil-minus { color: #b3261e; }
+.d-podpisy { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0; font-size: 14px; }
+.d-podpisy-tl { display: flex; flex-wrap: wrap; gap: 6px; }
+.d-prilozit { cursor: pointer; }
+.cp-podpisy { margin: 10px 0; } .cp-podpisy h3 { margin-top: 0; }

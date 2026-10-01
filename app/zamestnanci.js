@@ -328,7 +328,8 @@
   }
   // ---------- dokumenty zamestnanca (PDF v úložisku zamestnanci/<osoba>/dokumenty/) ----------
   function dkNacitaj() {
-    var os = Z.osoba; DK.osoba = os; DK.zoznam = null; DK.chyba = null;
+    var os = Z.osoba; DK.osoba = os; DK.zoznam = null; DK.chyba = null; DK.podp = null;
+    DB.rpc("podpisane_zoznam", { p_osoba: os }).then(function (r) { if (DK.osoba === os) { DK.podp = r && r.data && r.data.ok ? r.data.dokumenty : []; kresli(); } });
     DB.storage.from("zamestnanci").download(os + "/dokumenty/_zoznam.json").then(function (r) {
       if (DK.osoba !== os) return;
       if (r.error || !r.data) { DK.zoznam = []; kresli(); return; }
@@ -343,7 +344,11 @@
       (l == null ? '<p class="muted" style="margin:0">Načítavam…</p>' : !l.length ? '<p class="muted" style="margin:0">Zatiaľ tu nie sú žiadne dokumenty.' + (d.spravca ? " Objavia sa po vygenerovaní nástupných dokumentov." : "") + "</p>" :
         '<div class="rows">' + l.map(function (x) {
           return '<button type="button" class="row zm-dok-riadok" data-zm-dok="' + esc(x.subor) + '"><span>📄 ' + esc(x.nazov) + '</span><span class="muted">' + esc(x.datum ? datum(x.datum) : "") + " ›</span></button>";
-        }).join("") + "</div>") + "</section>";
+        }).join("") + "</div>") +
+      ((DK.podp || []).length ? '<h4 style="margin:12px 0 4px">✍️ Podpísané v appke</h4><div class="rows">' + DK.podp.map(function (x) {
+          return '<button type="button" class="row zm-dok-riadok" data-zm-podp="' + esc(x.cesta) + '" data-nazov="' + esc(x.nazov) + '"><span>✍️ ' + esc(x.nazov) + '</span><span class="muted">' +
+            esc(new Date(x.vytvoreny).toLocaleDateString("sk-SK")) + " · " + (x.podpisy || []).length + " podp. ›</span></button>";
+        }).join("") + "</div>" : "") + "</section>";
   }
   function dkOtvor(subor) {
     var x = (DK.zoznam || []).filter(function (d) { return d.subor === subor; })[0] || {};
@@ -446,6 +451,7 @@
       return;
     }
     if (t.dataset.zmDok) { dkOtvor(t.dataset.zmDok); return; }
+    if (t.dataset.zmPodp && window.lbzPodpis) { lbzPodpis.otvor(DB, t.dataset.zmPodp, t.dataset.nazov || "Podpísaný dokument"); return; }
     if (t.dataset.zmFilter) { Z.filter = t.dataset.zmFilter; prekresli(); return; }
     if (t.dataset.zmUpr) { Z.uprav = t.dataset.zmUpr; Z.sprava = null; prekresli(); var f = document.getElementById("zm-form"); if (f) f.scrollIntoView({ block: "start", behavior: "smooth" }); return; }
     var a = t.dataset.zm;
