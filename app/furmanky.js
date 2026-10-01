@@ -1,7 +1,7 @@
 // LBZ aplikácia – modul FURMANKY (objednávky z Upgates priamo v appke)
 // Vidia a upravujú: IT, CEO, zákaznícky servis. Údaje sú v databáze appky (Supabase),
-// z Upgates ich sťahuje server appky 3× denne (6:00, 11:30, 14:00) alebo tlačidlo „Aktualizovať z Upgates“.
-// Počas testu appka do Upgates nič nezapisuje.
+// objednávky z Upgates sťahuje server appky automaticky každých 30 min (6:00–21:00); furmanky sa z nich zostavia v appke.
+// Tlačidlo „Prepočítať furmanky“ prepočíta zaradenie len z objednávok v appke (z Upgates nič nesťahuje).
 // Tabuľka je ako záložky v „Správe objednávok“: zákazníci v stĺpcoch, produkty v riadkoch, medzisúčty a dávky
 // podľa tých istých vzorcov (šablóna z hárka Default).
 
@@ -147,12 +147,12 @@
     nacitajFurmanku();
   }
 
-  // ---------- Aktualizovať z Upgates ----------
+  // ---------- Prepočítať furmanky (z objednávok v appke, bez Upgates) ----------
   function stiahni() {
     if (F.stahujem) return;
-    if (!lbzPotvrd("Naozaj stiahnuť objednávky z Upgates teraz?\n\nFurmanky sa podľa nich prepočítajú. Ručné zmeny v appke ostanú.")) return;
-    F.stahujem = true; F.sprava = { typ: "info", text: "Sťahujem objednávky z Upgates… (môže to trvať aj minútu)" }; prekresli();
-    DB.functions.invoke("upgates-sync", { body: { akcia: "sync" } }).then(function (res) {
+    if (!lbzPotvrd("Prepočítať furmanky z objednávok v appke?\n\nObjednávky z Upgates sa sťahujú automaticky každých 30 minút. Ručné zmeny v appke ostanú.")) return;
+    F.stahujem = true; F.sprava = { typ: "info", text: "Prepočítavam furmanky…" }; prekresli();
+    DB.functions.invoke("upgates-sync", { body: { akcia: "prepocet" } }).then(function (res) {
       F.stahujem = false;
       var d = res.data;
       if (res.error && !d) {
@@ -276,7 +276,7 @@
   function behHtml() {
     var b = F.beh && F.beh.posledny;
     if (!b) return '<span class="muted">Z Upgates sa ešte nesťahovalo.</span>';
-    return '<span class="muted">⟳ Upgates ' + esc(casSk(b.cas)) + (b.typ === "auto" ? " · automaticky" : " · ručne") +
+    return '<span class="muted">⟳ Objednávky z Upgates ' + esc(casSk(b.cas)) + (b.typ === "auto" ? " · automaticky každých 30 min" : " · ručne") +
       (b.ok ? "" : ' · <strong class="f-zle">' + esc(b.text) + "</strong>") + "</span>";
   }
 
@@ -322,10 +322,10 @@
       '<div class="k' + (nezar ? " k-pozor" : "") + '"><span class="k-ik" aria-hidden="true">' + (nezar ? "⚠️" : "✅") + '</span><b class="num">' + nezar + "</b><span>nezaradených</span></div></div>";
     return '<div class="head"><div><h2>Furmanky</h2><div class="sub">' + behHtml() + '</div></div><span class="head-tl">' +
         '<button class="btn btn-ikona" data-f="obnov" title="Obnoviť zobrazenie" aria-label="Obnoviť zobrazenie"' + (F.nacitavam ? " disabled" : "") + ">↻</button>" +
-        '<button class="btn btn-primary" data-f="stiahni"' + (F.stahujem ? " disabled" : "") + '><span aria-hidden="true">⟳</span><span class="tl-text">' + (F.stahujem ? "Sťahujem…" : "Aktualizovať z Upgates") + "</span></button></span></div>" +
+        '<button class="btn btn-primary" data-f="stiahni"' + (F.stahujem ? " disabled" : "") + '><span aria-hidden="true">⟳</span><span class="tl-text">' + (F.stahujem ? "Prepočítavam…" : "Prepočítať furmanky") + "</span></button></span></div>" +
       testHtml() + spravaHtml() +
       (F.zoznam == null ? '<div class="empty"><strong>Načítavam furmanky…</strong></div>' :
-        (!z.length ? '<div class="empty"><strong>Zatiaľ žiadne furmanky</strong><span class="muted">Stlačte „Aktualizovať z Upgates“.</span></div>' :
+        (!z.length ? '<div class="empty"><strong>Zatiaľ žiadne furmanky</strong><span class="muted">Objednávky z Upgates sa načítajú automaticky do 30 minút, potom stlačte „Prepočítať furmanky“.</span></div>' :
           kpi +
           '<div class="f-karty">' + (rozvozy.map(kartaRozvozu).join("") || '<p class="muted">Najbližších 7 dní nie je žiadny rozvoz.</p>') + "</div>" +
           (neskor || F.vsetky ? '<button class="btn-link f-dalsie" data-f="dalsie">' + (F.vsetky ? "Zobraziť len najbližších 7 dní" : "Ďalšie termíny (" + neskor + ")") + "</button>" : "") +

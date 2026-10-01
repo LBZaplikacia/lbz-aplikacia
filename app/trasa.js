@@ -1,7 +1,8 @@
 // LBZ aplikácia – modul Trasa (pre furmana, spoločný účet furman@)
 // Trasu vytvorí zákaznícky servis vo Furmankách (čas odchodu → poradie a časy príchodov cez Google Mapy).
 // Furman: navigácia (po 9 zastávkach), volanie, QR pre kasu pri dobierke, Doručené / Nedoručené, poznámka, fotka,
-// Ukončiť rozvoz → furmanka ide do Archívu, nedoručené do ďalšej furmanky alebo na zadaný termín.
+// Ukončiť rozvoz → furmanka ide do Archívu, nedoručené do zvolenej furmanky alebo do najbližšej otvorenej furmanky regiónu.
+// Sledovanie: furman (po písomnom súhlase v appke) posiela v deň rozvozu polohu každých ~30 s – zákazník ju vidí na sledovanie.html.
 
 (function () {
   "use strict";
@@ -121,7 +122,7 @@
         '<span class="muted"> · ' + esc(z.kusy) + " ks" + (z.faktura ? " · fa " + esc(z.faktura) : "") + " · obj. " + esc(z.cislo) + "</span></div>" +
       (z.pozn_obj ? '<p class="s-varovanie s-varovanie-info t-z-pozn">' + esc(z.pozn_obj) + "</p>" : "") +
       odpovedeHtml(z) +
-      (z.poznamka ? '<p class="t-z-moja">📝 ' + esc(z.poznamka) + (z.presun_datum ? " · nový termín " + esc(datumSk(z.presun_datum)) : "") + "</p>" : "") +
+      (z.poznamka ? '<p class="t-z-moja">📝 ' + esc(z.poznamka) + (z.presun_nazov ? " · presun: " + esc(z.presun_nazov) : z.presun_datum ? " · nový termín " + esc(datumSk(z.presun_datum)) : "") + "</p>" : "") +
       foto + qr +
       (T.data.trasa.stav === "ukoncena" ? "" : '<div class="t-z-tl">' +
         (vybav ? '<button class="btn" data-t-akcia="spat" data-c="' + esc(z.cislo) + '">↩️ Späť</button>'
@@ -236,7 +237,9 @@
       '<div class="f-lista"><h3>' + (nedor ? "❌ Nedoručené – " : "📝 Poznámka – ") + esc(z.meno || z.firma || D.cislo) + '</h3><button class="btn-link" data-t="zavri" aria-label="Zavrieť">✕</button></div>' +
       '<form class="f-form" id="t-dialog-form"><label class="field"><span class="label">' + (nedor ? "Prečo (napr. nikto doma, nedvíha)" : "Poznámka (napr. nechané u suseda)") + "</span>" +
       '<textarea id="t-pozn" rows="3"' + (nedor ? " required" : "") + ">" + esc(z.poznamka || "") + "</textarea></label>" +
-      (nedor ? '<label class="field"><span class="label">Nový termín (nechajte prázdne = ďalšia furmanka regiónu)</span><input type="date" id="t-datum" value="' + esc(z.presun_datum || "") + '"></label>' : "") +
+      (nedor ? '<label class="field"><span class="label">Presunúť do furmanky</span><select id="t-furm"><option value="">Najbližšia otvorená furmanka regiónu (automaticky)</option>' +
+      (T.presunFurm || []).map(function (f) { return '<option value="' + f.id + '"' + (String(z.presun_furmanka || "") === String(f.id) ? " selected" : "") + ">" + esc(f.nazov) + (f.stav === "full" ? " (uzavretá)" : "") + "</option>"; }).join("") +
+      "</select></label>" + (T.presunFurm == null ? '<p class="muted">Načítavam furmanky…</p>' : "") : "") +
       '<button class="btn ' + (nedor ? "t-tl-nie" : "btn-primary") + '" type="submit">' + (nedor ? "Označiť ako nedoručené" : "Uložiť poznámku") + "</button></form></div>";
   }
 
@@ -259,7 +262,7 @@
   function prekresli() {
     if (!koren || !koren.isConnected) return;
     var y = window.scrollY;
-    koren.innerHTML = (T.id == null ? pohladZoznam() : pohladTrasa()) + dialogHtml();
+    koren.innerHTML = suhlasHtml() + (T.id == null ? pohladZoznam() : pohladTrasa()) + dialogHtml();
     if (window.lbzPamat) lbzPamat.uloz("trasa", { id: T.id, rezim: T.rezim, akt: T.akt });
     window.scrollTo(0, y);
     var miesto = document.getElementById("t-gmapa-miesto"); if (miesto) mapaUkaz(miesto);
@@ -310,6 +313,33 @@
       if (args.p_stav === "dorucene" || args.p_stav === "nedorucene") smsDalsiemu(args.p_cislo);
       return nacitajTrasu(true).then(function () { return r; });
     }).catch(function (e) { T.prace--; T.sprava = { typ: "chyba", text: chybaText(e) }; prekresli(); });
+  }
+  // nedoručená: zoznam furmaniek, kam ju presunúť (rovnaký región prvý)
+  function nacitajPresun() {
+    if (T.presunFurm && T.presunId === T.id) return;
+    T.presunFurm = null; T.presunId = T.id;
+    rpc("trasa_furmanky_presun", { p_id: T.id }).then(function (v) {
+      T.presunFurm = v || [];
+      if (T.dialog && T.dialog.typ === "nedorucene") { var p = document.getElementById("t-pozn"), txt = p ? p.value : null; prekresli(); var p2 = document.getElementById("t-pozn"); if (p2 && txt != null) p2.value = txt; }
+    }).catch(function () { T.presunFurm = []; });
+  }
+  // ---------- sledovanie rozvozu: poloha furmana pre zákazníkov (len furman, len so súhlasom, len v deň rozvozu) ----------
+  var SUHLAS_TEXT = "Beriem na vedomie a súhlasím, že počas rozvozu (od otvorenia trasy v deň rozvozu do jej ukončenia) aplikácia zaznamenáva polohu môjho zariadenia približne každých 30 sekúnd. " +
+    "Poloha slúži na riadenie rozvozu a na to, aby zákazník, ktorému sa objednávka v daný deň doručuje, videl na mape, kde sa nachádza auto s jeho objednávkou a kedy približne príde. " +
+    "Zákazník vidí polohu len v deň rozvozu a len kým jeho objednávka nie je doručená. Ukladá sa len posledná poloha (nie história jazdy) a po ukončení rozvozu sa zmaže, najneskôr do nasledujúceho dňa. " +
+    "Mimo rozvozu sa poloha cez aplikáciu nesleduje. Som oboznámený(á) aj s tým, že firemné vozidlo je vybavené GPS sledovaním. Prevádzkovateľ: V sedle u Falťanov s.r.o.";
+  var POLOHA = { posledna: 0 };
+  function dnesIso() { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  function posliPolohu(p) {
+    if (ROLA !== "furman" || T.suhlas !== true || T.id == null || !T.data || !T.data.trasa) return;
+    var tr = T.data.trasa; if (tr.stav === "ukoncena" || String(tr.datum).slice(0, 10) !== dnesIso()) return;
+    var teraz = Date.now(); if (teraz - POLOHA.posledna < 30000) return; POLOHA.posledna = teraz;
+    rpc("trasa_poloha", { p_id: T.id, p_lat: p.coords.latitude, p_lng: p.coords.longitude, p_presnost: p.coords.accuracy || null }).catch(function () { POLOHA.posledna = 0; });
+  }
+  function suhlasHtml() {
+    if (ROLA !== "furman" || T.suhlas !== false) return "";
+    return '<section class="card t-suhlas"><h3>📍 Sledovanie polohy počas rozvozu</h3><p>' + esc(SUHLAS_TEXT) + "</p>" +
+      '<button class="btn btn-primary" data-t="suhlas">✅ Beriem na vedomie a súhlasím</button></section>';
   }
   // po vybavení zastávky: SMS ďalšiemu zákazníkovi „furman je na ceste“ s presnejším časom (Edge Function gosms)
   function smsDalsiemu(poCisle) {
@@ -388,7 +418,7 @@
     if (navigator.geolocation && gpsId == null) {
       gpsId = navigator.geolocation.watchPosition(function (p) {
         var bol = T.gps && T.akt ? vzdialenost(najdi(T.akt) || {}) : null;
-        T.gps = { lat: p.coords.latitude, lng: p.coords.longitude }; T.gpsChyba = false;
+        T.gps = { lat: p.coords.latitude, lng: p.coords.longitude }; T.gpsChyba = false; posliPolohu(p);
         var a = T.akt && najdi(T.akt), teraz = a ? vzdialenost(a) : null;
         if (teraz != null && teraz < NA_MIESTE_M && (bol == null || bol >= NA_MIESTE_M)) { try { navigator.vibrate && navigator.vibrate([150, 80, 150]); } catch (e) {} }
         if (T.id != null && (T.rezim || "jazda") === "jazda" && !T.dialog) {
@@ -426,10 +456,16 @@
         zastavka({ p_cislo: c, p_stav: "dorucene" }, "✓ Doručené: " + (zd.meno || zd.firma || c)); vibruj(); return;
       }
       if (d.tAkcia === "spat") { if (!lbzPotvrd("Vrátiť zastávku medzi nevybavené?")) return; T.akt = c; T.drzAkt = false; T.naMieste = null; zastavka({ p_cislo: c, p_stav: "caka" }); return; }
-      if (d.tAkcia === "nedorucene" || d.tAkcia === "poznamka") { T.dialog = { typ: d.tAkcia, cislo: c, fokus: true }; prekresli(); return; }
+      if (d.tAkcia === "nedorucene" || d.tAkcia === "poznamka") { T.dialog = { typ: d.tAkcia, cislo: c, fokus: true }; prekresli(); if (d.tAkcia === "nedorucene") nacitajPresun(); return; }
     }
     switch (d.t) {
       case "zavri-spravu": T.sprava = null; prekresli(); break;
+      case "suhlas":
+        rpc("trasa_suhlas_daj", { p_text: SUHLAS_TEXT }).then(function (r) {
+          if (r && r.ok) { T.suhlas = true; T.sprava = { typ: "ok", text: "Ďakujeme – súhlas je uložený." }; } else T.sprava = { typ: "chyba", text: "Súhlas sa neuložil" };
+          prekresli();
+        }).catch(function (er) { T.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+        break;
       case "zavri": T.dialog = null; prekresli(); break;
       case "obnov": T.sprava = null; if (T.id == null) nacitajZoznam(); else nacitajTrasu(); break;
       case "spat": T.id = null; T.data = null; T.sprava = null; vypniJazdu(); nacitajZoznam(); break;
@@ -458,9 +494,9 @@
     e.preventDefault();
     var D = T.dialog, pozn = document.getElementById("t-pozn").value;
     if (D.typ === "nedorucene") {
-      var dat = document.getElementById("t-datum").value || null;
+      var fs = document.getElementById("t-furm"), fid = fs && fs.value ? Number(fs.value) : null;
       T.drzAkt = true;
-      zastavka({ p_cislo: D.cislo, p_stav: "nedorucene", p_poznamka: pozn, p_presun_datum: dat }, "✗ Nedoručené – ide do ďalšej furmanky");
+      zastavka({ p_cislo: D.cislo, p_stav: "nedorucene", p_poznamka: pozn, p_presun_furmanka: fid }, "✗ Nedoručené – po ukončení rozvozu ide do " + (fid ? "zvolenej furmanky" : "najbližšej otvorenej furmanky"));
     } else zastavka({ p_cislo: D.cislo, p_poznamka: pozn }, "Poznámka uložená");
   }
   function klaves(e) { if (e.key === "Escape" && T.dialog) { T.dialog = null; prekresli(); } }
@@ -482,6 +518,7 @@
       el.addEventListener("submit", odoslanie);
       el.addEventListener("keydown", klaves);
       prekresli();
+      if (ROLA === "furman" && T.suhlas == null) rpc("trasa_suhlas_stav").then(function (v) { T.suhlas = !!v; prekresli(); }).catch(function () {});
       if (T.id == null) nacitajZoznam(); else { nacitajTrasu(true); zapniJazdu(); }
     },
     otvor: function (id) { T.id = id; T.data = null; },
