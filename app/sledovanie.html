@@ -120,7 +120,7 @@
         info.innerHTML = "<h1>" + (d.stav === "na_ceste" ? "Furman je na ceste 🚚" : "Furman sa chystá na cestu") + "</h1>" +
           (prichod ? '<p>Plánovaný príchod: <span class="velke">' + esc(cas(prichod)) + "</span>" + (d.eta_live ? '<br><span class="muted">podľa aktuálnej polohy auta a dopravy</span>' : "") + "</p>" : "") +
           (d.stav === "na_ceste" ? '<p><span class="pill">' + (d.pred_vami ? "pred vami ešte " + zastavky(d.pred_vami) : "ste na rade 👋") + "</span></p>" : "") +
-          (d.auto ? '<p class="muted">' + (DEMO ? "UKÁŽKA – auto sa pohybuje zrýchlene" : "Poloha auta z " + esc(cas(d.auto.kedy)) + " · obnovuje sa samo") + "</p>" : '<p class="muted">Poloha auta sa zobrazí, keď sa furman vydá na cestu.</p>');
+          (d.auto ? '<p class="muted">' + (DEMO ? "UKÁŽKA – auto sa pohybuje zrýchlene, čas príchodu sa mení len podľa dopravy" : "Poloha auta z " + esc(cas(d.auto.kedy)) + " · obnovuje sa samo") + "</p>" : '<p class="muted">Poloha auta sa zobrazí, keď sa furman vydá na cestu.</p>');
         return true;
     }
     skryMapu(); info.innerHTML = "<p>Stav sa nepodarilo zistiť.</p>"; return true;
@@ -147,7 +147,7 @@
     volaj({ demo: true }).then(function (d) {
       var body = d.polyline ? dekoduj(d.polyline) : [[d.start.lat, d.start.lng], [d.ciel.lat, d.ciel.lng]];
       var dlzky = [0]; for (var i = 1; i < body.length; i++) dlzky.push(dlzky[i - 1] + Math.hypot(body[i][0] - body[i - 1][0], body[i][1] - body[i - 1][1]));
-      var spolu = dlzky[dlzky.length - 1] || 1, TRVANIE = 90000, start = Date.now();
+      var spolu = dlzky[dlzky.length - 1] || 1, TRVANIE = 90000, start = Date.now(), ETA0 = start + ((d.trvanie_s || 3600) + 600) * 1000;
       function bodNa(f) { var cie = f * spolu, k = 1; while (k < dlzky.length - 1 && dlzky[k] < cie) k++; var u = (cie - dlzky[k - 1]) / ((dlzky[k] - dlzky[k - 1]) || 1); return [body[k - 1][0] + (body[k][0] - body[k - 1][0]) * u, body[k - 1][1] + (body[k][1] - body[k - 1][1]) * u]; }
       function krok() {
         var f = Math.min(1, (Date.now() - start) / TRVANIE);
@@ -158,7 +158,7 @@
         if (ciara) { ciara.setLatLngs(zv); ciaraObrys.setLatLngs(zv); }
         else { ciaraObrys = L.polyline(zv, { color: "#583934", weight: 8, opacity: 0.35 }).addTo(mapa); ciara = L.polyline(zv, { color: "#d1a73a", weight: 5, opacity: 0.95 }).addTo(mapa); }
         vykresli({ ok: true, stav: "na_ceste", cislo: "UKÁŽKA", pred_vami: f < 0.33 ? 2 : f < 0.66 ? 1 : 0, ciel: d.ciel,
-          auto: { lat: p[0], lng: p[1], kedy: new Date().toISOString() }, eta_live: new Date(Date.now() + zostava * 1000 + (f < 0.33 ? 10 : f < 0.66 ? 5 : 0) * 60000).toISOString() });
+          auto: { lat: p[0], lng: p[1], kedy: new Date().toISOString() }, eta_live: new Date(ETA0 + Math.round(2 * Math.sin(f * Math.PI * 3)) * 60000).toISOString() });
         setTimeout(krok, 250);
       }
       krok();
