@@ -26,7 +26,8 @@
   function denSk(s) { var p = String(s).slice(0, 10).split("-"); return +p[2] + ". " + +p[1] + ". " + p[0]; }
   function denKratko(s) { var p = String(s).slice(0, 10).split("-"); return new Date(+p[0], +p[1] - 1, +p[2], 12).toLocaleDateString("sk-SK", { weekday: "short", day: "numeric", month: "numeric" }); }
   function kresli() { if (koren && koren.isConnected) prekresli(); window.dispatchEvent(new Event("lbz-prekresli")); }
-  function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim(); }
+  function archiv(d) { return String(d || "") < "2026-09-01"; } // jazdy do augusta 2026 = archív zo starej tabuľky (len na čítanie)
+function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim(); }
 
   // ---------- načítanie ----------
   function nacitajStav() {
@@ -149,16 +150,17 @@
       (Object.keys(podla).length ? '<div class="k-ucely-graf">' + Object.keys(podla).sort(function (a, b) { return podla[b] - podla[a]; }).map(function (u) {
         return '<div class="k-graf-r"><span>' + (IKONY_UCEL[u] || "•") + " " + esc(u) + '</span><span class="k-bar"><i style="width:' + Math.round(podla[u] / max * 100) + '%"></i></span><b class="num">' + km(podla[u]) + " km</b></div>";
       }).join("") + "</div>" : "") +
-      (r.length ? zoznamMobil(r) : "") +
+      (archiv(K.mesiac) ? '<p class="muted k-pozn">🔒 Archív zo starej tabuľky – len na čítanie.</p>' : "") +
+(r.length ? zoznamMobil(r) : "") +
       (r.length ? '<div class="tbl-wrap k-len-pc"><table class="d-tab k-tab"><thead><tr><th>Dátum</th><th>Miesto</th><th class="t-r">Tachometer</th><th class="t-r">Najazdené</th><th>Vodič</th><th>Účel</th><th class="t-r">Tank.</th><th></th></tr></thead><tbody>' +
         r.map(function (x) {
           var poc = x.miesto === "Počiatočný stav";
           return '<tr class="' + (poc ? "k-poc" : x.navrat ? "k-navrat" : "") + '"><td>' + esc(denKratko(x.datum)) + "</td><td>" + esc(x.miesto) + (x.poznamka ? ' <span class="muted">· ' + esc(x.poznamka) + "</span>" : "") + "</td>" +
             '<td class="t-r num">' + km(x.tach, 0) + '</td><td class="t-r num">' + km(x.km) + (x.nesedi != null ? ' <span class="k-nesedi" title="Podľa tachometra ' + km(x.nesedi) + ' km">⚠</span>' : "") + "</td>" +
             "<td>" + esc(x.vodic || "") + "</td><td>" + esc(x.ucel || "") + '</td><td class="t-r num">' + esc(tankText(x)) + "</td>" +
-            "<td>" + (x.virt ? "" : '<button class="btn-link" data-k-upr="' + x.id + '">Upraviť</button>') + "</td></tr>";
+            "<td>" + (x.virt ? "" : archiv(x.datum) ? '<span class="muted" title="Archív – len na čítanie">🔒</span>' : '<button class="btn-link" data-k-upr="' + x.id + '">Upraviť</button>') + "</td></tr>";
         }).join("") + "</tbody></table></div>" : '<div class="empty"><strong>V tomto mesiaci nie sú jazdy</strong></div>') +
-      (chyby ? '<p class="muted k-pozn">⚠ = najazdené km nesedia s rozdielom tachometrov (napr. prehodené riadky alebo chýbajúci zápis). Oprav cez „Upraviť“.</p>' : "");
+      (chyby ? '<p class="muted k-pozn">⚠ = najazdené km nesedia s rozdielom tachometrov (napr. prehodené riadky alebo chýbajúci zápis). ' + (archiv(K.mesiac) ? "Staré záznamy sa ponechávajú tak, ako boli." : "Oprav cez „Upraviť“.") + '</p>' : "");
   }
 
   // mobil: cesta tam + návrat ako jedna karta
@@ -171,7 +173,7 @@
       return '<div class="k-pol' + (zle ? " k-pol-zle" : "") + '"><div class="k-pol-hl"><b>' + esc(x.miesto) + '</b><b class="num">' + km(spolu) + " km</b></div>" +
         '<div class="k-pol-det muted">' + esc(denKratko(x.datum)) + " · " + (IKONY_UCEL[x.ucel] || "") + " " + esc(x.navrat ? "návrat" : x.ucel || "") +
         (sp ? " · tam " + km(x.km) + " / späť " + km(sp.km) : "") + " · tach. " + km(sp ? sp.tach : x.tach, 0) + (tankText(x) ? " · ⛽ " + esc(tankText(x)) : "") + (zle ? ' · <span class="k-nesedi">⚠ km nesedia</span>' : "") + "</div>" +
-        '<div class="k-pol-tl"><button class="btn-link" data-k-upr="' + x.id + '">Upraviť' + (sp ? " tam" : "") + "</button>" + (sp ? '<button class="btn-link" data-k-upr="' + sp.id + '">Upraviť späť</button>' : "") + "</div></div>";
+        (archiv(x.datum) ? '<div class="k-pol-tl muted">🔒 archív – len na čítanie</div></div>' : '<div class="k-pol-tl"><button class="btn-link" data-k-upr="' + x.id + '">Upraviť' + (sp ? " tam" : "") + "</button>" + (sp ? '<button class="btn-link" data-k-upr="' + sp.id + '">Upraviť späť</button>' : "") + "</div></div>");
     }).join("") + "</div>";
   }
 

@@ -1482,3 +1482,10 @@ section.card { grid-template-columns: minmax(0, 1fr); }
 .r-dni-chk input:focus-visible + span { outline: 3px solid var(--accent); }
 .r-pot input { width: 52px; min-height: 38px; border: 1px solid var(--line); border-radius: 8px; text-align: center; font: inherit; background: var(--bg); color: var(--ink); }
 @media (max-width: 600px) { .r-vzor-r { grid-template-columns: 1fr; } .r-vzor-l { padding-top: 0; } }
+
+/* výrazný výber zamestnanca (Dochádzka, Cestovné príkazy) – v0.30.1 */
+.d-vyber-zam, .cp-vyber-zam { display: block; background: #fff4d6; border: 2px solid #CBA75B; border-radius: 14px; padding: 10px 12px; margin: 10px 0; }
+.d-vyber-zam .label, .cp-vyber-zam .label { font-weight: 700; font-size: 15px; color: #583934; }
+.d-vyber-zam select, .cp-vyber-zam select { width: 100%; min-height: 48px; font-size: 18px; font-weight: 700; color: #583934; background: #fff; border: 2px solid #583934; border-radius: 10px; padding: 6px 10px; }
+.zam-banner { display: flex; align-items: center; gap: 8px; background: #583934; color: #fff; border-radius: 12px; padding: 10px 14px; font-size: 17px; margin: 10px 0 0; }
+.zam-banner b { color: #ffe7a8; }

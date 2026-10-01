@@ -160,21 +160,20 @@
       if (DB && !D.ludiaNac) { D.ludiaNac = true; rpc("dochadzka_prehlad", { p_mesiac: D.mesiac }).then(function (d) { if (d && d.ludia) { D.ludia = d.ludia; prekresli(); } }).catch(function () { D.ludiaNac = false; }); }
       return "";
     }
-    return '<label class="field d-vyber-zam"><span class="label">👤 Dochádzka zamestnanca' + (spravca() ? " (zobraziť a upraviť)" : "") + '</span><select id="d-vyber-zam"><option value="">– vyber zamestnanca –</option>' +
+    return (D.zalozka === "osoba" && D.osoba ? '<div class="zam-banner">👤 Zobrazuješ dochádzku: <b>' + esc((l.filter(function (x) { return x.id === D.osoba; })[0] || {}).meno || "") + "</b></div>" : "") + '<label class="field d-vyber-zam"><span class="label">👤 Dochádzka zamestnanca' + (spravca() ? " (zobraziť a upraviť)" : "") + '</span><select id="d-vyber-zam"><option value="">– vyber zamestnanca –</option>' +
       l.map(function (x) { return '<option value="' + x.id + '"' + (D.zalozka === "osoba" && D.osoba === x.id ? " selected" : "") + ">" + esc(x.meno) + "</option>"; }).join("") + "</select></label>";
   }
   // ---------- bilancia hodín (plán = smeny v rozpise × dĺžka smeny; rozdiel sa prenáša do ďalšieho mesiaca) ----------
   function znak(min) { return (min > 0 ? "+" : min < 0 ? "−" : "") + hodiny(Math.abs(min)); }
   function bilanciaHtml(b) {
     if (!b) return "";
-    if (!b.tpp) return '<div class="d-bil"><div class="d-bil-h"><b>⚖️ Hodiny v mesiaci</b></div><div class="d-bil-r"><span>Odpracované + neprítomnosť</span><b class="num">' + hodiny(b.odpracovane_min) + ' h</b><small>bez fondu a prenosu (nie TPP)</small></div></div>';
     var z = b.zostatok_min;
     return '<div class="d-bil"><div class="d-bil-h"><b>⚖️ Bilancia hodín</b>' + (b.beziaci ? ' <span class="muted">(priebežne – mesiac ešte beží)</span>' : "") + "</div>" +
-      '<div class="d-bil-r"><span>Fond' + (b.beziaci ? " zatiaľ" : "") + '</span><b class="num">' + hodiny(b.beziaci ? b.fond_zatial_min : b.fond_min) + " h</b><small>" + (b.beziaci ? b.prac_dni_zatial + " z " + b.prac_dni : b.prac_dni) + " prac. dní × " + String(Math.round(b.fond_tyzden_h / 5 * 100) / 100).replace(".", ",") + " h · celý mesiac " + hodiny(b.fond_min) + " h</small></div>" +
+      '<div class="d-bil-r"><span>Plán podľa rozpisu</span><b class="num">' + hodiny(b.plan_min) + " h</b><small>" + b.smeny + " smien × " + String(b.smena_h).replace(".", ",") + " h – vypláca sa</small></div>" +
       '<div class="d-bil-r"><span>Odpracované + neprítomnosť</span><b class="num">' + hodiny(b.odpracovane_min) + " h</b></div>" +
       '<div class="d-bil-r"><span>Prenos z minulého mesiaca</span><b class="num">' + znak(b.prenos_z_min) + " h</b></div>" +
       '<div class="d-bil-r d-bil-z ' + (z >= 0 ? "d-bil-plus" : "d-bil-minus") + '"><span>' + (b.beziaci ? "Zatiaľ" : "Prenos do ďalšieho mesiaca") + "</span><b class=\"num\">" + znak(z) + " h</b><small>" +
-        (z > 0 ? "nadčas – o toľko menej v ďalšom mesiaci" : z < 0 ? "chýba – o toľko viac v ďalšom mesiaci" : "presne podľa fondu") + "</small></div></div>";
+        (z > 0 ? "nadčas – o toľko menej v ďalšom mesiaci" : z < 0 ? "chýba – o toľko viac v ďalšom mesiaci" : "presne podľa plánu") + "</small></div></div>";
   }
   function menoOsoby() { var d = D.data || {}; return (d.osoba && d.osoba.meno) || (D.moja && D.moja.osoba && D.moja.osoba.meno) || ""; }
   function osobaId() { var d = D.data || {}; return (d.osoba && d.osoba.id) || D.osoba || (D.moja && D.moja.osoba && D.moja.osoba.id) || null; }
@@ -410,7 +409,7 @@
       p.ludia.map(function (x) {
         var bl = D.bilT && D.bilT[x.id];
         return '<tr><td class="c-meno">' + esc(x.meno) + (x.ucet ? "" : ' <span class="muted" title="Nemá prepojený účet v appke">(bez účtu)</span>') + '</td><td class="num c-norma"><span class="c-mob">norma </span>' + String(x.norma_h || 8).replace(".", ",") + ' h</td><td class="num c-hod"><b>' + hodiny(x.min) +
-          '<span class="c-mob"> h</span></b></td><td class="num c-dni">' + x.dni + '<span class="c-mob"> dní</span></td><td class="num c-str"><span class="c-mob">stravné </span>' + eur(x.stravne) + '</td><td class="num c-bil' + (bl && bl.zostatok_min < 0 ? " d-bil-minus" : "") + '"><span class="c-mob">bilancia </span>' + (bl && bl.zostatok_min != null ? znak(bl.zostatok_min) + " h" : "") + '</td><td class="c-det"><button class="btn-link" data-d-osoba="' + x.id + '">📅 ' + (p.uprava ? "Zobraziť / upraviť" : "Zobraziť") + '</button></td></tr>';
+          '<span class="c-mob"> h</span></b></td><td class="num c-dni">' + x.dni + '<span class="c-mob"> dní</span></td><td class="num c-str"><span class="c-mob">stravné </span>' + eur(x.stravne) + '</td><td class="num c-bil' + (bl && bl.zostatok_min < 0 ? " d-bil-minus" : "") + '"><span class="c-mob">bilancia </span>' + (bl ? znak(bl.zostatok_min) + " h" : "") + '</td><td class="c-det"><button class="btn-link" data-d-osoba="' + x.id + '">📅 ' + (p.uprava ? "Zobraziť / upraviť" : "Zobraziť") + '</button></td></tr>';
       }).join("") + "</tbody></table></div>";
   }
   function dialogHtml() {
@@ -495,7 +494,7 @@
         D.mesiac = iso(nv); D.osoba = null; D.data = null; kresli(); nacitajMesiac(); break;
       case "tlac-vykaz": tlacHtml('<div class="k-tlac">' + vykazTlacHtml(D.podV ? D.podV.podpisy : null) + "</div>"); break;
       case "podpis-vykaz": podpisVykazu("zamestnanec"); break;
-      case "podpis-vykaz-v": podpisVykazu("zamestnavatel"); break;
+      case "podpis-vykaz-v": if (lbzPotvrd("Podpisuješ za zamestnávateľa výkaz dochádzky: " + menoOsoby() + ". Pokračovať?")) podpisVykazu("zamestnavatel"); break;
       case "pdf-vykaz": if (D.podV && D.podV.pdf) lbzPodpis.otvor(DB, D.podV.pdf.cesta, D.podV.pdf.nazov); break;
       case "mes-": case "mes+":
         var p = D.mesiac.split("-"), nd = new Date(+p[0], +p[1] - 1 + (d.d === "mes+" ? 1 : -1), 1); D.mesiac = iso(nd); D.data = null; D.prehlad = null; prekresli(); obnov(); break;
