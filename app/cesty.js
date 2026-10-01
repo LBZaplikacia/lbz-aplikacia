@@ -28,7 +28,7 @@
   }
   function miesta(c) {
     var v = [], b = c.body || [];
-    b.forEach(function (x) { var m = String(x.miesto || x.adresa || "").trim(); if (m && v[v.length - 1] !== m) v.push(m); });
+    b.forEach(function (x) { var m = String(x.miesto || x.adresa || "").trim() + (x.min ? " (" + x.min + " min)" : ""); if (m && v[v.length - 1] !== m) v.push(m); });
     return v;
   }
   function mesiacNazov(m) { var p = String(m).split("-"); return MESIACE[+p[1] - 1] + " " + p[0]; }
@@ -44,7 +44,7 @@
       ".cp-body li .cp-m{flex:1;min-width:0}.cp-body li small{display:block;color:var(--muted,#6b5b55);overflow-wrap:anywhere}.cp-body li.cp-dopl{background:#fff7e6}.cp-body .cp-km{white-space:nowrap;font-size:13px}" +
       ".cp-ik{border:1px solid var(--line);background:var(--bg);border-radius:8px;min-width:36px;min-height:36px;font-size:15px;cursor:pointer}.cp-vloz{display:block;width:100%;text-align:left;border:0;background:none;color:var(--hneda,#583934);font-size:13px;padding:4px 8px;cursor:pointer}" +
       ".cp-polia{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}.cp-polia input,.cp-polia textarea,.cp-vlozf input{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px;min-height:44px;font:inherit;background:var(--bg);color:var(--ink)}" +
-      ".cp-vlozf{display:flex;gap:6px;padding:6px 8px;background:#fff7e6}.cp-sum{display:flex;flex-wrap:wrap;gap:6px 16px;font-weight:600;margin:8px 0}.cp-akcie{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}";
+      ".cp-vlozf{display:flex;gap:6px;padding:6px 8px;background:#fff7e6}.cp-min{display:flex;align-items:center;gap:2px;font-size:13px}.cp-min input{width:58px;min-height:36px;border:1px solid var(--line);border-radius:8px;padding:4px;font:inherit;background:var(--bg);color:var(--ink)}.cp-sum{display:flex;flex-wrap:wrap;gap:6px 16px;font-weight:600;margin:8px 0}.cp-akcie{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}";
     document.head.appendChild(s);
   }
 
@@ -126,6 +126,7 @@
         return '<li class="' + (x.typ === "doplnene" ? "cp-dopl" : "") + '"><span class="cp-m"><b>' + (i + 1) + ". " + esc(x.miesto || x.adresa) + "</b>" +
           (x.adresa && x.adresa !== x.miesto ? "<small>" + esc(x.adresa) + "</small>" : "") + (x.typ === "doplnene" ? "<small>doplnené furmanom</small>" : "") + "</span>" +
           '<span class="cp-km">' + (x.km != null ? "+" + esc(kmTxt(x.km)) : "") + "</span>" +
+          '<label class="cp-min" title="Ako dlho si sa tu zdržal (minúty)">⏱<input type="number" min="0" max="600" step="5" inputmode="numeric" data-cp-min="' + i + '" value="' + esc(x.min || "") + '" placeholder="min"' + (zamk ? " disabled" : "") + "></label>" +
           (zamk ? "" : '<button class="cp-ik" data-cp-hore="' + i + '" aria-label="Vyššie">↑</button><button class="cp-ik" data-cp-dole="' + i + '" aria-label="Nižšie">↓</button><button class="cp-ik" data-cp-zmaz="' + i + '" aria-label="Odstrániť">✕</button>') +
           "</li>" + vloz(i + 1);
       }).join("") +
@@ -172,13 +173,14 @@
     if (g("cp-mkon") !== null) f.miesto_kon = g("cp-mkon");
     if (g("cp-ucel") !== null) f.ucel = g("cp-ucel");
     if (g("cp-pozn") !== null) f.poznamka = g("cp-pozn");
+    [].forEach.call(document.querySelectorAll("[data-cp-min]"), function (e) { var b = f.body[+e.dataset.cpMin]; if (b) b.min = e.value === "" ? null : Math.max(0, Math.round(+e.value)); });
   }
   function uloz(potvrdit) {
     nacitajFormular();
     var f = C.f; if (!f) return;
     if (potvrdit && (!f.zaciatok || !f.koniec)) { lbzInfo("Doplň čas odchodu a návratu."); return; }
     C.prace = true; kresli();
-    var body = (f.body || []).map(function (b) { return { miesto: b.miesto, adresa: b.adresa, lat: b.lat, lng: b.lng, cislo: b.cislo, typ: b.typ, km: b.km }; });
+    var body = (f.body || []).map(function (b) { return { miesto: b.miesto, adresa: b.adresa, lat: b.lat, lng: b.lng, cislo: b.cislo, typ: b.typ, km: b.km, min: b.min ? +b.min : null }; });
     rpc("cp_uloz", { p_id: f.id, p: { zaciatok: f.zaciatok, koniec: f.koniec, km: f.km, miesto_zac: f.miesto_zac, miesto_kon: f.miesto_kon, ucel: f.ucel, poznamka: f.poznamka || "", body: body, potvrdit: !!potvrdit } })
       .then(function (r) {
         C.prace = false;
@@ -189,7 +191,7 @@
         nacitaj();
       }).catch(function (e) { C.prace = false; C.sprava = { typ: "chyba", text: chyba(e) }; kresli(); });
   }
-  function zmenaBodov() { nacitajFormular(); C.f.km = null; C.f.km_spat = null; kresli(); prepocitajKm(); }
+  function zmenaBodov() { C.f.km = null; C.f.km_spat = null; kresli(); prepocitajKm(); }
 
   function klik(e) {
     var t = e.target.closest("button, [data-cp]"); if (!t || !koren.contains(t)) return;
@@ -201,9 +203,9 @@
       return;
     }
     if (ds.cpVloz != null && ds.cpVloz !== "") { nacitajFormular(); C.vloz = +ds.cpVloz; kresli(); var v = document.getElementById("cp-vloz-txt"); if (v) v.focus(); return; }
-    if (ds.cpHore != null && ds.cpHore !== "") { var i = +ds.cpHore; if (i > 0) { var b = C.f.body; var x = b[i]; b[i] = b[i - 1]; b[i - 1] = x; zmenaBodov(); } return; }
-    if (ds.cpDole != null && ds.cpDole !== "") { var j = +ds.cpDole, bb = C.f.body; if (j < bb.length - 1) { var y = bb[j]; bb[j] = bb[j + 1]; bb[j + 1] = y; zmenaBodov(); } return; }
-    if (ds.cpZmaz != null && ds.cpZmaz !== "") { C.f.body.splice(+ds.cpZmaz, 1); zmenaBodov(); return; }
+    if (ds.cpHore != null && ds.cpHore !== "") { nacitajFormular(); var i = +ds.cpHore; if (i > 0) { var b = C.f.body; var x = b[i]; b[i] = b[i - 1]; b[i - 1] = x; zmenaBodov(); } return; }
+    if (ds.cpDole != null && ds.cpDole !== "") { nacitajFormular(); var j = +ds.cpDole, bb = C.f.body; if (j < bb.length - 1) { var y = bb[j]; bb[j] = bb[j + 1]; bb[j + 1] = y; zmenaBodov(); } return; }
+    if (ds.cpZmaz != null && ds.cpZmaz !== "") { nacitajFormular(); C.f.body.splice(+ds.cpZmaz, 1); zmenaBodov(); return; }
     var a = ds.cp;
     if (a === "mes-" || a === "mes+") {
       var p = C.m.split("-"), d = new Date(+p[0], +p[1] - 1 + (a === "mes+" ? 1 : -1), 1);
@@ -220,7 +222,7 @@
     else if (a === "vloz-ok") {
       var txt = (document.getElementById("cp-vloz-txt") || {}).value || ""; txt = txt.trim();
       if (!txt) return;
-      C.f.body.splice(C.vloz, 0, { miesto: txt, adresa: txt, typ: "doplnene" }); C.vloz = null; zmenaBodov();
+      nacitajFormular(); C.f.body.splice(C.vloz, 0, { miesto: txt, adresa: txt, typ: "doplnene" }); C.vloz = null; zmenaBodov();
     }
     else if (a === "vloz-zrus") { C.vloz = null; kresli(); }
     else if (a === "km") { nacitajFormular(); prepocitajKm(); }
@@ -243,24 +245,41 @@
   // ---------- tlač – hromadný cestovný príkaz za mesiac ----------
   function tlac() {
     var d = C.d; if (!d || !d.cesty) return;
-    var o = d.osoba || {}, meno = [o.titul, o.priezvisko, o.meno].filter(Boolean).join(" ") || o.prezyvka || "";
-    var cesty = d.cesty, sumKm = 0, sumStr = 0;
-    var riadky = cesty.map(function (c) {
-      sumKm += Number(c.km || 0); sumStr += Number(c.stravne || 0);
-      return "<tr><td>" + esc(datumSk(c.datum)) + "</td><td>" + esc(c.miesto_zac) + "<br>" + esc(hm(c.zaciatok)) + "</td><td>" + esc(miesta(c).join(", ")) + (c.poznamka ? "<br><i>" + esc(c.poznamka) + "</i>" : "") +
-        "</td><td>" + esc(c.ucel) + "</td><td>" + esc(c.miesto_kon) + "<br>" + esc(hm(c.koniec)) + '</td><td class="t-r">' + esc(hodiny(trvanie(c))) + '</td><td class="t-r">' + esc(kmTxt(c.km)) +
-        '</td><td class="t-r">' + eur(c.stravne) + "</td><td>" + esc((STAV[c.stav] || STAV.navrh)[0]) + "</td></tr>";
+    var o = d.osoba || {}, meno = [o.priezvisko, o.meno, o.titul].filter(Boolean).join(" ") || o.prezyvka || "";
+    var cesty = d.cesty, s = d.sadzby || {}, sumStr = 0, sumKm = 0;
+    var dt = function (x) { var p = String(x).slice(0, 10).split("-"); return +p[2] + ". " + +p[1] + ". " + p[0]; };
+    var kratke = function (m) { return String(m || "").replace(/\s*\(.*\)$/, ""); };
+    var zdrz = function (b) { return b.min ? " (" + b.min + " min)" : ""; };
+    var hore = cesty.map(function (c) {
+      return "<tr><td>" + esc(kratke(c.miesto_zac)) + "<br>" + esc(dt(c.datum)) + "</td><td>" + esc(miesta(c).join(", ")) + "</td><td>" + esc(c.ucel) + "</td><td>" + esc(kratke(c.miesto_kon)) + "<br>" + esc(dt(c.datum)) + "</td></tr>";
     }).join("");
-    var s = d.sadzby || {};
-    var h = '<div class="k-tlac cp-tlac"><h2>CESTOVNÝ PRÍKAZ – hromadný na ' + esc(mesiacNazov(C.m)) + "</h2>" +
-      "<p>podľa § 3 ods. 3 zákona č. 283/2002 Z. z. o cestovných náhradách – opakované pracovné cesty (rozvoz)</p>" +
-      "<p><b>Zamestnávateľ:</b> " + esc(ZAMESTNAVATEL) + "<br><b>Zamestnanec:</b> " + esc(meno) + (o.bydlisko ? " · <b>bydlisko:</b> " + esc(o.bydlisko) : "") +
-      "<br><b>Pravidelné pracovisko:</b> Sedlo Zbojská (Zbojská 1960/14, 980 61 Tisovec) · <b>Dopravný prostriedok:</b> služobné motorové vozidlo (náhrada za km sa neposkytuje)" +
-      "<br><b>Stravné (§ 5):</b> 5–12 h " + eur(s.s5) + " · nad 12–18 h " + eur(s.s12) + " · nad 18 h " + eur(s.s18) + "</p>" +
-      "<table><thead><tr><th>Dátum</th><th>Začiatok cesty</th><th>Miesto výkonu práce</th><th>Účel</th><th>Koniec cesty</th><th>Trvanie</th><th>Km</th><th>Stravné</th><th>Stav</th></tr></thead><tbody>" + riadky +
-      '</tbody><tfoot><tr><td colspan="6">Spolu (' + cesty.length + ' ciest)</td><td class="t-r">' + esc(kmTxt(Math.round(sumKm * 10) / 10)) + '</td><td class="t-r">' + eur(sumStr) + "</td><td></td></tr></tfoot></table>" +
-      '<p style="margin-top:14px">Preddavok: 0,00 € · Doplatok zamestnancovi: ' + eur(sumStr) + "</p>" +
-      '<p style="margin-top:28px;display:flex;justify-content:space-between;gap:20px"><span>Podpis zamestnanca: ....................................</span><span>Schválil (zamestnávateľ): ....................................</span><span>Dátum: ...............</span></p></div>';
+    var dole = cesty.map(function (c) {
+      sumStr += Number(c.stravne || 0); sumKm += Number(c.km || 0);
+      var b = c.body || [], vid = {}, mm = [];
+      b.forEach(function (x) { var m = String(x.miesto || x.adresa || "").trim(); var k = m + "|" + (x.min || ""); if (m && !vid[k]) { vid[k] = 1; mm.push(esc(m) + esc(zdrz(x))); } });
+      return '<tr class="cp-t-zac"><td rowspan="3">' + esc(dt(c.datum)) + "</td><td>" + esc(kratke(c.miesto_zac)) + '</td><td class="t-r" rowspan="3">' + esc(hm(c.zaciatok)) + '</td><td class="t-r" rowspan="3">' + esc(hm(c.koniec)) +
+        '</td><td class="t-r" rowspan="3">' + eur(c.stravne) + '</td><td class="t-r" rowspan="3">' + eur(c.stravne) + '</td><td rowspan="3">' + esc(kmTxt(c.km)) + (c.poznamka ? "<br>" + esc(c.poznamka) : "") + "</td></tr>" +
+        "<tr><td>" + (mm.join(", ") || "–") + "</td></tr><tr><td>" + esc(kratke(c.miesto_kon)) + "</td></tr>";
+    }).join("");
+    var dopl = [];
+    cesty.forEach(function (c) { (c.body || []).forEach(function (x) { if (x.typ === "doplnene") dopl.push(dt(c.datum) + " – " + (x.miesto || "") + zdrz(x)); }); });
+    var h = '<div class="k-tlac cp-tlac">' +
+      '<table class="cp-hl-t"><tr><th colspan="3" style="text-align:left;font-size:15pt">CESTOVNÝ PRÍKAZ</th><th style="font-size:12pt">Rozvoz buchiet</th></tr>' +
+      '<tr><td colspan="2">priezvisko, meno, titul:</td><td colspan="2"><b>' + esc(meno) + "</b></td></tr>" +
+      '<tr><td colspan="2">bydlisko:</td><td colspan="2">' + esc(o.bydlisko || "") + "</td></tr></table>" +
+      '<table><thead><tr><th>začiatok cesty (miesto, dátum)</th><th>miesto rokovania</th><th>účel cesty</th><th>koniec cesty (miesto, dátum)</th></tr></thead><tbody>' + hore + "</tbody></table>" +
+      '<table class="cp-hl-t"><tr><td style="width:30%">spolucestujúci</td><td>–</td></tr><tr><td>dopravný prostriedok</td><td>' + esc((cesty[0] && cesty[0].doprava) || "služobné vozidlo (SMV) FIAT DOBLO AA086TG") + "</td></tr></table>" +
+      '<p style="margin:3mm 0 1mm">Hromadný cestovný príkaz na ' + esc(mesiacNazov(C.m)) + " – opakované pracovné cesty (§ 3 ods. 3 zákona č. 283/2002 Z. z.). Zamestnávateľ: " + esc(ZAMESTNAVATEL) + "</p>" +
+      '<p style="text-align:right;margin:8mm 0 2mm">.............................................<br>podpis prac. oprávneného na povolenie cesty</p>' +
+      '<table style="width:60mm"><tr><th>hod</th><th>eur</th></tr><tr><td>0–5</td><td class="t-r">0,00</td></tr><tr><td>5–12</td><td class="t-r">' + eur(s.s5) + '</td></tr><tr><td>12–18</td><td class="t-r">' + eur(s.s12) + '</td></tr><tr><td>18+</td><td class="t-r">' + eur(s.s18) + "</td></tr></table>" +
+      '<h2 style="margin-top:6mm;text-align:center">VYÚČTOVANIE PRACOVNEJ CESTY</h2>' +
+      "<table><thead><tr><th>dátum</th><th>odchod / príchod</th><th>začiatok cesty</th><th>koniec cesty</th><th>stravné [EUR]</th><th>spolu</th><th>poznámka</th></tr></thead><tbody>" + dole +
+      '</tbody><tfoot><tr><td colspan="5">Vyplatiť:</td><td class="t-r">' + eur(sumStr) + "</td><td>" + esc(kmTxt(Math.round(sumKm * 10) / 10)) + "</td></tr></tfoot></table>" +
+      '<h2 style="margin-top:6mm">SPRÁVA Z PRACOVNEJ CESTY (popis účelu a výsledkov PC)</h2><p>Rozvoz objednávok zákazníkom podľa trás (' + cesty.length + " ciest, spolu " + esc(kmTxt(Math.round(sumKm * 10) / 10)) + ")." +
+      (dopl.length ? "<br>Ďalšie miesta: " + esc(dopl.join("; ")) : "") + "</p>" +
+      '<p style="display:flex;justify-content:space-between;margin:10mm 0 4mm"><span>.............................................<br>dátum a podpis účastníka</span><span>.............................................<br>schválil</span></p>' +
+      '<h2 style="margin-top:4mm">ŽIADOSŤ O PREPLATENIE CESTOVNÝCH NÁKLADOV</h2><p>Žiadam o preplatenie cestovných nákladov vo výške <b>' + eur(sumStr) + "</b>.</p>" +
+      '<p style="display:flex;justify-content:space-between;margin:10mm 0 0"><span>.............................................<br>dátum a podpis účastníka</span><span>.............................................<br>schválil</span></p></div>';
     var obal = document.getElementById("tlac-oblast");
     if (!obal) { obal = document.createElement("div"); obal.id = "tlac-oblast"; document.body.appendChild(obal); }
     obal.className = ""; obal.innerHTML = h; document.body.classList.add("tlaci");
