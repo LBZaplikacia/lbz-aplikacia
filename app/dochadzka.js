@@ -424,7 +424,7 @@
 
   window.LBZ_DOCHADZKA = {
     nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; D.moja = null; D.data = null; D.prehlad = null; if (DB) nacitajMoju(); },
-    mozem: function () { return !!DB && ["prevadzka", "furman", "zakaznik"].indexOf(ROLA) === -1; },   // spoločné účty si dochádzku nezapisujú
+    mozem: function () { return !!DB && ["prevadzka", "zakaznik"].indexOf(ROLA) === -1; },   // spoločný účet prevádzky si dochádzku nezapisuje; furman len so svojím osobným účtom (bez osoby sa karta neukáže)
     mount: function (el) {
       koren = el;
       el.addEventListener("click", klik); el.addEventListener("change", zmena); el.addEventListener("submit", odoslanie);
