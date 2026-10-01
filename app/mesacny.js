@@ -19,6 +19,7 @@
   function prvy(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
   function predosly() { var d = new Date(); return ymd(new Date(d.getFullYear(), d.getMonth() - 1, 1)); }
   function aktualny() { return ymd(prvy(new Date())); }
+  function koniecRoka() { var d = new Date(); return d.getMonth() === 11 || (d.getMonth() === 10 && d.getDate() >= 15); }
   function posun(m, o) { var p = String(m).split("-"); return ymd(new Date(+p[0], +p[1] - 1 + o, 1)); }
   function mNazov(m) { var p = String(m || "").split("-"); return p.length > 1 ? MESIACE[+p[1] - 1] + " " + p[0] : ""; }
   function datum(s) { if (!s) return ""; var p = String(s).slice(0, 10).split("-"); return +p[2] + ". " + +p[1] + ". " + p[0]; }
@@ -325,7 +326,8 @@
       mojaOsoba().then(function (moja) {
         return Promise.all([
           moja ? rpc("mesacny_list", { p_osoba: moja, p_mesiac: m }).catch(function () { return null; }) : null,
-          spravca() ? rpc("mesacny_prehlad", { p_mesiac: m }).catch(function () { return null; }) : null
+          spravca() ? rpc("mesacny_prehlad", { p_mesiac: m }).catch(function () { return null; }) : null,
+          spravca() && koniecRoka() ? rpc("dochadzka_bilancia", { p_mesiac: aktualny() }).catch(function () { return null; }) : null
         ]);
       }).then(function (x) {
         var st = JSON.stringify(S.karta.d), l = x[0], p = x[1];
@@ -334,18 +336,21 @@
           moj: l && l.ok && l.stav === "caka_zamestnanec" ? { termin: l.termin, k_vyplate: l.stravne && l.stravne.k_vyplate } : null,
           zamestnavatel: p && p.ok ? p.ludia.filter(function (y) { return y.stav === "caka_zamestnavatel"; }).length : 0,
           nepodpisali: p && p.ok ? p.ludia.filter(function (y) { return y.stav === "caka_zamestnanec"; }).length : 0,
-          termin: p && p.ok ? p.termin : null
+          termin: p && p.ok ? p.termin : null,
+          vyr: x[2] && x[2].ok ? x[2].ludia.filter(function (y) { return y.tpp && Math.abs(y.zostatok_min || 0) >= 60; }).map(function (y) { return { meno: y.meno, min: y.zostatok_min }; }) : []
         };
         if (JSON.stringify(S.karta.d) !== st) prekresliPrehlad();
       }).catch(function () { /* */ });
     }
     var d = S.karta.d;
-    if (!d || (!d.moj && !d.zamestnavatel && !d.nepodpisali)) return "";
-    var h = '<section class="card"><h3>✍️ Na podpis</h3>';
+    var vyr = d && d.vyr && d.vyr.length ? d.vyr : null, pod = d && (d.moj || d.zamestnavatel || d.nepodpisali);
+    if (!d || (!pod && !vyr)) return "";
+    var h = '<section class="card"><h3>' + (pod ? "✍️ Na podpis" : "⚖️ Hodiny do konca roka") + "</h3>";
     if (d.moj) h += '<p style="margin:0 0 8px">Podpíš <b>mesačný list za ' + esc(mNazov(d.mesiac)) + "</b> – dochádzka a stravné (do " + datum(d.moj.termin) + ").</p>";
     if (d.zamestnavatel) h += '<p style="margin:0 0 8px">Za zamestnávateľa čaká: <b>' + d.zamestnavatel + "</b></p>";
+    if (vyr) h += '<p style="margin:0 0 8px">⚖️ <b>Vyrovnanie hodín TPP do 31. 12.</b> – ' + vyr.map(function (y) { return esc(y.meno) + " " + (y.min > 0 ? "nadčas " : "chýba ") + hod(Math.abs(y.min)); }).join(", ") + ". Naplánuj podľa toho rozpis na december (Rozpis → 📊 Bilancia).</p>";
     if (d.nepodpisali) h += '<p class="muted" style="margin:0 0 8px">Ešte nepodpísali: ' + d.nepodpisali + (d.termin ? " (termín " + datum(d.termin) + ")" : "") + "</p>";
-    return h + '<button class="btn btn-primary" data-mod="dochadzka" data-pm-otvor="1">✍️ Otvoriť Na podpis</button></section>';
+    return h + (pod ? '<button class="btn btn-primary" data-mod="dochadzka" data-pm-otvor="1">✍️ Otvoriť Na podpis</button>' : "") + (vyr ? ' <button class="btn" data-mod="rozpis">📅 Rozpis</button>' : "") + "</section>";
   }
 
   // klik na kartu Prehľadu: pred otvorením Dochádzky prepni na záložku Na podpis

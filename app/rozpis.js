@@ -99,16 +99,17 @@
   }
   function bilanciaHtml(B) {
     var tpp = B.filter(function (x) { return x.tpp; }), ost = B.filter(function (x) { return !x.tpp && x.dni > 0; });
-    var tab1 = tpp.length ? '<h4 class="r-h4">TPP – fond</h4><table class="r-bil"><thead><tr><th>Kto</th><th>Dní</th><th>Plán h</th><th>Absencie h</th><th>Fond h</th><th>Rozdiel</th></tr></thead><tbody>' +
+    var tab1 = tpp.length ? '<h4 class="r-h4">TPP – fond</h4><table class="r-bil"><thead><tr><th>Kto</th><th>Dní</th><th>Plán h</th><th>Absencie h</th><th>Fond h</th><th title="Prenos hodín z predošlých mesiacov (+ nadčas, − chýba)">Prenos</th><th>Spolu</th></tr></thead><tbody>' +
       tpp.map(function (x) {
-        var roz = Math.round(((+x.plan_h || 0) + (+x.abs_h || 0) - (+x.fond || 0)) * 10) / 10;
+        var roz = Math.round(((+x.plan_h || 0) + (+x.abs_h || 0) - (+x.fond || 0) + (+x.prenos_h || 0)) * 10) / 10, varuj = x.vyrovnat ? Math.abs(roz) > 4 : roz < -4;
         return "<tr><td><b>" + esc(x.meno) + '</b></td><td class="num">' + x.dni + '</td><td class="num">' + esc(x.plan_h) + '</td><td class="num">' + esc(x.abs_h || 0) +
-          '</td><td class="num">' + esc(x.fond) + '</td><td class="num ' + (roz < -4 ? "r-bil-malo" : "") + '">' + (roz > 0 ? "+" : "") + roz + (roz < -4 ? " ⚠️" : "") + "</td></tr>";
+          '</td><td class="num">' + esc(x.fond) + '</td><td class="num">' + ((+x.prenos_h || 0) > 0 ? "+" : "") + esc(x.prenos_h || 0) + '</td><td class="num ' + (varuj ? "r-bil-malo" : "") + '">' + (roz > 0 ? "+" : "") + roz + (varuj ? " ⚠️" : "") + "</td></tr>";
       }).join("") + "</tbody></table>" : "";
+    var vyr = tpp.some(function (x) { return x.vyrovnat; }) ? '<p class="muted">📌 Koniec roka: hodiny TPP sa vyrovnávajú k 31. 12. – rozpis na december naplánuj tak, aby stĺpec <b>Spolu</b> bol čo najbližšie k 0 (+ nadčas, − chýba).</p>' : "";
     var tab2 = ost.length ? '<h4 class="r-h4">Brigádnici – počet dní</h4><div class="r-bil-brig">' + ost.sort(function (a, b) { return b.dni - a.dni; }).map(function (x) {
       return '<span class="r-leg"><b>' + esc(x.meno) + '</b> <span class="num">' + x.dni + "</span>" + (x.student ? " 🎓" : "") + "</span>";
     }).join("") + "</div>" : "";
-    return '<div class="r-bil-obal">' + tab1 + tab2 + '<p class="muted r-mala">Plán h = smeny × hodiny na smenu zo vzoru (ak nie sú, priemer z dochádzky za 2 mesiace, inak podľa pozície). Fond = pracovné dni mesiaca × týždenný úväzok / 5. ⚠️ = chýba viac ako 4 h – doplňte smenu. 🎓 = študent.</p></div>';
+    return '<div class="r-bil-obal">' + tab1 + vyr + tab2 + '<p class="muted r-mala">Plán h = smeny × hodiny na smenu zo vzoru (ak nie sú, priemer z dochádzky za 2 mesiace, inak podľa pozície). Fond = pracovné dni mesiaca × týždenný úväzok / 5. ⚠️ = chýba viac ako 4 h – doplňte smenu. 🎓 = študent.</p></div>';
   }
   function nacitajZiadosti() {
     if (!DB) return;
