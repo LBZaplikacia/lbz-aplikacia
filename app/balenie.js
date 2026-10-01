@@ -256,7 +256,7 @@
       var hotovo = p.hotovo >= p.ks;
       var ovl = p.sken ? '<span class="b-pol-tl">' + (hotovo ? "" : '<button class="btn b-lupa" data-b-lupa="' + esc(p.kod) + '" title="Balík bez štítku – vybrať podľa expirácie">🔍 bez štítku</button>') +
           '<button class="btn btn-ikona" data-b-rucne="' + esc(p.kod) + '" data-ks="' + Math.max(0, p.hotovo - 1) + '" aria-label="Menej (vráti balík na sklad)" title="Menej – vráti balík na sklad"' + (p.hotovo > 0 ? "" : " disabled") + ">−</button>" +
-          (hotovo ? "" : '<button class="btn r-mini" data-b-zadaj="' + esc(p.kod) + '" title="Napísať kód balíka aj s koncovkou (expirácia) zo štítku">⌨️ zadať kód</button>') + "</span>"
+          (hotovo ? "" : '<button class="btn r-mini" data-b-zadaj="' + esc(p.kod) + '" title="Napísať kód balíka aj s koncovkou (expirácia) zo štítku">⌨️ zadať kód</button>') + (hotovo ? "" : '<button class="btn r-mini" data-b-rucne="' + esc(p.kod) + '" data-ks="' + Math.min(p.ks, p.hotovo + 1) + '" title="Potvrdiť 1 ks ručne – bez kódu (ak je na sklade, odpíše sa najstarší)">✋ ručne</button>') + "</span>"
         : '<span class="b-pol-tl"><button class="btn btn-ikona" data-b-potvrd="' + esc(p.kod) + '" data-ks="' + Math.max(0, p.hotovo - 1) + '" aria-label="Menej"' + (p.hotovo > 0 ? "" : " disabled") + ">−</button>" +
           '<button class="btn btn-ikona" data-b-potvrd="' + esc(p.kod) + '" data-ks="' + Math.min(p.ks, p.hotovo + 1) + '" aria-label="Viac"' + (hotovo ? " disabled" : "") + ">+</button>" +
           (hotovo ? "" : '<button class="btn r-mini" data-b-potvrd="' + esc(p.kod) + '" data-ks="' + p.ks + '">✓ všetko</button>') + "</span>";
