@@ -35,7 +35,7 @@
     }).catch(function (e) { O.prace = false; O.zoznam = { ok: false, text: chyba(e) }; kresli(); });
   }
   function otvor(cislo) {
-    O.cislo = cislo; O.detail = null; O.uprava = null; O.sprava = null; kresli(); window.scrollTo(0, 0);
+    O.cislo = cislo; O.detail = null; O.uprava = null; O.sprava = null; O.dobVolba = null; kresli(); window.scrollTo(0, 0);
     rpc("obj_detail", { p_cislo: cislo }).then(function (d) { O.detail = d; kresli(); }).catch(function (e) { O.detail = { ok: false, text: chyba(e) }; kresli(); });
 nacitajSms(cislo);
   }
@@ -171,7 +171,7 @@ var dok = (D.doklady || []).filter(function (d) { return d.typ === "invoice" || 
         '<span class="num">' + esc(eur(d.suma)) + ' <button class="btn r-mini" type="button" data-o-pdf="' + esc(d.cislo) + '">PDF</button>' + "</span></div>";
     }).join("") + "</div>" : '<p class="muted" style="margin:0">' + (o.faktura ? "Faktúra " + esc(o.faktura) + " – detail sa načíta pri ďalšom stiahnutí z Upgates." : "Zatiaľ bez faktúry.") + "</p>")  + "</section>";
     if (!storno) {
-      h += '<section class="card"><h3>Stav objednávky</h3>' + ((D.stavy || []).length ?
+      h += '<section class="card"><h3>Stav objednávky</h3>' + dobVolbaHtml(o) + ((D.stavy || []).length ?
         '<form id="o-stav" class="o-riadok"><select name="stav">' + D.stavy.map(function (s) { return '<option value="' + esc(s.kod) + '"' + (s.nazov === o.status ? " selected" : "") + ">" + esc(s.nazov) + "</option>"; }).join("") +
         '</select><button class="btn btn-primary" type="submit">Zmeniť stav</button></form>' +
         '<p class="muted r-mala">Pri zmene stavu Upgates pošle zákazníkovi e-mail, ak ho má stav nastavený. Pri <b>Storno</b> appka najprv ponúkne vystaviť dobropis v Upgates.</p>'
@@ -212,6 +212,21 @@ return '<details class="card o-sms"' + (otv ? " open" : "") + ' ontoggle="window
 function nacitajSms(cislo) {
 rpc("obj_sms", { p_cislo: cislo }).then(function (d) { O.sms = Object.assign({ cislo: cislo }, d || { ok: false }); if (O.cislo === cislo && !O.uprava) kresli(); })
 .catch(function (e) { O.sms = { cislo: cislo, ok: false, text: chyba(e) }; if (O.cislo === cislo && !O.uprava) kresli(); });
+}
+// Storno s faktúrou: celý dobropis vystaví appka v Upgates; čiastočný (vrátená časť) sa robí ručne v Upgates – appka naviguje
+function dobVolbaHtml(o) {
+var V = O.dobVolba; if (!V || V.cislo !== O.cislo) return "";
+if (!V.ciastocny) return '<div class="s-varovanie" style="margin:0 0 10px"><p style="margin:0 0 6px"><b>Storno – k objednávke je faktúra ' + esc(o.faktura) + ".</b> Pred stornom treba dobropis. Aký?</p>" +
+'<div class="f-akcie"><button class="btn btn-primary" data-o="dob-cely">↩ Celý dobropis – vystaviť a dať Storno</button><button class="btn" data-o="dob-ciastocny">✂️ Čiastočný dobropis (vrátená časť)</button><button class="btn" data-o="dob-zrus">Zrušiť</button></div>' +
+'<p class="muted r-mala" style="margin:6px 0 0">Celý: appka vystaví dobropis v Upgates, dá Storno a Upgates pošle zákazníkovi e-mail so storno a dobropisom.</p></div>';
+return '<div class="s-varovanie" style="margin:0 0 10px"><p style="margin:0 0 6px"><b>✂️ Čiastočný dobropis sa vystavuje v Upgates</b></p><ol style="margin:0 0 8px;padding-left:20px">' +
+"<li>Otvorte objednávku v Upgates (tlačidlo nižšie).</li><li>V časti <b>Dokumenty</b> ťuknite <b>Nový → Dobropis</b>.</li>" +
+"<li>V dobropise nechajte len vrátené položky a ich počty, ostatné odstráňte, a dobropis uložte.</li>" +
+"<li>Stav objednávky <b>nemeňte na Storno</b> – zvyšok objednávky platí.</li>" +
+"<li>Vráťte sa sem a ťuknite <b>🔎 Skontrolovať dobropis v Upgates</b> – appka ho dotiahne medzi Doklady.</li></ol>" +
+'<div class="f-akcie">' + (V.url ? '<a class="btn btn-primary" href="' + esc(V.url) + '" target="_blank" rel="noopener">↗ Otvoriť objednávku v Upgates</a>'
+: V.url === "" ? '<span class="zm-chyba-pol">' + esc(V.chyba || "Odkaz sa nepodarilo načítať") + "</span>" : '<span class="muted">Pripravujem odkaz…</span>') +
+'<button class="btn" data-o="dob-zrus">Hotovo</button></div></div>';
 }
 function riadok(n, v, html) { return v ? '<div class="row"><span class="muted">' + esc(n) + "</span><span>" + (html ? v : esc(v)) + "</span></div>" : ""; }
 
@@ -284,7 +299,27 @@ function riadok(n, v, html) { return v ? '<div class="row"><span class="muted">'
         fn("ciselniky").then(function (r) { sprava(r && r.ok ? "ok" : "chyba", (r && r.text) || "Nenačítané"); O.cis = null; }).catch(function (x) { sprava("chyba", chyba(x)); });
         return;
       case "odoslat": t.disabled = true; odoslatZmeny(false); return;
-      case "dobropis":
+      case "dob-cely":
+var V = O.dobVolba; if (!V) return; O.dobVolba = null;
+sprava("ok", "Vystavujem dobropis v Upgates…");
+fn("vystav_dobropis", { cislo: V.cislo }).then(function (r) {
+if (!r || !r.ok) { sprava("chyba", (r && r.text) || "Dobropis sa nevystavil – Storno som nedal"); otvor(V.cislo); return; }
+sprava("ok", r.text + " – dávam Storno…");
+return rpc("obj_stav", { p_cislo: V.cislo, p_kod: V.kod }).then(function (r2) {
+if (!r2 || r2.ok === false) { sprava("chyba", (r2 && r2.text) || "Nezmenené"); return; }
+sprava("ok", r2.text); odoslatZmeny(true);
+});
+}).catch(function (x) { sprava("chyba", chyba(x)); });
+return;
+case "dob-ciastocny":
+if (!O.dobVolba) return;
+O.dobVolba.ciastocny = true; O.dobVolba.url = null; kresli();
+fn("admin_odkaz", { cislo: O.dobVolba.cislo }).then(function (r) {
+if (!O.dobVolba) return; O.dobVolba.url = r && r.ok ? r.url : ""; O.dobVolba.chyba = r && !r.ok ? r.text : null; kresli();
+}).catch(function (x) { if (O.dobVolba) { O.dobVolba.url = ""; O.dobVolba.chyba = chyba(x); kresli(); } });
+return;
+case "dob-zrus": O.dobVolba = null; kresli(); return;
+case "dobropis":
         t.disabled = true;
         fn("dobropis", { cislo: O.cislo }).then(function (r) { sprava(r && r.dobropis ? "ok" : "chyba", (r && r.text) || "Nepodarilo sa overiť"); otvor(O.cislo); }).catch(function (x) { sprava("chyba", chyba(x)); });
         return;
@@ -342,16 +377,9 @@ if (f.id === "o-stav") {
         });
       };
       if (/storn/i.test(nazov) && ob.faktura && !maDob && ob.zdroj !== "appka") {
-        if (!lbzPotvrd("K objednávke " + cis + " je faktúra " + ob.faktura + ".\n\nPred Storno treba vystaviť dobropis. Vystaviť dobropis v Upgates teraz a potom dať Storno?\n\n(Upgates potom zákazníkovi pošle e-mail so storno a dobropisom.)")) return;
-        sprava("ok", "Vystavujem dobropis v Upgates…");
-        fn("vystav_dobropis", { cislo: cis }).then(function (r) {
-          if (!r || !r.ok) { sprava("chyba", (r && r.text) || "Dobropis sa nevystavil – Storno som nedal"); otvor(cis); return; }
-          sprava("ok", r.text + " – dávam Storno…");
-          return zmen();
-        }).catch(function (x) { sprava("chyba", chyba(x)); });
-        return;
+        O.dobVolba = { kod: kod, nazov: nazov, cislo: cis }; kresli(); return; // výber: celý / čiastočný dobropis
       }
-      if (!lbzPotvrd("Zmeniť stav objednávky " + cis + " na „" + nazov + "“?")) return;
+      if (!lbzPotvrd("Zmeniť stav objednávky " + cis + " na „" + nazov + "“?" + (/storn/i.test(nazov) && maDob ? "\n\nK objednávke už je dobropis. Ak bol len čiastočný, na zvyšok vystavte v Upgates ďalší dobropis." : ""))) return;
       zmen().catch(function (x) { sprava("chyba", chyba(x)); });
       return;
     }
