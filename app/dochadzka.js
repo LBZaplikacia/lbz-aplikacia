@@ -8,8 +8,8 @@
 
   var DB = null, ROLA = null, koren = null;
   var D = { moja: null, nacitavam: false, sprava: null, zalozka: "mesiac", mesiac: null, data: null, prehlad: null, osoba: null, dialog: null, miesto: null, prace: 0 };
-  var MIESTA = ["ZBOJSKÁ", "ROZVOZ", "OBCHOD", "BUCHTOMOBIL", "ADMINISTRATÍVA", "DOMA"];
-  var POZ_MIESTO = { pecenie: "ZBOJSKÁ", bar: "ZBOJSKÁ", rozvoz: "ROZVOZ", buchtac: "BUCHTOMOBIL", obchod: "OBCHOD" };
+  var MIESTA = ["ZBOJSKÁ", "ROZVOZ", "SLUŽOBKA", "BUCHTOMOBIL", "ADMINISTRATÍVA", "DOMA"];
+  var POZ_MIESTO = { pecenie: "ZBOJSKÁ", bar: "ZBOJSKÁ", rozvoz: "ROZVOZ", buchtac: "BUCHTOMOBIL", obchod: "SLUŽOBKA" };
   var TYPY = { praca: "Odpracované", dovolenka: "Dovolenka", pn: "PN", ocr: "OČR", lekar: "Lekár", nv: "Náhradné voľno", oprava: "Oprava záznamu" };
   var SUHLAS_TEXT = "Potvrdzujem, že som bol(a) oboznámený(á), že pri zápise príchodu a odchodu v aplikácii sa zaznamenáva poloha zariadenia " +
     "(len v okamihu zápisu, nie počas práce). Údaj slúži na overenie miesta výkonu práce, vidí ho len vedenie (IT a CEO) a uchováva sa po dobu " +
@@ -89,7 +89,7 @@
     return s ? (POZ_MIESTO[s.pozicia] || "ZBOJSKÁ") : "ZBOJSKÁ";
   }
   // karta v štýle starej webovej dochádzky: zlatý rámik, veľké PRÍCHOD / ODCHOD, výber miesta, Dovolenka / Lekár / PN, výkaz
-  var MIESTA_POPIS = { "ZBOJSKÁ": "ZBOJSKÁ", "ROZVOZ": "ROZVOZ", "OBCHOD": "OBCHOD", "BUCHTOMOBIL": "BUCHTOMOBIL", "ADMINISTRATÍVA": "ADMINISTRATÍVA", "DOMA": "DOMA" };
+  var MIESTA_POPIS = { "ZBOJSKÁ": "ZBOJSKÁ", "ROZVOZ": "ROZVOZ", "SLUŽOBKA": "SLUŽOBKA", "BUCHTOMOBIL": "BUCHTOMOBIL", "ADMINISTRATÍVA": "ADMINISTRATÍVA", "DOMA": "DOMA" };
   function vykazHtml() {
     if (!D.vykaz) return "";
     var d = D.data;

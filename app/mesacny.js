@@ -9,7 +9,7 @@
   var S = { el: null, citatel: false, pohlad: null, mesiac: null, osoba: null, moja: undefined, list: null, prehlad: null,
             nacitavam: false, sprava: null, vyber: {}, bezi: null, detail: false, karta: null };
   var MESIACE = ["január", "február", "marec", "apríl", "máj", "jún", "júl", "august", "september", "október", "november", "december"];
-  var MIESTO_NAZOV = { "ZBOJSKÁ": "Zbojská", "ROZVOZ": "Rozvoz", "OBCHOD": "Obchod", "BUCHTOMOBIL": "Buchťáč", "ADMINISTRATÍVA": "Administratíva" };
+  var MIESTO_NAZOV = { "ZBOJSKÁ": "Zbojská", "ROZVOZ": "Rozvoz", "OBCHOD": "Služobka", "SLUŽOBKA": "Služobka", "BUCHTOMOBIL": "Buchťáč", "ADMINISTRATÍVA": "Administratíva" };
   var TYP_DOK = { cp: "Cestovný príkaz", dochadzka: "Výkaz dochádzky", absencia: "Dovolenkový lístok / žiadosť", hotovost: "Prevzatie hotovosti" };
   var ZAMESTNAVATEL = "V sedle u Falťanov s.r.o., Mládežnícka 3427/9, 974 04 Banská Bystrica, IČO 47206934";
 

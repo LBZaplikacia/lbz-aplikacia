@@ -156,7 +156,7 @@
   function cip(m) {
     var o = osoba(m.osoba), cas = UKAZ_CAS && m.od ? m.od + (m.do ? "–" + m.do : "") : "";
     if (!o) {
-      return '<button class="r-cip r-volne" data-r-miesto="' + m.id + '"><span>voľné</span>' + (cas ? '<small class="num">' + esc(cas) + "</small>" : "") + "</button>";
+      return '<button class="r-cip r-volne" data-r-miesto="' + m.id + '"><span>voľné</span>' + (cas ? '<small class="num">' + esc(cas) + "</small>" : "") + (m.poznamka ? '<small style="color:#b45309;font-weight:600">⚠️ ' + esc(m.poznamka) + "</small>" : "") + "</button>";
     }
     var ja = R.data.ja && o.id === R.data.ja;
     return '<button class="r-cip' + (ja ? " r-ja" : "") + (m.vynimka ? " r-vynimka" : "") + '" data-r-miesto="' + m.id + '" style="background:' + esc(o.farba) + ";color:" + textNa(o.farba) + '">' +
