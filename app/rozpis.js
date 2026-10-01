@@ -82,9 +82,15 @@
     if (!vedenie()) return "";
     var mes = MESIACE[mesiac.getMonth()], nm = navrhMesiaca(mesiac), koniec = new Date(mesiac.getFullYear(), mesiac.getMonth() + 1, 0, 12);
     if (!nm.length) {
-      if (iso(koniec) < iso(dnes())) return "";
-      return '<div class="r-lista r-gen"><button class="btn r-mini" data-r="generuj" data-m="' + iso(mesiac) + '">✨ Vygenerovať rozpis – ' + esc(mes) + "</button>" +
-        '<button class="btn r-mini" data-r-pohlad="vzory">🧩 Vzory smien</button></div>';
+      var buduci = iso(mesiac) > iso(dnes()), maBil = iso(mesiac) >= "2026-09-01", Bx = null;
+      if (maBil) {
+        if (!R.bilancia || R.bilancia.mesiac !== iso(mesiac)) { R.bilancia = { mesiac: iso(mesiac), zoznam: null }; setTimeout(function () { nacitajBilanciu(iso(mesiac)); }, 0); }
+        Bx = R.bilancia.zoznam;
+      }
+      return '<section class="card r-navrh-panel"><h3>📊 Bilancia hodín – ' + esc(mes) + "</h3>" +
+        (maBil ? (Bx ? (Bx.length ? bilanciaHtml(Bx) : '<p class="muted">Nič na zobrazenie.</p>') : '<p class="muted">Načítavam…</p>') : "") +
+        '<div class="r-lista r-gen">' + (buduci ? '<button class="btn r-mini" data-r="generuj" data-m="' + iso(mesiac) + '">✨ Vygenerovať rozpis – ' + esc(mes) + "</button>" : '<span class="muted">Generovať sa dá len rozpis na budúci mesiac.</span>') +
+        '<button class="btn r-mini" data-r-pohlad="vzory">🧩 Vzory smien</button></div></section>';
     }
     var obs = nm.filter(function (n) { return n.osoba; }).length, vol = nm.length - obs;
     var B = R.bilancia && R.bilancia.mesiac === iso(mesiac) ? R.bilancia.zoznam : null;
