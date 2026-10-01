@@ -476,7 +476,7 @@
     else if (a === "zd-ukaz") {
       rpc("zam_zdrav_fotky", { p_osoba: Z.osoba }).then(function (c) {
         return Promise.all((c || []).map(function (x) { return x ? DB.storage.from("zamestnanci").createSignedUrl(x, 300).then(function (r) { return r && r.data ? r.data.signedUrl : null; }) : null; }));
-      }).then(function (u) { ZD.foto = (u || []).filter(Boolean); prekresli(); }).catch(function (x) { lbzInfo(chybaText(x)); });
+      }).then(function (u) { u = (u || []).filter(Boolean); if (!u.length) { lbzInfo("Fotky preukazu sa nepodarilo načítať. Skús to znova alebo nahraj fotky nanovo."); return; } ZD.foto = u; prekresli(); }).catch(function (x) { lbzInfo(chybaText(x)); });
     }
     else if (a === "potvrd") {
       var s = document.getElementById("zm-suhlas");

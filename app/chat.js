@@ -540,9 +540,11 @@
     if (e.target.id === "chat-skupina-form") {
       e.preventDefault();
       var dd = C.dialog, vs = document.getElementById("chat-sk-vsetci").checked, ar = document.getElementById("chat-sk-archiv");
+      dd.nazov = document.getElementById("chat-sk-nazov").value.trim(); dd.ikona = document.getElementById("chat-sk-ikona").value; dd.archiv = ar ? ar.checked : false;
+      if (!dd.nazov) { lbzInfo("Zadaj názov skupiny."); return; }
       C.prace = true; kresliDialog();
-      rpc("chat_skupina_uloz", { p: { id: dd.id || null, nazov: document.getElementById("chat-sk-nazov").value, ikona: document.getElementById("chat-sk-ikona").value,
-        vsetci: vs, clenovia: dd.clenovia || [], archiv: ar ? ar.checked : false } }).then(function (r) {
+      rpc("chat_skupina_uloz", { p: { id: dd.id || null, nazov: dd.nazov, ikona: dd.ikona,
+        vsetci: vs, clenovia: dd.clenovia || [], archiv: dd.archiv } }).then(function (r) {
         C.prace = false;
         if (!r || !r.ok) { kresliDialog(); lbzInfo((r && r.text) || "Neuložené"); return; }
         C.dialog = null; kresliDialog();
@@ -553,6 +555,7 @@
   function vstup(e) {
     var t = e.target;
     if (t.id === "chat-text") { vyska(t); return; }
+    if ((t.id === "chat-sk-nazov" || t.id === "chat-sk-ikona") && C.dialog) { C.dialog[t.id === "chat-sk-nazov" ? "nazov" : "ikona"] = t.value; return; }
     if (t.id === "chat-hladaj-l") { C.dialog.hladaj = t.value; C.dialog.fokus = true; kresliDialog(); return; }
     if (t.id === "chat-sk-vsetci") { C.dialog.vsetci = t.checked; C.dialog.nazov = document.getElementById("chat-sk-nazov").value; C.dialog.ikona = document.getElementById("chat-sk-ikona").value; kresliDialog(); return; }
   }
