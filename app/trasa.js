@@ -382,8 +382,8 @@
   }
 
   // tlač ako starý skript (hárok trasy): Č. | Meno/Firma | Telefón | Č. faktúry | Suma | Adresa | Čas (+ prestávky) | Platba a poznámka | QR pre kasu
-  function tlacTrasu() {
-    var d = T.data, t = d.trasa, z = d.zastavky || [];
+  function tlacTrasu(dd) {
+    var d = dd || T.data, t = d.trasa, z = d.zastavky || [];
     var n = z.filter(function (x) { return !x.bez_gps; }).length, i1 = 2, i2 = n - 2, spolu = i1 >= i2, stred = Math.floor(n / 2);
     var qr = function (text, px) { return window.LBZ_QR ? window.LBZ_QR.svg(text, px) : ""; };
     var riadky = [], k = 0;
@@ -522,6 +522,14 @@
       if (T.id == null) nacitajZoznam(); else { nacitajTrasu(true); zapniJazdu(); }
     },
     otvor: function (id) { T.id = id; T.data = null; },
+    tlacPre: function (id) {
+      if (!DB) return Promise.reject(new Error("Nie ste prihlásený"));
+      return rpc("trasa_data", { p_id: id }).then(function (d) {
+        if (!d || d.ok === false) throw new Error((d && d.text) || "Trasa sa nedá načítať");
+        if (!d.trasa) throw new Error("Trasa ešte nie je vytvorená – vytvorí ju zákaznícky servis vo Furmankách.");
+        tlacTrasu(d);
+      });
+    },
     kartaSms: kartaSms,
     karta: function () {
       if (!T.zoznam && DB && !T._karta) { T._karta = true; rpc("trasa_zoznam").then(function (d) { if (d && d.ok) { T.zoznam = d.trasy || []; window.dispatchEvent(new Event("lbz-prekresli")); } }).catch(function () {}); }

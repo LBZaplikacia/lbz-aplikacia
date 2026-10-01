@@ -232,7 +232,7 @@
     var zab = obj.filter(function (o) { return o.stav === "zabalena"; }).length, odl = obj.filter(function (o) { return o.stav === "odlozena"; }).length;
     var head = '<div class="head"><div><button class="btn-link spat" data-b="spat-zoznam">← Balenie</button><h2>' + esc(f.nazov || "Furmanka") + "</h2>" +
       '<div class="sub">zabalené ' + zab + " z " + obj.length + (odl ? " · odložené " + odl : "") + (B.nacitavam ? " · načítavam…" : "") + "</div></div>" +
-      '<span class="head-tl"><button class="btn" data-b="stitky"' + (obj.length ? "" : " disabled") + '>🖨️ Štítky</button><button class="btn btn-ikona" data-b="obnov" aria-label="Obnoviť">↻</button></span></div>';
+      '<span class="head-tl"><button class="btn" data-b="stitky"' + (obj.length ? "" : " disabled") + '>🖨️ Štítky</button><button class="btn" data-b="trasa-tlac" title="Núdzová tlač trasy furmana">🗺️ Trasa</button><button class="btn btn-ikona" data-b="obnov" aria-label="Obnoviť">↻</button></span></div>';
     if (!d) return head + spravaHtml() + '<div class="empty"><strong>Načítavam…</strong></div>';
     return head + spravaHtml() + skenBox("Naskenujte štítok objednávky") + "<!--KAM-->" +
       '<section class="card"><div class="rows b-obj-zoznam">' + (obj.length ? obj.map(function (o, i) {
@@ -385,6 +385,10 @@
       case "kamera": zapniKameru(d.smer); break;
       case "kamera-stop": vypniKameru(); break;
       case "stitky": B.dialog = { typ: "stitky" }; prekresli(); break;
+      case "trasa-tlac":
+        if (!window.LBZ_TRASA || !window.LBZ_TRASA.tlacPre || !B.fData || !B.fData.furmanka) { B.sprava = { typ: "chyba", text: "Tlač trasy nie je dostupná – obnovte appku." }; prekresli(); break; }
+        window.LBZ_TRASA.tlacPre(B.fData.furmanka.id).catch(function (er) { B.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+        break;
       case "stitky-vsetky": case "stitky-ziadne": case "stitky-nove":
         var vyt = vytlacene();
         koren.querySelectorAll("[data-b-st]").forEach(function (c) { c.checked = d.b === "stitky-vsetky" || (d.b === "stitky-nove" && vyt.indexOf(c.dataset.bSt) === -1); });
