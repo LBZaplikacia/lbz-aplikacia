@@ -1451,3 +1451,6 @@ section.card { grid-template-columns: minmax(0, 1fr); }
 .d-podpisy-tl { display: flex; flex-wrap: wrap; gap: 6px; }
 .d-prilozit { cursor: pointer; }
 .cp-podpisy { margin: 10px 0; } .cp-podpisy h3 { margin-top: 0; }
+/* chat – vybraní členovia skupiny */
+.chat-f-cl .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink, #fff); border-color: var(--accent); }
+.chat-f-cl .chip[aria-pressed="true"]::before { content: "✓ "; }
