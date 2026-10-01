@@ -229,8 +229,8 @@
     var t = function (x) { return x ? "✅ " + esc(x.meno || "") + " " + esc(new Date(x.cas).toLocaleDateString("sk-SK")) : "nepodpísané"; };
     return '<div class="d-podpisy"><span>✍️ Zamestnanec: ' + t(zz) + " · Zamestnávateľ: " + t(zv) + "</span>" +
       '<span class="d-podpisy-tl"><button class="btn" data-d="tlac-vykaz">🖨️ Tlačiť</button>' +
-      (D.zalozka === "mesiac" ? '<button class="btn' + (zz ? "" : " btn-primary") + '" data-d="podpis-vykaz">✍️ ' + (zz ? "Podpísať znova" : "Podpísať výkaz") + "</button>" : "") +
-      (spr && D.zalozka === "osoba" ? '<button class="btn" data-d="podpis-vykaz-v">✍️ Podpísať za zamestnávateľa</button>' : "") +
+      (D.zalozka === "mesiac" ? (zz ? '<span class="d-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Podpísané</span>' : '<button class="btn btn-primary" data-d="podpis-vykaz">✍️ Podpísať výkaz</button>') : "") +
+      (spr && D.zalozka === "osoba" ? (zv ? '<span class="d-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Podpísané zamestnávateľom</span>' : '<button class="btn" data-d="podpis-vykaz-v">✍️ Podpísať za zamestnávateľa</button>') : "") +
       (D.podV && D.podV.pdf ? '<button class="btn" data-d="pdf-vykaz">📄 Podpísané PDF</button>' : "") + "</span></div>";
   }
   function listokHtml(a, meno, pod) {
@@ -366,7 +366,7 @@
     return '<div class="rows">' + a.map(function (x) {
       return '<div class="row"><span>' + esc(TYPY[x.typ]) + " · " + esc(denSk(x.od)) + (x.do !== x.od ? " – " + esc(denSk(x.do)) : "") +
         (x.cas_od ? " " + String(x.cas_od).slice(0, 5) + "–" + String(x.cas_do || "").slice(0, 5) : "") + (x.dovod ? ' <span class="muted">(' + esc(x.dovod) + ")</span>" : "") + prilohyTl(x.prilohy) +
-        (x.typ !== "oprava" && x.stav !== "zamietnuta" ? ' <button class="btn-link" data-d-listok="' + x.id + '">✍️ ' + (x.typ === "dovolenka" ? "podpísať lístok" : "podpísať") + "</button>" : "") +
+        (x.typ !== "oprava" && x.stav !== "zamietnuta" ? ((D.zalozka === "osoba" ? x.podpis_zv : x.podpis_zam) ? ' <span class="d-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Podpísané</span>' : ' <button class="btn-link" data-d-listok="' + x.id + '">✍️ ' + (x.typ === "dovolenka" ? "podpísať lístok" : "podpísať") + "</button>") : "") +
         (x.typ === "lekar" ? ' <label class="btn-link d-prilozit">📷 priložiť priepustku<input type="file" accept="image/*" multiple hidden data-d-priloz="' + x.id + '"></label>' : "") +
         "</span>" + (st[x.stav] || "") + "</div>";
     }).join("") + "</div>";
