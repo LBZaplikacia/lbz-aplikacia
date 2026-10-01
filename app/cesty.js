@@ -145,10 +145,10 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
       '<div class="row"><span>Cestovný príkaz – schválil (zamestnávateľ)</span><span>' + txt(zv) + "</span></div>" +
       '<div class="row"><span>Stravné ' + eur(sumStr) + " prevzaté v hotovosti</span><span>" + txt(hz) + "</span></div></div>" +
       '<div class="cp-akcie">' +
-        '<button class="btn' + (zz ? "" : " btn-primary") + '" data-cp="podpis-cp">✍️ ' + (zz ? "Podpísať znova" : "Podpísať cestovný príkaz") + "</button>" +
-        (d.spravca ? '<button class="btn" data-cp="podpis-cp-v">✍️ Schváliť a podpísať za zamestnávateľa</button>' : "") +
-        (Number(sumStr) > 0 ? '<button class="btn" data-cp="podpis-hot">💶 Potvrdiť prevzatie hotovosti</button>' : "") +
-        (d.spravca && hz ? '<button class="btn" data-cp="podpis-hot-v">✍️ Vyplatil (zamestnávateľ)</button>' : "") +
+        (zz ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Podpísané</span>' : '<button class="btn btn-primary" data-cp="podpis-cp">✍️ Podpísať cestovný príkaz</button>') +
+        (d.spravca ? (zv ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Schválené zamestnávateľom</span>' : '<button class="btn" data-cp="podpis-cp-v">✍️ Schváliť a podpísať za zamestnávateľa</button>') : "") +
+        (Number(sumStr) > 0 ? (hz ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Hotovosť prevzatá</span>' : '<button class="btn" data-cp="podpis-hot">💶 Potvrdiť prevzatie hotovosti</button>') : "") +
+        (d.spravca && hz ? (ma(ho, "zamestnavatel") ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Vyplatené</span>' : '<button class="btn" data-cp="podpis-hot-v">✍️ Vyplatil (zamestnávateľ)</button>') : "") +
         (p.cp && p.cp.pdf ? '<button class="btn" data-cp="pdf-cp">📄 Podpísaný príkaz (PDF)</button>' : "") +
         (p.hot && p.hot.pdf ? '<button class="btn" data-cp="pdf-hot">📄 Potvrdenie hotovosti (PDF)</button>' : "") +
       "</div></section>";

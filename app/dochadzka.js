@@ -10,7 +10,7 @@
   var D = { moja: null, nacitavam: false, sprava: null, zalozka: "mesiac", mesiac: null, data: null, prehlad: null, osoba: null, dialog: null, miesto: null, prace: 0 };
   var MIESTA = ["ZBOJSKÁ", "ROZVOZ", "OBCHOD", "BUCHTOMOBIL", "ADMINISTRATÍVA", "DOMA"];
   var POZ_MIESTO = { pecenie: "ZBOJSKÁ", bar: "ZBOJSKÁ", rozvoz: "ROZVOZ", buchtac: "BUCHTOMOBIL", obchod: "OBCHOD" };
-  var TYPY = { praca: "Odpracované", dovolenka: "Dovolenka", pn: "PN", ocr: "OČR", lekar: "Lekár", oprava: "Oprava záznamu" };
+  var TYPY = { praca: "Odpracované", dovolenka: "Dovolenka", pn: "PN", ocr: "OČR", lekar: "Lekár", nv: "Náhradné voľno", oprava: "Oprava záznamu" };
   var SUHLAS_TEXT = "Potvrdzujem, že som bol(a) oboznámený(á), že pri zápise príchodu a odchodu v aplikácii sa zaznamenáva poloha zariadenia " +
     "(len v okamihu zápisu, nie počas práce). Údaj slúži na overenie miesta výkonu práce, vidí ho len vedenie (IT a CEO) a uchováva sa po dobu " +
     "potrebnú na evidenciu pracovného času. Prevádzkovateľ: V sedle u Falťanov s.r.o.";
@@ -376,7 +376,7 @@
     return '<form class="card f-form d-ziadost" id="d-ziadost-form"><h3>Žiadosť – neprítomnosť alebo oprava</h3>' +
       (o ? '<p class="f-sprava">Oprava záznamu ' + esc(denSk(o.datum)) + " (" + esc(cas(o.prichod)) + "–" + esc(cas(o.odchod)) + ') – zadaj správne časy. <button type="button" class="btn-link" data-d="opr-zrus">zrušiť</button></p>' : "") +
       '<label class="field"><span class="label">Druh</span><select id="d-z-typ"><option value="dovolenka">Dovolenka</option><option value="pn">PN (práceneschopnosť)</option>' +
-      '<option value="ocr">OČR (ošetrovanie člena rodiny)</option><option value="lekar">Návšteva lekára</option><option value="oprava">Oprava záznamu (zabudnutý príchod / odchod)</option></select></label>' +
+      '<option value="ocr">OČR (ošetrovanie člena rodiny)</option><option value="lekar">Návšteva lekára</option><option value="nv">Náhradné voľno (čerpanie nadčasu)</option><option value="oprava">Oprava záznamu (zabudnutý príchod / odchod)</option></select></label>' +
       '<div class="d-riadok"><label class="field"><span class="label">Od</span><input type="date" id="d-z-od" value="' + dnes + '" required></label>' +
       '<label class="field"><span class="label">Do</span><input type="date" id="d-z-do" value="' + dnes + '"></label></div>' +
       '<div class="d-riadok d-z-casy" hidden><p class="muted d-cela">Ak čas nezadáš, započíta sa celá denná norma.</p><label class="field"><span class="label">Čas od</span><input type="time" id="d-z-cod"></label>' +

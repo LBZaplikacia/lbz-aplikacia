@@ -100,6 +100,7 @@
       (d.dni_dovolenka ? "<dt>Dovolenka</dt><dd>" + d.dni_dovolenka + " dní</dd>" : "") +
       (d.dni_pn ? "<dt>PN / OČR</dt><dd>" + d.dni_pn + " dní</dd>" : "") +
       (d.dni_lekar ? "<dt>Lekár</dt><dd>" + d.dni_lekar + " dní</dd>" : "") +
+      (d.dni_nv ? "<dt>Náhradné voľno</dt><dd>" + d.dni_nv + " dní</dd>" : "") +
       (d.min_absencie ? "<dt>Absencie spolu</dt><dd>" + hod(d.min_absencie) + "</dd>" : "") +
       (b && b.tpp ? "<dt>Fond (" + b.prac_dni + " prac. dní)</dt><dd>" + hod(b.fond_min) + "</dd>" +
            "<dt>Rozdiel v mesiaci</dt><dd>" + hodZ(b.rozdiel_min) + "</dd>" +
