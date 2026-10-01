@@ -132,6 +132,7 @@ function sluzobny() { return ROLA !== "furman" || String(EMAIL || "").toLowerCas
           : '<button class="btn t-tl-ok" data-t-akcia="dorucene" data-c="' + esc(z.cislo) + '">✅ Doručené</button>' +
             '<button class="btn t-tl-nie" data-t-akcia="nedorucene" data-c="' + esc(z.cislo) + '">❌ Nedoručené</button>') +
         '<button class="btn" data-t-akcia="poznamka" data-c="' + esc(z.cislo) + '">📝</button>' +
+'<button class="btn" data-t-akcia="pozn_obj" data-c="' + esc(z.cislo) + '" title="Poznámka k objednávke">✏️</button>' +
         '<label class="btn t-foto-tl" title="Fotka">📷<input type="file" accept="image/*" capture="environment" data-t-foto="' + esc(z.cislo) + '" hidden></label></div>') +
       "</section>";
   }
@@ -207,6 +208,7 @@ function jazdaHtml(t) {
         (a.telefon ? '<a class="btn t-tl-tel2" href="' + tel(a.telefon) + '">📞 Zavolať</a>' : "") + "</div>"
         : '<div class="t-akt-tl"><button class="btn t-velke-tl btn-primary" data-t="dalsia">➡️ ĎALŠIA ZASTÁVKA</button></div>') +
       (t.stav === "ukoncena" ? "" : '<div class="t-akt-male"><button class="btn" data-t-akcia="poznamka" data-c="' + esc(a.cislo) + '">📝 Poznámka</button>' +
+'<button class="btn" data-t-akcia="pozn_obj" data-c="' + esc(a.cislo) + '">✏️ Poznámka objednávky</button>' +
         '<label class="btn t-foto-tl">📷 Fotka<input type="file" accept="image/*" capture="environment" data-t-foto="' + esc(a.cislo) + '" hidden></label>' +
         (!vybav ? '<button class="btn" data-t="preskocit">⏭️ Preskočiť</button>' : '<button class="btn" data-t-akcia="spat" data-c="' + esc(a.cislo) + '">↩️ Späť</button>') + "</div>") +
       "</section>" +
@@ -247,13 +249,13 @@ if (rez === "jazda") return head + spravaHtml() + prog + prep + jazdaHtml(t) + (
     }
     var nedor = D.typ === "nedorucene";
     return '<div class="f-dialog-pozadie" data-t="zavri"></div><div class="f-dialog" role="dialog" aria-modal="true">' +
-      '<div class="f-lista"><h3>' + (nedor ? "❌ Nedoručené – " : "📝 Poznámka – ") + esc(z.meno || z.firma || D.cislo) + '</h3><button class="btn-link" data-t="zavri" aria-label="Zavrieť">✕</button></div>' +
-      '<form class="f-form" id="t-dialog-form"><label class="field"><span class="label">' + (nedor ? "Prečo (napr. nikto doma, nedvíha)" : "Poznámka (napr. nechané u suseda)") + "</span>" +
-      '<textarea id="t-pozn" rows="3"' + (nedor ? " required" : "") + ">" + esc(z.poznamka || "") + "</textarea></label>" +
+      '<div class="f-lista"><h3>' + (nedor ? "❌ Nedoručené – " : D.typ === "pozn_obj" ? "✏️ Poznámka k objednávke – " : "📝 Poznámka – ") + esc(z.meno || z.firma || D.cislo) + '</h3><button class="btn-link" data-t="zavri" aria-label="Zavrieť">✕</button></div>' +
+      '<form class="f-form" id="t-dialog-form"><label class="field"><span class="label">' + (nedor ? "Prečo (napr. nikto doma, nedvíha)" : D.typ === "pozn_obj" ? "Poznámka k objednávke – uloží sa do objednávky (vidí ju zákaznícky servis) a zapíše sa aj do Upgates" : "Poznámka (napr. nechané u suseda)") + "</span>" +
+      '<textarea id="t-pozn" rows="3"' + (nedor ? " required" : "") + ">" + esc((D.typ === "pozn_obj" ? z.pozn_o : z.poznamka) || "") + "</textarea></label>" +
       (nedor ? '<label class="field"><span class="label">Presunúť do furmanky</span><select id="t-furm"><option value="">Najbližšia otvorená furmanka regiónu (automaticky)</option>' +
       (T.presunFurm || []).map(function (f) { return '<option value="' + f.id + '"' + (String(z.presun_furmanka || "") === String(f.id) ? " selected" : "") + ">" + esc(f.nazov) + (f.stav === "full" ? " (uzavretá)" : "") + "</option>"; }).join("") +
       "</select></label>" + (T.presunFurm == null ? '<p class="muted">Načítavam furmanky…</p>' : "") : "") +
-      '<button class="btn ' + (nedor ? "t-tl-nie" : "btn-primary") + '" type="submit">' + (nedor ? "Označiť ako nedoručené" : "Uložiť poznámku") + "</button></form></div>";
+      '<button class="btn ' + (nedor ? "t-tl-nie" : "btn-primary") + '" type="submit">' + (nedor ? "Označiť ako nedoručené" : D.typ === "pozn_obj" ? "Uložiť do objednávky" : "Uložiť poznámku") + "</button></form></div>";
   }
 
   // ---------- MAPA Google v karte zastávky (bez kľúča, embed). Iframe sa pri prekreslení nevytvára znova – len sa presunie. ----------
@@ -476,7 +478,7 @@ if (d.tVyber) { T.akt = d.tVyber; T.drzAkt = false; T.naMieste = null; T.rezim =
         zastavka({ p_cislo: c, p_stav: "dorucene" }, "✓ Doručené: " + (zd.meno || zd.firma || c)); vibruj(); return;
       }
       if (d.tAkcia === "spat") { if (!lbzPotvrd("Vrátiť zastávku medzi nevybavené?")) return; T.akt = c; T.drzAkt = false; T.naMieste = null; zastavka({ p_cislo: c, p_stav: "caka" }); return; }
-      if (d.tAkcia === "nedorucene" || d.tAkcia === "poznamka") { T.dialog = { typ: d.tAkcia, cislo: c, fokus: true }; prekresli(); if (d.tAkcia === "nedorucene") nacitajPresun(); return; }
+      if (d.tAkcia === "nedorucene" || d.tAkcia === "poznamka" || d.tAkcia === "pozn_obj") { T.dialog = { typ: d.tAkcia, cislo: c, fokus: true }; prekresli(); if (d.tAkcia === "nedorucene") nacitajPresun(); return; }
     }
     switch (d.t) {
       case "zavri-spravu": T.sprava = null; prekresli(); break;
@@ -517,7 +519,15 @@ if (d.tVyber) { T.akt = d.tVyber; T.drzAkt = false; T.naMieste = null; T.rezim =
       var fs = document.getElementById("t-furm"), fid = fs && fs.value ? Number(fs.value) : null;
       T.drzAkt = true;
       zastavka({ p_cislo: D.cislo, p_stav: "nedorucene", p_poznamka: pozn, p_presun_furmanka: fid }, "✗ Nedoručené – po ukončení rozvozu ide do " + (fid ? "zvolenej furmanky" : "najbližšej otvorenej furmanky"));
-    } else zastavka({ p_cislo: D.cislo, p_poznamka: pozn }, "Poznámka uložená");
+    } else if (D.typ === "pozn_obj") {
+T.prace++;
+rpc("trasa_poznamka_obj", { p_id: T.id, p_cislo: D.cislo, p_text: pozn }).then(function (r) {
+T.prace--;
+T.sprava = { typ: r && r.ok ? "ok" : "chyba", text: (r && r.text) || "Neuložené" };
+if (r && r.ok) T.dialog = null;
+nacitajTrasu(true);
+}).catch(function (er) { T.prace--; T.sprava = { typ: "chyba", text: chybaText(er) }; prekresli(); });
+} else zastavka({ p_cislo: D.cislo, p_poznamka: pozn }, "Poznámka uložená");
   }
   function klaves(e) { if (e.key === "Escape" && T.dialog) { T.dialog = null; prekresli(); } }
 
