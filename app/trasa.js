@@ -446,9 +446,29 @@ N + ".t-nahlad-lista{position:sticky;top:0;left:0;z-index:2;display:flex;justify
 var iNav = html.indexOf('<div class="t-p-nav">');
 var obsah = (iNav > -1 ? html.slice(0, iNav) : html).replace(/<a href="/g, '<a target="_blank" rel="noopener" href="') +
 '<div class="t-p-nav">' + nav.map(function (x) { return '<a class="t-p-navbox" target="_blank" rel="noopener" href="' + x.url + '">' + qr(x.url, 110) + "<div>Navigácia " + x.od + "–" + x.po + "</div></a>"; }).join("") + "</div></div>";
-ov.innerHTML = "<style>" + css + '</style><div class="t-nahlad-lista"><button class="btn" type="button" id="t-nahlad-tlac-tl">🖨️ Tlačiť</button><button class="btn" type="button" id="t-nahlad-zavri">✕ Zavrieť</button></div><div class="t-tlac-strana">' + obsah + "</div>";
+ov.innerHTML = "<style>" + css + '</style><div class="t-nahlad-lista"><button class="btn" type="button" id="t-zoom-minus" aria-label="Oddialiť">−</button><button class="btn" type="button" id="t-zoom-plus" aria-label="Priblížiť">+</button><button class="btn" type="button" id="t-nahlad-tlac-tl">🖨️ Tlačiť</button><button class="btn" type="button" id="t-nahlad-zavri">✕ Zavrieť</button></div><div class="t-tlac-strana">' + obsah + "</div>";
 document.getElementById("t-nahlad-zavri").onclick = function () { ov.remove(); };
 document.getElementById("t-nahlad-tlac-tl").onclick = function () { ov.remove(); tlacTrasu(d); };
+// priblíženie / oddialenie prstami (appka má v meta viewport maximum-scale=1, preto vlastné) a tlačidlami − +
+var strana = ov.querySelector(".t-tlac-strana"), Z = 1, pinch = null;
+var nastavZoom = function (z, mx, my) {
+z = Math.max(0.3, Math.min(3, z));
+var px = (ov.scrollLeft + (mx || 0)) / Z, py = (ov.scrollTop + (my || 0)) / Z;
+Z = z; strana.style.zoom = z;
+if (mx != null) { ov.scrollLeft = px * z - mx; ov.scrollTop = py * z - my; }
+};
+nastavZoom(Math.min(1, (ov.clientWidth - 16) / (strana.offsetWidth || 794)));
+ov.style.touchAction = "pan-x pan-y";
+ov.addEventListener("touchstart", function (e) { if (e.touches.length === 2) { var a = e.touches[0], b = e.touches[1]; pinch = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1, z: Z }; } }, { passive: true });
+ov.addEventListener("touchmove", function (e) {
+if (!pinch || e.touches.length !== 2) return;
+e.preventDefault();
+var a = e.touches[0], b = e.touches[1];
+nastavZoom(pinch.z * Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) / pinch.d, (a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
+}, { passive: false });
+ov.addEventListener("touchend", function (e) { if (e.touches.length < 2) pinch = null; }, { passive: true });
+document.getElementById("t-zoom-plus").onclick = function () { nastavZoom(Z * 1.25, ov.clientWidth / 2, ov.clientHeight / 2); };
+document.getElementById("t-zoom-minus").onclick = function () { nastavZoom(Z / 1.25, ov.clientWidth / 2, ov.clientHeight / 2); };
 return;
 }
 var obal = document.getElementById("tlac-oblast");
