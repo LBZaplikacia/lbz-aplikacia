@@ -106,7 +106,15 @@ function sluzobny() { return ROLA !== "furman" || String(EMAIL || "").toLowerCas
     }).join("") + "</div>";
   }
 
-  function zastavkaHtml(z, i) {
+  // poznámka k objednávke: ťuknutím sa otvorí na úpravu (prázdna = ťuknutím sa doplní); navrch položky okrem mrazených buchiet
+function poznObjHtml(z, trieda, ikona) {
+var smie = T.data && T.data.trasa && T.data.trasa.stav !== "ukoncena";
+var ine = z.ine ? '<p class="s-varovanie t-z-ine">🎁 Okrem buchiet: <b>' + esc(z.ine) + "</b></p>" : "";
+var attr = smie ? ' data-t-akcia="pozn_obj" data-c="' + esc(z.cislo) + '" role="button" tabindex="0" title="Ťuknite pre úpravu" style="cursor:pointer"' : "";
+if (z.pozn_obj) return ine + '<p class="' + trieda + '"' + attr + ">" + ikona + esc(z.pozn_obj) + (smie ? ' <span class="muted">✏️</span>' : "") + "</p>";
+return ine + (smie ? '<p class="muted"' + attr.replace('style="cursor:pointer"', 'style="cursor:pointer;border:1px dashed currentColor;border-radius:8px;padding:6px 10px;margin:6px 0"') + ">➕ Doplniť poznámku k objednávke</p>" : "");
+}
+function zastavkaHtml(z, i) {
     var dob = dobierka(z), vybav = z.stav !== "caka";
     var qr = dob && z.faktura && window.LBZ_QR ? '<details class="t-qr"><summary>QR pre kasu (' + esc(eur(z.suma)) + ")</summary>" +
       window.LBZ_QR.svg(z.faktura + ";" + Math.round(Number(z.suma || 0) * 100), 160) + "</details>" : "";
@@ -123,7 +131,7 @@ function sluzobny() { return ROLA !== "furman" || String(EMAIL || "").toLowerCas
       (z.telefon ? '<a class="t-z-tel" href="' + tel(z.telefon) + '">📞 ' + esc(z.telefon) + "</a>" : "") +
       '<div class="t-z-platba ' + (dob ? "t-dob" : "") + '">' + (dob ? "💶 DOBIERKA " + esc(eur(z.suma)) : z.platba === "NA FAKTÚRU" ? "🧾 NA FAKTÚRU" : "✅ ZAPLATENÉ") +
         '<span class="muted"> · ' + esc(z.kusy) + " ks" + (z.faktura ? " · fa " + esc(z.faktura) : "") + " · obj. " + esc(z.cislo) + "</span></div>" +
-      (z.pozn_obj ? '<p class="s-varovanie s-varovanie-info t-z-pozn">' + esc(z.pozn_obj) + "</p>" : "") +
+      poznObjHtml(z, "s-varovanie s-varovanie-info t-z-pozn", "") +
       odpovedeHtml(z) +
       (z.poznamka ? '<p class="t-z-moja">📝 ' + esc(z.poznamka) + (z.presun_nazov ? " · presun: " + esc(z.presun_nazov) : z.presun_datum ? " · nový termín " + esc(datumSk(z.presun_datum)) : "") + "</p>" : "") +
       foto + qr +
@@ -132,7 +140,6 @@ function sluzobny() { return ROLA !== "furman" || String(EMAIL || "").toLowerCas
           : '<button class="btn t-tl-ok" data-t-akcia="dorucene" data-c="' + esc(z.cislo) + '">✅ Doručené</button>' +
             '<button class="btn t-tl-nie" data-t-akcia="nedorucene" data-c="' + esc(z.cislo) + '">❌ Nedoručené</button>') +
         '<button class="btn" data-t-akcia="poznamka" data-c="' + esc(z.cislo) + '">📝</button>' +
-'<button class="btn" data-t-akcia="pozn_obj" data-c="' + esc(z.cislo) + '" title="Poznámka k objednávke">✏️</button>' +
         '<label class="btn t-foto-tl" title="Fotka">📷<input type="file" accept="image/*" capture="environment" data-t-foto="' + esc(z.cislo) + '" hidden></label></div>') +
       "</section>";
   }
@@ -193,7 +200,7 @@ function jazdaHtml(t) {
         : '<div class="t-akt-adresa">📍 -</div>') +
       '<div class="t-akt-platba ' + (dob ? "t-dob" : a.platba === "NA FAKTÚRU" ? "t-fa" : "t-ok") + '">' + (dob ? "💶 DOBIERKA " + esc(eur(a.suma)) : a.platba === "NA FAKTÚRU" ? "🧾 NA FAKTÚRU" : "✅ ZAPLATENÉ") +
         '<span> · ' + esc(a.kusy) + " ks</span></div>" +
-      (a.pozn_obj ? '<p class="s-varovanie t-akt-pozn">⚠️ ' + esc(a.pozn_obj) + "</p>" : "") +
+      poznObjHtml(a, "s-varovanie t-akt-pozn", "⚠️ ") +
       odpovedeHtml(a) +
       (a.poznamka ? '<p class="t-z-moja">📝 ' + esc(a.poznamka) + "</p>" : "") +
       (vybav ? '<p class="f-sprava f-ok">' + (a.stav === "dorucene" ? "✓ Doručené " + esc(cas(a.cas)) : "✗ Nedoručené") + "</p>" : "") +
@@ -208,7 +215,6 @@ function jazdaHtml(t) {
         (a.telefon ? '<a class="btn t-tl-tel2" href="' + tel(a.telefon) + '">📞 Zavolať</a>' : "") + "</div>"
         : '<div class="t-akt-tl"><button class="btn t-velke-tl btn-primary" data-t="dalsia">➡️ ĎALŠIA ZASTÁVKA</button></div>') +
       (t.stav === "ukoncena" ? "" : '<div class="t-akt-male"><button class="btn" data-t-akcia="poznamka" data-c="' + esc(a.cislo) + '">📝 Poznámka</button>' +
-'<button class="btn" data-t-akcia="pozn_obj" data-c="' + esc(a.cislo) + '">✏️ Poznámka objednávky</button>' +
         '<label class="btn t-foto-tl">📷 Fotka<input type="file" accept="image/*" capture="environment" data-t-foto="' + esc(a.cislo) + '" hidden></label>' +
         (!vybav ? '<button class="btn" data-t="preskocit">⏭️ Preskočiť</button>' : '<button class="btn" data-t-akcia="spat" data-c="' + esc(a.cislo) + '">↩️ Späť</button>') + "</div>") +
       "</section>" +
@@ -413,7 +419,7 @@ var zm = document.getElementById("t-zs-miesto"); if (zm) { mapaZsUkaz(zm); if (D
       var dob = dobierka(x);
       riadky.push("<tr><td class=\"t-p-c\">" + (x.poradie || i + 1) + "</td><td><b>" + esc(x.meno || x.firma || "") + "</b></td><td>" + esc(x.telefon || "") + "</td><td>" + esc(x.faktura || "") +
         "</td><td class=\"t-p-suma\">" + esc(eur(x.suma)) + '</td><td><a href="' + mapa(x.adresa) + '">' + esc(x.adresa || "") + "</a>" + (x.bez_gps ? " <b>(adresa nenájdená)</b>" : "") +
-        '</td><td class="t-p-cas">' + esc(cas(x.eta)) + '</td><td class="' + (dob ? "t-p-dob" : "") + '">' + (dob ? "DOBIERKA" : esc(x.platba)) + (x.pozn_obj ? "<br>" + esc(x.pozn_obj) : "") +
+        '</td><td class="t-p-cas">' + esc(cas(x.eta)) + '</td><td class="' + (dob ? "t-p-dob" : "") + '">' + (dob ? "DOBIERKA" : esc(x.platba)) + (x.ine ? "<br><b>+ " + esc(x.ine) + "</b>" : "") + (x.pozn_obj ? "<br>" + esc(x.pozn_obj) : "") +
         '</td><td class="t-p-qr">' + (dob && x.faktura ? qr(x.faktura + ";" + Math.round(Number(x.suma || 0) * 100), 70) : "") + "</td></tr>");
     });
     var nav = navOdkazy(z, true);
@@ -457,7 +463,7 @@ var zm = document.getElementById("t-zs-miesto"); if (zm) { mapaZsUkaz(zm); if (D
   }
   document.addEventListener("visibilitychange", function () { if (!document.hidden && T.id != null && koren && koren.isConnected) zapniJazdu(); });
   function klik(e) {
-    var t = e.target.closest("button, [data-t]"); if (!t || !koren.contains(t)) return;
+    var t = e.target.closest("button, a, [data-t], [data-t-akcia]"); if (!t || !koren.contains(t)) return; if (t.tagName === "A") return;
     var d = t.dataset;
     if (d.tOtvor) { T.id = +d.tOtvor; T.data = null; T.sprava = null; T.akt = null; T.rezim = ROLA === "furman" ? "jazda" : "mapa"; prekresli(); window.scrollTo(0, 0); nacitajTrasu(); zapniJazdu(); return; }
     if (d.tRezim) { T.rezim = d.tRezim; prekresli(); window.scrollTo(0, 0); return; }

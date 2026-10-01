@@ -37,6 +37,7 @@
   function otvor(cislo) {
     O.cislo = cislo; O.detail = null; O.uprava = null; O.sprava = null; kresli(); window.scrollTo(0, 0);
     rpc("obj_detail", { p_cislo: cislo }).then(function (d) { O.detail = d; kresli(); }).catch(function (e) { O.detail = { ok: false, text: chyba(e) }; kresli(); });
+nacitajSms(cislo);
   }
   function produkty() {
     if (O.produkty) return Promise.resolve(O.produkty);
@@ -156,7 +157,8 @@
       riadok("E-mail", o.email ? '<a href="mailto:' + esc(o.email) + '">' + esc(o.email) + "</a>" : "", true) +
       riadok("Adresa", [o.ulica, o.psc, o.mesto].filter(Boolean).join(", ")) + riadok("Doprava", o.doprava) + riadok("Platba", [o.platba_nazov, o.platba].filter(Boolean).join(" · ")) +
       riadok("Suma", eur(o.suma)) + riadok("Faktúra", o.faktura) + riadok("Dobropis", o.dobropis) + riadok("Poznámka", o.poznamka) + riadok("Vytvorená", dat(o.vytvorena)) + "</div>" +
-      (storno ? "" : '<div class="f-akcie"><button class="btn" data-o="upravit">✏️ Upraviť</button></div>') + "</section>";
+      '<div class="f-akcie">' + (o.telefon ? '<a class="btn btn-primary" href="tel:' + esc(String(o.telefon).replace(/[^\d+]/g, "")) + '">📞 Zavolať</a>' : "") + (storno ? "" : '<button class="btn" data-o="upravit">✏️ Upraviť</button>') + "</div></section>";
+h += smsHtml(o);
     h += '<section class="card"><h3>Položky</h3><div class="rows">' + (D.polozky || []).map(function (p) {
       return '<div class="row"><span>' + esc(p.nazov || p.kod) + ' <span class="muted">' + esc(p.kod) + '</span></span><span class="num">' + esc(p.mnozstvo) + " ks" + (p.cena != null ? " · " + esc(eur(p.cena)) : "") + "</span></div>";
     }).join("") + "</div></section>";
@@ -186,7 +188,27 @@
     }).join("") + "</div></details>";
     return h;
   }
-  function riadok(n, v, html) { return v ? '<div class="row"><span class="muted">' + esc(n) + "</span><span>" + (html ? v : esc(v)) + "</span></div>" : ""; }
+  // SMS konverzácia so zákazníkom (odoslané SMS + odpovede z GoSMS) a SMS priamo z appky
+var TYP_SMS = { den_vopred: "deň vopred", cestou: "furman na ceste", rucne: "zákaznícky servis" };
+function smsHtml(o) {
+var S = O.sms && O.sms.cislo === O.cislo ? O.sms : null, zoz = S && S.ok ? S.spravy || [] : [];
+return '<section class="card o-sms"><h3>💬 SMS so zákazníkom</h3>' +
+(!S ? '<p class="muted">Načítavam…</p>' : !S.ok ? '<p class="muted">' + esc(S.text || "SMS sa nenačítali") + "</p>" :
+!zoz.length ? '<p class="muted" style="margin:0 0 8px">Zatiaľ žiadne SMS.</p>' :
+'<div style="display:flex;flex-direction:column;gap:6px;margin:0 0 10px">' + zoz.map(function (m) {
+var von = m.smer === "von";
+return '<div style="max-width:85%;align-self:' + (von ? "flex-end" : "flex-start") + ";background:" + (von ? "rgba(209,167,58,.20)" : "rgba(127,127,127,.15)") + ';border-radius:12px;padding:8px 10px">' +
+'<div style="white-space:pre-wrap">' + esc(m.text) + '</div><div class="muted" style="font-size:12px;margin-top:4px">' + esc(dat(m.cas)) + " · " +
+(von ? esc(TYP_SMS[m.typ] || m.typ || "SMS") + (m.kto ? " · " + esc(m.kto) : "") + (m.stav === "chyba" ? " · ⚠️ neodoslaná" : "") : "💬 odpoveď zákazníka") + "</div></div>";
+}).join("") + "</div>") +
+(o.telefon ? '<form id="o-sms-form"><label class="field"><span class="label">Napísať SMS na ' + esc(o.telefon) + '</span><textarea name="text" rows="2" maxlength="600" required placeholder="Text SMS…"></textarea></label>' +
+'<div class="f-akcie"><button class="btn btn-primary" type="submit">📱 Poslať SMS</button></div></form>' : '<p class="muted" style="margin:0">Objednávka nemá telefón.</p>') + "</section>";
+}
+function nacitajSms(cislo) {
+rpc("obj_sms", { p_cislo: cislo }).then(function (d) { O.sms = Object.assign({ cislo: cislo }, d || { ok: false }); if (O.cislo === cislo && !O.uprava) kresli(); })
+.catch(function (e) { O.sms = { cislo: cislo, ok: false, text: chyba(e) }; if (O.cislo === cislo && !O.uprava) kresli(); });
+}
+function riadok(n, v, html) { return v ? '<div class="row"><span class="muted">' + esc(n) + "</span><span>" + (html ? v : esc(v)) + "</span></div>" : ""; }
 
   // formulár pre úpravu aj novú objednávku; F = {meno, firma, telefon, email, ulica, psc, mesto, poznamka, doprava_kod, platba_kod, polozky:[]}
   function formularHtml(F, nova) {
@@ -292,7 +314,19 @@
       ["doklad", "zaplatene", "od", "do", "suma_od", "suma_do", "produkt", "miesto", "zdroj"].forEach(function (k) { if (f.elements[k]) O.filter[k] = String(f.elements[k].value || "").trim(); });
       nacitaj(); return;
     }
-    if (f.id === "o-stav") {
+    if (f.id === "o-sms-form") {
+e.preventDefault();
+var txt = f.elements.text.value.trim(), ob2 = (O.detail && O.detail.objednavka) || {}, cis2 = O.cislo;
+if (!txt || !lbzPotvrd("Poslať SMS na " + ob2.telefon + "?\n\n" + txt)) return;
+var bt = f.querySelector("button[type=submit]"); if (bt) bt.disabled = true;
+DB.functions.invoke("gosms", { body: { akcia: "posli", polozky: [{ cislo: cis2, telefon: ob2.telefon, text: txt, typ: "rucne" }] } }).then(function (r) {
+var d = r && r.data;
+O.sprava = { typ: d && d.ok ? "ok" : "chyba", text: (d && d.text) || "SMS sa neodoslala" };
+nacitajSms(cis2);
+}).catch(function (x) { sprava("chyba", chyba(x)); if (bt) bt.disabled = false; });
+return;
+}
+if (f.id === "o-stav") {
       e.preventDefault();
       var kod = f.elements.stav.value, nazov = f.elements.stav.selectedOptions[0].textContent, cis = O.cislo;
       var ob = (O.detail && O.detail.objednavka) || {}, maDob = !!ob.dobropis || (O.detail.doklady || []).some(function (d) { return d.typ === "creditNote"; });
