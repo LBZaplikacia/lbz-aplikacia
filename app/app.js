@@ -286,7 +286,15 @@
     }
 
     var obsah;
-    if (stav.login === "zabudnute") {
+    if (stav.login === "odkaz") {
+      obsah = '<form class="panel" id="f-odkaz">' +
+        '<h2 style="font-size:20px">Prihlásenie odkazom</h2>' +
+        '<p class="muted" style="margin:0;font-size:14px">Prvé prihlásenie alebo prihlásenie bez hesla. Zadajte e-mail, ktorý máte v appke zapísaný. Pošleme naň odkaz – po kliknutí naň ste prihlásení.</p>' +
+        '<label class="field"><span class="label">E-mail</span><input id="in-email" type="email" autocomplete="email" required></label>' +
+        spravaHtml() +
+        '<button class="btn btn-primary" type="submit">Poslať prihlasovací odkaz</button>' +
+        '<button class="btn" type="button" data-login="prihlasenie">Späť na prihlásenie</button></form>';
+    } else if (stav.login === "zabudnute") {
       obsah = '<form class="panel" id="f-zabudnute">' +
         '<h2 style="font-size:20px">Zabudnuté heslo</h2>' +
         '<p class="muted" style="margin:0;font-size:14px">Pošleme vám e-mail s odkazom na nastavenie nového hesla.</p>' +
@@ -310,6 +318,7 @@
         spravaHtml() +
         '<button class="btn btn-primary" type="submit">Prihlásiť sa</button>' +
         '<button class="btn-link" type="button" data-login="zabudnute">Zabudli ste heslo?</button>' +
+        '<button class="btn-link" type="button" data-login="odkaz">Prvé prihlásenie / prihlásenie bez hesla</button>' +
         '<p class="muted" style="margin:0;font-size:13px">Po prihlásení ostanete prihlásení aj po zatvorení appky.</p></form>';
     }
     el('<main class="login"><div class="login-card">' + hlavicka + obsah + "</div></main>");
@@ -751,7 +760,7 @@
       ulozPouzivatela(document.getElementById("in-p-email").value, document.getElementById("in-p-meno").value, document.getElementById("in-p-rola").value, true);
       return;
     }
-    if (["f-prihlasenie", "f-zabudnute", "f-nove-heslo", "f-zmena-hesla"].indexOf(f.id) === -1) return; // ostatné formuláre si obsluhujú moduly
+    if (["f-prihlasenie", "f-odkaz", "f-zabudnute", "f-nove-heslo", "f-zmena-hesla"].indexOf(f.id) === -1) return; // ostatné formuláre si obsluhujú moduly
     e.preventDefault();
     var tlacidlo = f.querySelector('button[type="submit"]'); if (tlacidlo) tlacidlo.disabled = true;
     var hotovo = function (typ, text) { stav.sprava = { typ: typ, text: text }; render(); };
@@ -761,6 +770,12 @@
       db.auth.signInWithPassword({ email: email, password: document.getElementById("in-heslo").value }).then(function (res) {
         if (res.error) hotovo("chyba", "Nesprávny e-mail alebo heslo.");
         else stav.sprava = null; // zvyšok spraví onAuthStateChange
+      });
+    } else if (f.id === "f-odkaz") {
+      var mailO = document.getElementById("in-email").value.trim().toLowerCase();
+      db.auth.signInWithOtp({ email: mailO, options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: true } }).then(function (res) {
+        var chybaO = res.error ? (/rate|seconds|second/i.test(res.error.message || "") ? "Odkaz sme poslali pred chvíľou. Skúste to znova o minútu." : "Odkaz sa nepodarilo odoslať, skúste to o chvíľu.") : "";
+        hotovo(res.error ? "chyba" : "ok", chybaO || ("Prihlasovací odkaz sme poslali na " + mailO + ". Otvorte e-mail (pozrite aj Spam a Promo akcie) a kliknite na „Prihlásiť sa do appky“."));
       });
     } else if (f.id === "f-zabudnute") {
       var mail = document.getElementById("in-email").value.trim();
