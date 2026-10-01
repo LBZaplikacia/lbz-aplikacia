@@ -204,6 +204,8 @@ h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; text-wrap: bal
 .s-thead { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; background: var(--surface-2); }
 .s-thead span:not(:first-child), .s-velke { text-align: center; }
 .s-produkt { border-top: 1px solid var(--line); border-left: 8px solid var(--pf); }
+.s-produkt > .s-prow { background: var(--pf); color: #2b1d1a; }   /* celý riadok produktu vo farbe produktu */
+.s-produkt > .s-prow .muted { color: #5b4a44; }
 .s-prow > span:first-child { display: grid; min-width: 0; }
 .s-mono { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .s-velke { font: 700 20px var(--font-display); }
