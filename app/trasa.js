@@ -662,7 +662,9 @@ var zs = T.nahlad[t.id];
 return '<p style="margin:8px 0 4px"><b>' + esc(datumSk(t.datum)) + " · " + esc(t.nazov) + '</b><br><span class="muted">odchod <b class="num">' + esc(cas(t.odchod)) + '</b> · návrat ~<span class="num">' + esc(cas(t.navrat)) + "</span>" +
 (t.hodiny ? " · " + String(t.hodiny).replace(".", ",") + " h" : "") + " · " + t.pocet + " zastávok</span></p>" +
 (zs == null ? '<p class="muted">Načítavam zastávky…</p>' : '<div class="rows">' + zs.map(function (x, i) {
-return '<div class="row"><span><b class="num">' + (x.poradie || i + 1) + ".</b> " + esc(x.meno || x.firma || x.cislo) + ' <span class="muted">· ' + esc(String(x.adresa || "").split(", ").pop()) + '</span></span><span class="num">' + esc(cas(x.eta)) + "</span></div>";
+return '<div class="row"><span><b class="num">' + (x.poradie || i + 1) + ".</b> " + esc(x.meno || x.firma || x.cislo) +
+(x.adresa ? '<br><a href="' + mapa(x.adresa) + '" target="_blank" rel="noopener">📍 ' + esc(x.adresa) + "</a>" : "") +
+'</span><span class="num">' + esc(cas(x.eta)) + "</span></div>";
 }).join("") + "</div>");
 }).join("") + '<p class="muted" style="margin:8px 0 0">Len náhľad plánu – rozvoz sa robí na služobnom telefóne (účet furman@).</p>'
 : '<p class="muted" style="margin:0">Žiadna naplánovaná trasa.</p>') + "</section>";
