@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.29.13 BETA";
+  var VERZIA = "0.29.14 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -80,12 +80,12 @@
   var PRISTUPY = {
     it: MODULY.map(function (m) { return m.kod; }),
     ceo: MODULY.map(function (m) { return m.kod; }),
-    prevadzka: ["aktivita", "odbery", "prehlad", "chat", "sklad", "balenie", "dochadzka", "kniha_jazd", "nastavenia"],
+    prevadzka: ["aktivita", "odbery", "prehlad", "chat", "sklad", "balenie", "dochadzka", "kniha_jazd", "zamestnanci", "nastavenia"],
     zamestnanec: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "nastavenia"],
-    furman: ["aktivita", "odbery", "prehlad", "chat", "trasa", "dochadzka", "kniha_jazd", "nastavenia"],
+    furman: ["aktivita", "odbery", "prehlad", "chat", "trasa", "dochadzka", "rozpis", "zamestnanci", "nastavenia"],
     zakaznicky_servis: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "objednavky", "furmanky", "trasa", "komentare", "zamestnanci", "nastavenia"],
     uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci", "nastavenia"],
-    prevadzkar: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "rozpis", "sklad", "balenie", "furmanky", "kniha_jazd", "zamestnanci", "nastavenia"],
+    prevadzkar: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "rozpis", "sklad", "balenie", "kniha_jazd", "zamestnanci", "nastavenia"],
     majitelka_arealu: ["aktivita", "odbery", "prehlad", "kniha_jazd", "nastavenia"],
     zakaznik: ["prehlad", "moje_objednavky", "sledovanie", "nastavenia"]
   };
@@ -142,10 +142,10 @@
   var PORADIE = {
     it: ["aktivita", "odbery", "schvalenie", "statistiky", "sms", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
     ceo: ["aktivita", "odbery", "schvalenie", "statistiky", "sms", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
-    prevadzkar: ["aktivita", "odbery", "schvalenie", "dochadzka", "ulohy", "rozpis", "vybavit", "sklad", "balenie", "furmanky", "kniha"],
+    prevadzkar: ["aktivita", "odbery", "schvalenie", "dochadzka", "ulohy", "rozpis", "vybavit", "sklad", "balenie", "kniha"],
     zamestnanec: ["aktivita", "odbery", "dochadzka", "zdrav", "ulohy", "furmanky", "rozpis", "vybavit"],
     prevadzka: ["aktivita", "odbery", "ulohy", "dochadzka", "sklad", "balenie", "furmanky", "vybavit"],
-    furman: ["aktivita", "odbery", "sms", "dochadzka", "rozpis", "trasa", "vybavit", "ulohy", "kniha"],
+    furman: ["aktivita", "odbery", "sms", "dochadzka", "rozpis", "trasa", "vybavit", "ulohy"],
     zakaznicky_servis: ["aktivita", "odbery", "sms", "dochadzka", "ulohy", "zdrav", "furmanky", "rozpis", "vybavit"],
     majitelka_arealu: ["aktivita", "odbery", "kniha", "vybavit"]
   };
@@ -180,8 +180,9 @@
   function nacitajPouzivatelov() {
     if (!OSTRY || !spravca() || stav.nacitavamPouz) return;
     stav.nacitavamPouz = true;
-    db.rpc("pouzivatelia").then(function (r) {
-      stav.nacitavamPouz = false;
+    Promise.all([db.rpc("pouzivatelia"), db.rpc("ucty_osoby")]).then(function (v) {
+      var r = v[0]; stav.nacitavamPouz = false;
+      stav.uctyOsoby = v[1] && v[1].data && v[1].data.ok ? v[1].data : null;
       stav.pouzivatelia = r.error ? [] : (r.data || []);
       if (stav.modul === "nastavenia") render();
     });
@@ -207,9 +208,19 @@
           return '<div class="pouz-riadok' + (u.aktivny ? "" : " pouz-vyp") + '">' +
             '<span class="pouz-meno"><strong>' + esc(u.meno || u.email) + '</strong><span class="muted">' + esc(u.email) + " · " +
               (u.posledne_prihlasenie ? "prihlásený " + new Date(u.posledne_prihlasenie).toLocaleDateString("sk-SK") : u.ucet ? "účet založený" : "ešte sa neprihlásil") + "</span></span>" +
-            '<select data-pouz-rola="' + esc(u.email) + '" aria-label="Rola">' + moznostiRol(u.rola) + "</select>" +
+            '<select data-pouz-rola="' + esc(u.email) + '" aria-label="Rola">' + moznostiRol(u.rola) + "</select>" + vyberOsoby(u) +
             '<label class="pouz-akt"><input type="checkbox" data-pouz-akt="' + esc(u.email) + '"' + (u.aktivny ? " checked" : "") + "> aktívny</label></div>";
         }).join("") + "</div>") + "</section>";
+  }
+  // prepojenie účtu s kartou zamestnanca (keď sa prihlási iným e-mailom, než má v karte)
+  var BEZ_KARTY = ["zakaznik", "it", "ceo", "prevadzka", "majitelka_arealu"];
+  function vyberOsoby(u) {
+    var uo = stav.uctyOsoby; if (!uo || !u.ucet) return "";
+    var moja = (uo.ucty || {})[String(u.email || "").toLowerCase()];
+    if (moja == null && BEZ_KARTY.indexOf(u.rola) > -1) return "";
+    return '<select data-pouz-osoba="' + esc(u.email) + '" aria-label="Karta zamestnanca" style="grid-column:1/-1' + (moja == null ? ';border-color:#d9822b;border-width:2px' : "") + '">' +
+      '<option value="">' + (moja == null ? "⚠️ priradiť kartu zamestnanca…" : "— bez karty —") + "</option>" +
+      (uo.osoby || []).map(function (o) { return '<option value="' + o.id + '"' + (o.id === moja ? " selected" : "") + ">👤 " + esc(o.meno) + "</option>"; }).join("") + "</select>";
   }
   function ulozPouzivatela(email, meno, rola, aktivny) {
     return db.rpc("nastav_pouzivatela", { p_email: email, p_meno: meno || null, p_rola: rola, p_aktivny: aktivny }).then(function (r) {
@@ -221,6 +232,15 @@
   }
   root.addEventListener("change", function (e) {
     var t = e.target, d = t.dataset;
+    if (d && d.pouzOsoba !== undefined) {
+      var em = d.pouzOsoba, os = t.value ? +t.value : null;
+      db.rpc("ucet_prirad", { p_email: em, p_osoba: os }).then(function (r) {
+        var res = r.data || {};
+        stav.spravaPouz = { typ: res.ok ? "ok" : "chyba", text: res.ok ? em + (os ? " – prepojené s kartou zamestnanca" : " – odpojené od karty") : (res.text || (r.error && r.error.message) || "Neuložené") };
+        stav.pouzivatelia = null; stav.naSchv = null; render();
+      });
+      return;
+    }
     if (!d || !(d.pouzRola || d.pouzAkt)) return;
     var email = d.pouzRola || d.pouzAkt;
     var u = (stav.pouzivatelia || []).filter(function (x) { return x.email === email; })[0]; if (!u) return;
@@ -374,7 +394,7 @@
   }
   // „Na schválenie“ – vedenie vidí na Prehľade, čo od zamestnancov čaká na jeho rozhodnutie
   function kartaSchvalenie() {
-    if (!OSTRY || ["it", "ceo", "prevadzkar", "zamestnanec", "furman"].indexOf(stav.rola) === -1) return "";
+    if (!OSTRY || ["zakaznik", "majitelka_arealu"].indexOf(stav.rola) > -1) return "";   // žiadosť o výmenu smeny vidí každý zamestnanec, ktorého sa týka
     if (!stav.naSchv || Date.now() - stav.naSchv.cas > 60000) {
       var bolo = stav.naSchv; stav.naSchv = { cas: Date.now(), d: bolo ? bolo.d : null };
       db.rpc("na_schvalenie").then(function (r) {
@@ -385,7 +405,8 @@
     var d = stav.naSchv.d; if (!d) return "";
     var pol = [d.osobne ? ["smeny", "🔄", "zmena smeny čaká na tvoje potvrdenie", "zmeny smien čakajú na tvoje potvrdenie", "zmien smien čaká na tvoje potvrdenie", "rozpis"]
       : ["smeny", "🔄", "zmena smeny", "zmeny smien", "zmien smien", "rozpis"], ["dochadzka", "🕒", "žiadosť v dochádzke", "žiadosti v dochádzke", "žiadostí v dochádzke", "dochadzka"],
-      ["udaje", "👤", "zmena údajov", "zmeny údajov", "zmien údajov", "zamestnanci"]].filter(function (x) { return +d[x[0]] > 0; });
+      ["udaje", "👤", "zmena údajov", "zmeny údajov", "zmien údajov", "zamestnanci"],
+      ["ucty", "🔗", "nový účet bez karty zamestnanca", "nové účty bez karty zamestnanca", "nových účtov bez karty zamestnanca", "nastavenia"]].filter(function (x) { return +d[x[0]] > 0; });
     if (!pol.length) return "";
     var spolu = pol.reduce(function (s, x) { return s + +d[x[0]]; }, 0);
     return '<section class="card schv-karta"><h3>🔔 ' + (d.osobne ? "Na potvrdenie" : "Na schválenie") + ' <span class="pill warn num">' + spolu + "</span></h3>" +
