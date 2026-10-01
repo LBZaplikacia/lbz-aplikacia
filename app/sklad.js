@@ -553,7 +553,7 @@
         '<button data-s-pohlad="furmanky" aria-selected="' + (S.pohlad === "furmanky" || S.pohlad === "furmanka") + '">Na rozvozy</button>' +
         (SUPA && spravca() ? '<button data-s-pohlad="sprava" aria-selected="' + (S.pohlad === "sprava") + '">Správa</button>' : "") + "</div>"
       : "";
-    var test = SUPA && sklad ? '<p class="s-test">🧪 Test – skeny idú len do appky. Ostrá práca v <a href="' + STARY_SKENER + '" target="_blank" rel="noopener">starom skeneri</a></p>' : "";
+    var test = "";   // od 1. 10. 2026 je sklad ostrý v appke (upozornenie na starý skener už neplatí)
     var st = S.stav && S.stav.nacitane;
     var stare = st && Date.now() - st > 15 * 60000;
     var varovanie = S.siet !== "ok"
@@ -803,7 +803,7 @@
         '<span class="muted"><span class="num">' + pol.length + "</span> produktov · <span class=\"num\">" + ks + "</span> ks</span>" +
         (chyba ? '<span class="pill warn">chýba ' + chyba + "</span>" : '<span class="pill ok">sklad pokryje</span>') + "</button>";
     }).join("") + "</div>" +
-    '<p class="muted s-pozn">Balenie objednávok a štítky zatiaľ v <a href="' + STARY_SKENER + '" target="_blank" rel="noopener">starej appke</a>.</p>';
+    '<p class="muted s-pozn">Balenie objednávok a štítky sú v module <button class="btn-link" data-mod="balenie">📦 Balenie</button>.</p>';
   }
 
   function pohladFurmanka() {
