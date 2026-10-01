@@ -347,53 +347,59 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
       '<div class="pdp-riadok">' + lbzPodpis.slot(pod, "zamestnanec", "prevzal(a) – zamestnanec") + lbzPodpis.slot(pod, "zamestnavatel", "vyplatil – za zamestnávateľa") + "</div>";
   }
   function tlac() { var h = tlacHtml(C.pod && C.pod.cp ? C.pod.cp.podpisy : null); if (!h) return; tlacitHtml('<div class="k-tlac cp-tlac">' + h + "</div>"); }
-  // tlač / PDF – hromadný cestovný príkaz za mesiac, kompaktne (1 riadok = 1 cesta, cieľ 1–2 strany A4)
-  var CP_TL_CSS = ".cp-tl{font:9pt/1.25 Montserrat,Arial,sans-serif;color:#000}" +
-    ".cp-tl table{width:100%;border-collapse:collapse;margin:0 0 2mm;font-size:8.5pt}" +
-    "#tlac-oblast .cp-tl th,#tlac-oblast .cp-tl td,.lbz-pdf .cp-tl th,.lbz-pdf .cp-tl td{border:1px solid #999;padding:.7mm 1.2mm;vertical-align:top;text-align:left;background:none}" +
-    "#tlac-oblast .cp-tl th,.lbz-pdf .cp-tl th{background:#f1e4c6 !important;font-weight:700;font-size:8pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
-    ".cp-tl table.cp-tl-hl td{border:0 !important;padding:0 0 1mm !important}.cp-tl .cp-tl-t1{font-size:13pt;font-weight:800}.cp-tl .cp-tl-t2{text-align:right;font-size:10pt;font-weight:700}" +
-    ".cp-tl table.cp-tl-info th{width:26mm;white-space:nowrap}.cp-tl h2{font-size:10pt;margin:2mm 0 1mm}" +
-    ".cp-tl td.cp-tl-m{font-size:7.5pt;color:#222}.cp-tl .cp-tl-c{text-align:center;white-space:nowrap}.cp-tl .cp-tl-r{text-align:right;white-space:nowrap}" +
+  // tlač / PDF – hromadný cestovný príkaz za mesiac podľa vzoru tlačiva (povolenie – správa – vyúčtovanie), kompaktne
+  var CP_TL_CSS = ".cp-tl{font:8.5pt/1.25 Montserrat,Arial,sans-serif;color:#000}" +
+    ".cp-tl table{width:100%;border-collapse:collapse;margin:0 0 1.5mm;font-size:8pt}" +
+    "#tlac-oblast .cp-tl th,#tlac-oblast .cp-tl td,.lbz-pdf .cp-tl th,.lbz-pdf .cp-tl td{border:1px solid #888;padding:.6mm 1.1mm;vertical-align:top;text-align:left;background:none}" +
+    "#tlac-oblast .cp-tl th,.lbz-pdf .cp-tl th{background:#eee5cf !important;font-weight:700;font-size:7.5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
+    ".cp-tl table.cp-tl-hl td{border:0 !important;padding:0 0 1mm !important}.cp-tl .cp-tl-t1{font-size:13pt;font-weight:800}.cp-tl .cp-tl-t2{text-align:right;font-size:9pt}" +
+    ".cp-tl table.cp-tl-info th{width:30mm;white-space:nowrap}" +
+    ".cp-tl h2{font-size:9.5pt;margin:3mm 0 1mm;padding:.6mm 1.2mm;background:#583934 !important;color:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
+    ".cp-tl td.cp-tl-m{font-size:7pt;color:#222}.cp-tl .cp-tl-c{text-align:center;white-space:nowrap}.cp-tl .cp-tl-r{text-align:right;white-space:nowrap}" +
     "#tlac-oblast .cp-tl tfoot td,.lbz-pdf .cp-tl tfoot td{font-weight:700;background:#f7f2e6 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}" +
-    ".cp-tl tr{break-inside:avoid;page-break-inside:avoid}.cp-tl p.cp-tl-p{margin:1mm 0;font-size:8.5pt}" +
-    ".cp-tl .pdp-riadok{display:flex;justify-content:space-between;align-items:flex-end;gap:8mm;margin:5mm 0 0}.cp-tl .pdp-slot{display:inline-block;min-width:62mm;font-size:8pt;vertical-align:bottom}.cp-tl .pdp-slot img{height:12mm;max-width:62mm;object-fit:contain;object-position:left bottom}";
+    ".cp-tl tr{break-inside:avoid;page-break-inside:avoid}.cp-tl p.cp-tl-p{margin:1mm 0;font-size:8pt}" +
+    ".cp-tl .pdp-riadok{display:flex;justify-content:space-between;align-items:flex-end;gap:8mm;margin:2mm 0 1mm;break-inside:avoid}.cp-tl .pdp-slot{display:inline-block;min-width:62mm;font-size:7.5pt;vertical-align:bottom}.cp-tl .pdp-slot img{height:11mm;max-width:62mm;object-fit:contain;object-position:left bottom}" +
+    ".cp-tl .cp-tl-blok{break-inside:avoid;page-break-inside:avoid}";
   function tlacHtml(pod) {
     var d = C.d; if (!d || !d.cesty) return "";
     var P = window.lbzPodpis, sl = function (rola, popis) { return P ? P.slot(pod, rola, popis) : '<span class="pdp-slot">.............................................<br>' + esc(popis) + "</span>"; };
     var o = d.osoba || {}, meno = [o.priezvisko, o.meno, o.titul].filter(Boolean).join(" ") || o.prezyvka || "";
-    var cesty = d.cesty, s = d.sadzby || {}, sumStr = 0, sumKm = 0, sumH = 0;
-    var dt = function (x) { var p = String(x).slice(0, 10).split("-"); return +p[2] + ". " + +p[1] + "."; };
+    var cesty = d.cesty, sumStr = 0, sumKm = 0;
+    var dt = function (x) { var p = String(x).slice(0, 10).split("-"); return +p[2] + ". " + +p[1] + ". " + p[0]; };
     var kratke = function (m) { return String(m || "").replace(/\s*\(.*\)$/, ""); };
-    var hmm = function (h) { if (!h) return ""; var m = Math.round(h * 60); return Math.floor(m / 60) + ":" + dvoj(m % 60); };
-    var dom = kratke(cesty[0] && cesty[0].miesto_zac) || "Sedlo Zbojská";
-    var ucel1 = cesty.every(function (c) { return c.ucel === cesty[0].ucel; }) ? (cesty[0] && cesty[0].ucel) || "" : null;
-    var riadky = cesty.map(function (c) {
-      var h = trvanie(c); sumStr += Number(c.stravne || 0); sumKm += Number(c.km || 0); if (h > 0) sumH += h;
+    var doprava = (cesty[0] && cesty[0].doprava) || "služobné motorové vozidlo";
+    var povolenie = cesty.map(function (c) {
       var vid = {}, mm = [];
-      if (kratke(c.miesto_zac) !== dom) mm.push("z: " + esc(kratke(c.miesto_zac)));
       (c.body || []).forEach(function (x) { var m = String(x.miesto || x.adresa || "").trim(); if (!m || vid[m]) return; vid[m] = 1; mm.push(x.typ === "doplnene" ? "<b>" + esc(m) + (x.min ? " (" + x.min + " min)" : "") + "</b>" : esc(m)); });
-      if (kratke(c.miesto_kon) !== dom) mm.push("do: " + esc(kratke(c.miesto_kon)));
-      return '<tr><td class="cp-tl-c">' + esc(dt(c.datum)) + '</td><td class="cp-tl-m">' + (mm.join(", ") || "–") + (c.poznamka ? "<br><i>" + esc(c.poznamka) + "</i>" : "") + "</td>" + (ucel1 == null ? "<td>" + esc(c.ucel) + "</td>" : "") +
-        '<td class="cp-tl-c">' + esc(hm(c.zaciatok)) + '</td><td class="cp-tl-c">' + esc(hm(c.koniec)) + '</td><td class="cp-tl-r">' + esc(hmm(h)) +
-        '</td><td class="cp-tl-r">' + (c.km != null && c.km !== "" ? esc(kmTxt(c.km)) : "") + '</td><td class="cp-tl-r">' + eur(c.stravne) + "</td></tr>";
+      return "<tr><td>" + esc(kratke(c.miesto_zac)) + "<br>" + esc(dt(c.datum)) + " " + esc(hm(c.zaciatok)) + '</td><td class="cp-tl-m">' + (mm.join(", ") || "–") + (c.poznamka ? "<br><i>" + esc(c.poznamka) + "</i>" : "") +
+        "</td><td>" + esc(c.ucel) + "</td><td>" + esc(kratke(c.miesto_kon)) + "<br>" + esc(dt(c.datum)) + "</td></tr>";
+    }).join("");
+    var vyuct = cesty.map(function (c) {
+      sumStr += Number(c.stravne || 0); sumKm += Number(c.km || 0);
+      return '<tr><td class="cp-tl-c">' + esc(dt(c.datum)) + "</td><td>" + esc(kratke(c.miesto_zac)) + " " + esc(hm(c.zaciatok)) + "</td><td>" + esc(kratke(c.miesto_kon)) + " " + esc(hm(c.koniec)) +
+        '</td><td class="cp-tl-c">SMV</td><td class="cp-tl-r">' + (c.km != null && c.km !== "" ? esc(kmTxt(c.km)) : "") + '</td><td class="cp-tl-r">0,00 €</td><td class="cp-tl-r">' + eur(c.stravne) +
+        '</td><td class="cp-tl-r">–</td><td class="cp-tl-r">–</td><td class="cp-tl-r"><b>' + eur(c.stravne) + "</b></td></tr>";
     }).join("");
     var kmSpolu = kmTxt(Math.round(sumKm * 10) / 10);
     return '<div class="cp-tl"><style>' + CP_TL_CSS + "</style>" +
-      '<table class="cp-tl-hl"><tr><td class="cp-tl-t1">CESTOVNÝ PRÍKAZ (hromadný)</td><td class="cp-tl-t2">Rozvoz buchiet · ' + esc(mesiacNazov(C.m)) + "</td></tr></table>" +
-      '<table class="cp-tl-info"><tr><th>Zamestnanec</th><td><b>' + esc(meno) + "</b></td><th>Bydlisko</th><td>" + esc(o.bydlisko || "") + "</td></tr>" +
-      '<tr><th>Zamestnávateľ</th><td colspan="3">' + esc(ZAMESTNAVATEL) + "</td></tr>" +
-      (ucel1 != null ? '<tr><th>Účel ciest</th><td colspan="3">' + esc(ucel1) + "</td></tr>" : "") +
-      "<tr><th>Dopravný prostriedok</th><td>" + esc((cesty[0] && cesty[0].doprava) || "služobné vozidlo (SMV) FIAT DOBLO AA086TG") + " – náhrada za km sa neposkytuje</td><th>Spolucestujúci</th><td>–</td></tr>" +
-      "<tr><th>Začiatok a koniec ciest</th><td>" + esc(dom) + "</td><th>Stravné (§ 5)</th><td>5–12 h " + eur(s.s5) + " · 12–18 h " + eur(s.s12) + " · nad 18 h " + eur(s.s18) + "</td></tr></table>" +
-      '<p class="cp-tl-p">Hromadný cestovný príkaz na opakované pracovné cesty v mesiaci ' + esc(mesiacNazov(C.m)) + " (§ 3 ods. 3 zákona č. 283/2002 Z. z.). Každý riadok = jedna pracovná cesta; tučne = miesta doplnené zamestnancom.</p>" +
-      "<h2>Pracovné cesty a vyúčtovanie</h2>" +
-      '<table class="cp-tl-cesty"><colgroup><col style="width:11mm"><col>' + (ucel1 == null ? '<col style="width:24mm">' : "") + '<col style="width:13mm"><col style="width:13mm"><col style="width:11mm"><col style="width:15mm"><col style="width:16mm"></colgroup>' +
-      "<thead><tr><th>Dátum</th><th>Miesto rokovania (trasa)</th>" + (ucel1 == null ? "<th>Účel</th>" : "") + "<th>Odchod</th><th>Príchod</th><th>Hod.</th><th>km</th><th>Stravné</th></tr></thead><tbody>" + riadky + "</tbody>" +
-      '<tfoot><tr><td colspan="' + (ucel1 == null ? 5 : 4) + '">Spolu: ' + cesty.length + ' ciest – vyplatiť stravné</td><td class="cp-tl-r">' + esc(hmm(sumH)) + '</td><td class="cp-tl-r">' + esc(kmSpolu) + '</td><td class="cp-tl-r">' + eur(sumStr) + "</td></tr></tfoot></table>" +
-      '<p class="cp-tl-p"><b>Správa z pracovnej cesty:</b> rozvoz objednávok zákazníkom podľa trás (' + cesty.length + " ciest, spolu " + esc(kmSpolu) + ").<br>" +
-      "<b>Žiadosť o preplatenie:</b> žiadam o preplatenie cestovných náhrad (stravné) vo výške <b>" + eur(sumStr) + "</b>.</p>" +
-      '<div class="pdp-riadok">' + sl("zamestnanec", "účastník cesty – správa a žiadosť o preplatenie") + sl("zamestnavatel", "zamestnávateľ – povolil cesty a schválil vyúčtovanie") + "</div></div>";
+      '<table class="cp-tl-hl"><tr><td class="cp-tl-t1">CESTOVNÝ PRÍKAZ</td><td class="cp-tl-t2">hromadný na mesiac <b>' + esc(mesiacNazov(C.m)) + "</b> – opakované pracovné cesty (§ 3 ods. 3 zákona č. 283/2002 Z. z.)</td></tr></table>" +
+      '<table class="cp-tl-info"><tr><th>Zamestnávateľ</th><td colspan="3">' + esc(ZAMESTNAVATEL) + "</td></tr>" +
+      "<tr><th>Priezvisko, meno, titul</th><td><b>" + esc(meno) + "</b></td><th>Bydlisko</th><td>" + esc(o.bydlisko || "") + "</td></tr></table>" +
+      '<h2>1. Povolenie pracovných ciest</h2><table><colgroup><col style="width:30mm"><col><col style="width:24mm"><col style="width:26mm"></colgroup>' +
+      "<thead><tr><th>Začiatok cesty (miesto, dátum, hodina)</th><th>Miesto rokovania (trasa)</th><th>Účel cesty</th><th>Koniec cesty (miesto, dátum)</th></tr></thead><tbody>" + povolenie + "</tbody></table>" +
+      '<div class="cp-tl-blok"><table class="cp-tl-info"><tr><th>Spolucestujúci</th><td>–</td><th>Určený dopravný prostriedok</th><td>' + esc(doprava) + " – náhrada za km sa neposkytuje</td></tr>" +
+      "<tr><th>Predpokladaná suma výdavkov</th><td>stravné podľa § 5 zákona č. 283/2002 Z. z.</td><th>Povolený preddavok</th><td>0,00 €</td></tr></table>" +
+      '<div class="pdp-riadok"><span></span>' + sl("zamestnavatel", "dátum a podpis zamestnávateľa, ktorý cesty povolil") + "</div></div>" +
+      '<div class="cp-tl-blok"><h2>2. Správa o výsledku pracovných ciest</h2>' +
+      '<p class="cp-tl-p">Rozvoz objednávok zákazníkom podľa trás – ' + cesty.length + " ciest, spolu " + esc(kmSpolu) + ". Tovar bol doručený podľa trás uvedených vyššie.</p>" +
+      '<div class="pdp-riadok"><span></span>' + sl("zamestnanec", "dátum a podpis zamestnanca") + "</div></div>" +
+      "<h2>3. Vyúčtovanie pracovných ciest</h2>" +
+      '<table><colgroup><col style="width:17mm"><col><col><col style="width:10mm"><col style="width:15mm"><col style="width:14mm"><col style="width:14mm"><col style="width:13mm"><col style="width:13mm"><col style="width:15mm"></colgroup>' +
+      "<thead><tr><th>Dátum</th><th>Odchod (miesto, hodina)</th><th>Príchod (miesto, hodina)</th><th>Dopr. prostr.</th><th>km</th><th>Cestovné</th><th>Stravné</th><th>Nocľažné</th><th>Vedľajšie výdavky</th><th>Spolu</th></tr></thead><tbody>" + vyuct + "</tbody>" +
+      '<tfoot><tr><td colspan="4">Spolu (' + cesty.length + ' ciest)</td><td class="cp-tl-r">' + esc(kmSpolu) + '</td><td class="cp-tl-r">0,00 €</td><td class="cp-tl-r">' + eur(sumStr) + '</td><td class="cp-tl-r">–</td><td class="cp-tl-r">–</td><td class="cp-tl-r">' + eur(sumStr) + "</td></tr></tfoot></table>" +
+      '<div class="cp-tl-blok"><table class="cp-tl-info"><tr><th>Preddavok</th><td>0,00 €</td><th>Doplatok / preplatok</th><td><b>doplatok ' + eur(sumStr) + "</b></td></tr></table>" +
+      '<p class="cp-tl-p">Vyhlasujem, že všetky údaje som uviedol(a) úplne a správne, a žiadam o preplatenie cestovných náhrad.</p>' +
+      '<div class="pdp-riadok">' + sl("zamestnanec", "dátum a podpis zamestnanca") + sl("zamestnavatel", "dátum a podpis zamestnávateľa, ktorý vyúčtovanie schválil") + "</div></div></div>";
   }
   function tlacitHtml(h) {
     var obal = document.getElementById("tlac-oblast");
