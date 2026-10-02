@@ -1,4 +1,4 @@
-// LBZ aplikácia – ✉️ Email (Gmail) – zákaznícky servis (eshop@), CEO a IT (ceo@) – s107, vzhľad ako Gmail v0.30.72 (priečinky v menu, potiahnutie do koša)
+// LBZ aplikácia – ✉️ Email (Gmail) – zákaznícky servis (eshop@), CEO a IT (ceo@) – s107, vzhľad ako Gmail v0.30.73 (priečinky v menu, potiahnutie do koša)
 // Celá schránka cez Edge Function „gmail“ (servisný účet s delegovaním). Odosiela sa len kliknutím človeka.
 (function () {
   "use strict";
@@ -175,7 +175,7 @@
   function doKosa(id) {
     var v = (S.d || []).filter(function (x) { return x.id === id; })[0];
     S.d = (S.d || []).filter(function (x) { return x.id !== id; });
-    S.kos = { id: id, v: v }; S.sprava = { typ: "ok", text: "🗑️ Presunuté do koša.", spat: true }; kresli();
+    S.kos = { id: id, v: v, odkial: S.stitok === "SPAM" ? "SPAM" : S.stitok === "STARRED" ? "STARRED" : (S.stitok === "INBOX" || S.stitok === "UNREAD") ? "INBOX" : "" }; S.sprava = { typ: "ok", text: "🗑️ Presunuté do koša.", spat: true }; kresli();
     volaj({ akcia: "upravit", id: id, kos: true }).then(function () { nacitajPocty(); }).catch(function (er) {
       if (v) S.d.unshift(v); S.kos = null; S.sprava = { typ: "chyba", text: "Nepresunuté: " + chyba(er) }; kresli();
     });
@@ -184,7 +184,7 @@
     var k = S.kos; if (!k) return; S.kos = null; S.sprava = null;
     if (k.v && S.d) { S.d.push(k.v); S.d.sort(function (x, y) { return (Number(y.neprecitane) - Number(x.neprecitane)) || (y.datum - x.datum); }); }
     kresli();
-    volaj({ akcia: "upravit", id: k.id, obnov: true }).then(function () { nacitajPocty(); }).catch(function (er) { S.sprava = { typ: "chyba", text: "Nevrátené: " + chyba(er) }; nacitaj(); });
+    volaj({ akcia: "upravit", id: k.id, obnov: true, pridaj: k.odkial ? [k.odkial] : [] }).then(function () { nacitajPocty(); }).catch(function (er) { S.sprava = { typ: "chyba", text: "Nevrátené: " + chyba(er) }; nacitaj(); });
   }
   function kresliZoznam() {
     var schr = S.schranka || (ROLA === "zakaznicky_servis" ? "eshop@legendarnebuchty.sk" : "ceo@legendarnebuchty.sk");
