@@ -1013,6 +1013,11 @@ html, body { max-width: 100%; overflow-x: hidden; }
 .ds-abs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; border-top: 2px dashed #e0e0e0; padding-top: 12px; }
 .ds-abs-tl { padding: 12px 2px; font: 700 13px var(--font-body); border: 2px solid var(--gold); border-radius: 8px; color: #583934; background: #fff; cursor: pointer; }
 .ds-abs-tl:active { background: var(--gold); color: #fff; }
+.ds-abs-tl[aria-pressed="true"] { background: var(--gold); color: #fff; }
+.ds-pozn { margin-top: 10px; padding: 10px; border: 2px solid var(--gold); border-radius: 10px; }
+.ds-pozn textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.ds-pozn-tl { display: flex; gap: 8px; }
+.ds-pozn-tl .btn { flex: 1; }
 .ds-miesto { width: 100%; padding: 17px; font: 700 16px var(--font-body); border: 2px solid var(--blue); border-radius: 8px; background: #fff; color: var(--blue); cursor: pointer; }
 .ds-miesto.ds-navrh { background: #e3f2fd; }
 .ds-spat { width: 100%; padding: 15px; border: 0; border-radius: 8px; background: #583934; color: #CBA75B; font: 700 16px var(--font-body); cursor: pointer; }
