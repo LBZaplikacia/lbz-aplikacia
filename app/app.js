@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.30.56 BETA";
+  var VERZIA = "0.30.57 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -141,7 +141,7 @@
     document.getElementById("ib-nie").onclick = function () { try { localStorage.setItem("lbz_instal_nie", "1"); } catch (e) { /* */ } b.remove(); };
   }
   setTimeout(ukazInstal, 1500);
-  if (location.search) try { history.replaceState(null, "", location.pathname); } catch (e) {}
+  if (location.search) try { window.LBZ_OZNAM_RAW = new URLSearchParams(location.search).get("oznam"); history.replaceState(null, "", location.pathname); } catch (e) {}
   // poradie kariet na Prehľade podľa roly (každý si ho môže upraviť – uloží sa v zariadení)
   var PORADIE = {
     it: ["aktivita", "odbery", "schvalenie", "cp", "statistiky", "sms", "podpis", "dochadzka", "ulohy", "zdrav", "vybavit", "kniha", "rozpis", "furmanky", "sklad", "balenie", "trasa"],
@@ -933,7 +933,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
   }
 })();
 
-// ---------- obsah upozornenia po kliknutí na push (v0.30.56, 2. 10. 2026) ----------
+// ---------- obsah upozornenia po kliknutí na push (v0.30.57, 2. 10. 2026) ----------
 // sw.js pri kliknutí na upozornenie pridá do adresy ?oznam={t,b,c}; appka ho tu ukáže v okienku
 // a uloží do zoznamu posledných 20 upozornení v tomto zariadení (localStorage lbz_oznamy).
 (function () {
@@ -977,7 +977,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
   }
   window.LBZ_OZNAMY = function () { ukaz(null); };
   try {
-    var q = new URLSearchParams(location.search), raw = q.get("oznam");
+    var q = new URLSearchParams(location.search), raw = q.get("oznam") || window.LBZ_OZNAM_RAW; window.LBZ_OZNAM_RAW = null;
     if (!raw) return;
     var o = JSON.parse(raw);
     q.delete("oznam");
