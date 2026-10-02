@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.30.53 BETA";
+  var VERZIA = "0.30.54 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -550,7 +550,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       var kZn = VP && VP.kartaZnamka ? VP.kartaZnamka() : ""; if (kZn) karty.unshift(kZn);
 
       var dnes = new Date().toLocaleDateString("sk-SK", { weekday: "long", day: "numeric", month: "numeric" });
-      var meno = String(stav.pouzivatel || "").split(" ").pop();
+      var meno = String(stav.pouzivatel || "").replace(/\s*\([^)]*\)/g, "").trim().split(" ").pop();
       return hlavicka("Dobrý deň" + (meno ? ", " + meno : "") + "!", "Dnes je " + dnes, true) + '<div class="grid">' + karty.join("") + "</div>" +
         kartaPrisposobit(por) +
         kartaPripravujeme(moje.filter(function (m) { return !m.aktivny && m.kod !== "nastavenia"; }));
