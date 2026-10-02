@@ -680,7 +680,9 @@
     karta: function () { return kartaHtml(); },
     // pre kartu „Máš podpísať“ (napodpis.js)
     listokHtml: function (a, meno, pod) { return listokHtml(a, meno, pod); },
-    listokPodpis: function (a, meno, osoba) { return window.lbzPodpis ? lbzPodpis.podpisat(listokMoznosti(a, meno, osoba, "zamestnanec")) : Promise.resolve({ ok: false, text: "Obnov appku" }); },
+    listokPodpis: function (a, meno, osoba, rola) { return window.lbzPodpis ? lbzPodpis.podpisat(listokMoznosti(a, meno, osoba, rola || "zamestnanec")) : Promise.resolve({ ok: false, text: "Obnov appku" }); },
+    // CEO: otvor dochádzku zamestnanca za mesiac (z karty „Podpísať za zamestnávateľa“)
+    otvorOsobu: function (osoba, mesiac) { D.zalozka = "osoba"; D.osoba = +osoba; D.mesiac = String(mesiac).slice(0, 8) + "01"; D.data = null; D.sprava = null; },
     maKartu: function () { return !D.moja || !!(D.moja && (D.moja.osoba || D.moja.chyba)); }
   };
 })();

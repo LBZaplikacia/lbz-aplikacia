@@ -353,14 +353,14 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
     };
   }
   // dokument pre kartu „Máš podpísať“ (napodpis.js): údaje inej osoby/mesiaca bez zmeny stavu modulu
-  function dokument(osoba, mesiac, typ) {
+  function dokument(osoba, mesiac, typ, rola) {
     return rpc("cp_mesiac", { p_mesiac: mesiac, p_osoba: osoba }).then(function (d) {
       if (!d || !d.ok) throw new Error((d && d.text) || "Nenačítané");
       function s(fn) { var b = { d: C.d, m: C.m }; C.d = d; C.m = mesiac; try { return fn(); } finally { C.d = b.d; C.m = b.m; } }
       return {
         html: function (pod) { return s(function () { return typ === "hotovost" ? hotovostHtml(pod) : tlacHtml(pod); }); },
         podpisat: function () {
-          var o = s(function () { return podpisMoznosti(typ, "zamestnanec"); });
+          var o = s(function () { return podpisMoznosti(typ, rola || "zamestnanec"); });
           o.html = function (pod) { return s(function () { return typ === "hotovost" ? hotovostHtml(pod) : tlacHtml(pod); }); };
           o.poPodpise = null;
           return lbzPodpis.podpisat(o);
@@ -464,6 +464,7 @@ window.LBZ_CESTY = {
     mozem: mozem,
     karta: karta,
     dokument: dokument,
+    otvor: function (osoba, m) { C.m = String(m).slice(0, 8) + "01"; C.osoba = +osoba; C.d = null; C.uprav = null; C.f = null; C.sprava = null; C.filter = null; },
     nastavMesiac: function (m) { C.m = String(m).slice(0, 8) + "01"; C.uprav = null; C.f = null; C.sprava = null; C.filter = null; },
     mount: function (el) {
       koren = el; if (!C.m) C.m = dnes().slice(0, 8) + "01";

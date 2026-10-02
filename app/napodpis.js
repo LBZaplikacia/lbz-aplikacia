@@ -59,8 +59,8 @@
       }).catch(function () { /* bez signálu */ });
     }
     var d = S.karta.d; if (!d) return "";
-    var pol = d.polozky || [], pr = d.pripomienky || [], nh = d.nahrane || [];
-    if (!pol.length && !pr.length && !nh.length) return "";
+    var pol = d.polozky || [], pr = d.pripomienky || [], nh = d.nahrane || [], zv = d.za_zamestnavatela || [];
+    if (!pol.length && !pr.length && !nh.length && !zv.length) return "";
     var h = '<section class="card np-karta">';
     if (pol.length) {
       h += '<h3>✍️ Máš podpísať <span class="pill warn num">' + pol.length + "</span></h3>" +
@@ -69,6 +69,16 @@
           var info = x.cakajuce_upravy ? "⏳ úprava čaká na schválenie" : x.pripomienka ? "✏️ pripomienka odoslaná" : (x.po_termine ? "⚠️ termín bol " : papier(x) ? "prečítať do " : oboz(x) ? "prečítať a podpísať do " : "podpísať do ") + datumK(x.termin) + (papier(x) ? " · podpis na papieri" : "");
           return '<button type="button" class="np-pol' + (x.po_termine ? " np-po" : "") + '" data-np-otvor="' + i + '"><span class="np-ik" aria-hidden="true">' + (IKONA[x.typ] || "📄") + "</span>" +
             '<span class="np-t"><b>' + esc(nazov(x)) + "</b><small>" + esc(info) + '</small></span><span class="np-sip">›</span></button>';
+        }).join("") + "</div>";
+    }
+    // CEO/IT: dokumenty, ktoré zamestnanec podpísal a čakajú na podpis zamestnávateľa (Terézia 2. 10. 2026)
+    if (zv.length) {
+      h += (pol.length ? '<h4 class="np-h4">' : "<h3>") + '🏢 Podpísať za zamestnávateľa <span class="pill warn num">' + zv.length + "</span>" + (pol.length ? "</h4>" : "</h3>") +
+        '<p class="muted np-pozn">Zamestnanec už podpísal. Otvor dokument, skontroluj ho, ak treba ✏️ uprav a potom podpíš prstom.</p><div class="np-zoz">' +
+        zv.map(function (x, i) {
+          return '<button type="button" class="np-pol" data-np-otvorv="' + i + '"><span class="np-ik" aria-hidden="true">' + (IKONA[x.typ] || "📄") + "</span>" +
+            '<span class="np-t"><b>' + esc(x.meno || "") + " · " + esc(nazov(x)) + "</b><small>" + esc(x.typ === "hotovost" ? "potvrď vyplatenie" : "zamestnanec podpísal " + (x.podpisal ? new Date(x.podpisal).toLocaleDateString("sk-SK") : "")) +
+            '</small></span><span class="np-sip">›</span></button>';
         }).join("") + "</div>";
     }
     if (pr.length) {
@@ -88,7 +98,8 @@
   }
 
   // ---------- dokumenty (HTML na obrazovku aj do PDF) ----------
-  function meno() { return (S.karta && S.karta.d && S.karta.d.meno) || ""; }
+  function meno() { return S.o && S.o.v ? S.o.x.meno || "" : (S.karta && S.karta.d && S.karta.d.meno) || ""; }
+  function osM() { return S.o && S.o.v ? S.o.x.osoba_id : S.karta.d.osoba_id; }
   function dochHtml(x, riadky, pod, obrazovka) {
     var sum = 0, str = 0, dni = {};
     riadky.forEach(function (r) { sum += Number(r.odpracovane_min || 0); str += Number(r.stravne || 0); if (r.typ === "praca") dni[r.datum] = 1; });
@@ -147,9 +158,9 @@
   }
 
   // ---------- okno dokumentu ----------
-  function otvor(i) {
-    var d = S.karta && S.karta.d, x = d && (d.polozky || [])[i]; if (!x) return;
-    S.o = { x: x, nac: true, data: null, upr: null, sprava: null, hotovo: false, prace: false };
+  function otvor(i, v) {
+    var d = S.karta && S.karta.d, x = d && (v ? d.za_zamestnavatela || [] : d.polozky || [])[i]; if (!x) return;
+    S.o = { x: x, v: !!v, nac: true, data: null, upr: null, sprava: null, hotovo: false, prace: false };
     var w = document.getElementById("np-okno");
     if (!w) {
       w = document.createElement("div"); w.id = "np-okno"; w.className = "np-okno"; w.setAttribute("role", "dialog"); w.setAttribute("aria-modal", "true");
@@ -157,7 +168,7 @@
       try { history.pushState({ npOkno: 1 }, ""); } catch (e) { /* */ }
     }
     document.body.classList.add("np-otvorene");
-    w.innerHTML = '<div class="np-hl"><button type="button" class="btn" data-np="zavri">← Späť</button><b>' + (IKONA[x.typ] || "📄") + " " + esc(nazov(x)) + "</b></div>" +
+    w.innerHTML = '<div class="np-hl"><button type="button" class="btn" data-np="zavri">← Späť</button><b>' + (IKONA[x.typ] || "📄") + " " + esc(nazov(x)) + "</b>" + (v ? " <small>· " + esc(x.meno || "") + "</small>" : "") + "</div>" +
       '<div class="np-telo"><div class="np-dok" id="np-dok"><p class="muted">Načítavam…</p></div><div id="np-msg"></div><div id="np-upr"></div></div><div class="np-paticka" id="np-pat"></div>';
     w.scrollTop = 0; casti(); nacitajDok();
   }
@@ -169,10 +180,10 @@
   window.addEventListener("popstate", function () { if (document.getElementById("np-okno")) zavri(true); });
 
   function nacitajDok() {
-    var o = S.o, x = o.x, os = S.karta.d.osoba_id, p;
+    var o = S.o, x = o.x, os = osM(), p;
     if (x.typ === "dochadzka") p = rpc("dochadzka_mesiac", { p_osoba: os, p_mesiac: x.mesiac }).then(function (d) { if (!d || d.ok === false) throw new Error((d && d.text) || "Nenačítané"); return d; });
     else if (x.typ === "stravne") p = rpc("mesacny_list", { p_osoba: os, p_mesiac: x.mesiac }).then(function (l) { if (!l || !l.ok) throw new Error((l && l.text) || "Nenačítané"); return l; });
-    else if (x.typ === "cp" || x.typ === "hotovost") p = window.LBZ_CESTY && LBZ_CESTY.dokument ? LBZ_CESTY.dokument(os, x.mesiac, x.typ) : Promise.reject(new Error("Obnov appku"));
+    else if (x.typ === "cp" || x.typ === "hotovost") p = window.LBZ_CESTY && LBZ_CESTY.dokument ? LBZ_CESTY.dokument(os, x.mesiac, x.typ, o.v ? "zamestnavatel" : "zamestnanec") : Promise.reject(new Error("Obnov appku"));
     else if (x.typ === "absencia") p = Promise.resolve({ a: { id: x.id, typ: x.druh, od: x.od, do: x.do, cas_od: x.cas_od, cas_do: x.cas_do, poznamka: x.poznamka, stav: x.stav } });
     else if (x.typ === "dokument") p = DB.storage.from("zamestnanci").download(x.cesta).then(function (r) {
       if (r.error || !r.data) throw r.error || new Error("Súbor sa nenašiel");
@@ -188,7 +199,7 @@
     var o = S.o, x = o.x, d = o.data, el = document.getElementById("np-dok"); if (!el) return;
     var h = "";
     if (d) {
-      if (x.typ === "dochadzka") h = dochHtml(x, d.riadky || [], null, !o.hotovo);
+      if (x.typ === "dochadzka") h = dochHtml(x, d.riadky || [], null, !o.hotovo && !o.v);
       else if (x.typ === "stravne") h = stravHtml(d, null);
       else if (x.typ === "cp" || x.typ === "hotovost") h = d.html(null);
       else if (x.typ === "absencia") h = window.LBZ_DOCHADZKA && LBZ_DOCHADZKA.listokHtml ? LBZ_DOCHADZKA.listokHtml(d.a, meno(), null) : "";
@@ -203,6 +214,7 @@
   function blok() {
     var o = S.o, x = o.x;
     if (o.nac || !o.data) return "Načítavam…";
+    if (o.v) return "";
     if (x.typ === "dochadzka") {
       if (x.cakajuce_upravy) return "⏳ Úprava dochádzky čaká na schválenie CEO – podpísať budeš môcť po rozhodnutí.";
       if ((o.data.riadky || []).some(function (r) { return r.typ === "praca" && !r.odchod; })) return "Niektorý deň nemá odchod – navrhni úpravu (zabudnutý odchod).";
@@ -218,6 +230,12 @@
     if (!p) return;
     if (o.hotovo) { p.innerHTML = '<button type="button" class="btn btn-primary" data-np="zavri">Zavrieť</button>'; return; }
     var b = blok();
+    if (o.v) {
+      p.innerHTML = (b && !o.nac ? '<p class="np-blok">' + esc(b) + "</p>" : "") +
+        '<div class="np-tl"><button type="button" class="btn" data-np="v-upr"' + (o.nac || o.prace || o.x.typ === "absencia" ? " disabled" : "") + ">✏️ Upraviť</button>" +
+        '<button type="button" class="btn btn-primary" data-np="podpis"' + (b || o.prace ? " disabled" : "") + ">" + (o.prace ? "Pracujem…" : o.x.typ === "hotovost" ? "✍️ Vyplatil(a) – podpísať" : "✍️ Podpísať za zamestnávateľa") + "</button></div>";
+      return;
+    }
     p.innerHTML = (b && !o.nac ? '<p class="np-blok">' + esc(b) + "</p>" : "") +
       '<div class="np-tl"><button type="button" class="btn" data-np="upr"' + (o.nac || o.prace ? " disabled" : "") + ">✏️ Navrhnúť úpravu</button>" +
       '<button type="button" class="btn btn-primary" data-np="podpis"' + (b || o.prace ? " disabled" : "") + ">" + (o.prace ? "Pracujem…" : papier(o.x) ? "✅ Prečítal(a) som" : oboz(o.x) ? "✍️ Prešiel/a som si – podpísať" : "✍️ Podpísať") + "</button></div>";
@@ -274,22 +292,22 @@
 
   // ---------- akcie v okne ----------
   function podpis() {
-    var o = S.o, x = o.x, d = o.data, os = S.karta.d.osoba_id, P = window.lbzPodpis, m = meno(), ym = String(x.mesiac || "").slice(0, 7), pr;
+    var o = S.o, x = o.x, d = o.data, os = osM(), P = window.lbzPodpis, m = meno(), ym = String(x.mesiac || "").slice(0, 7), pr, V = o.v;
     if (!P || !d || blok()) return;
-    var zak = { db: DB, rola: "zamestnanec", osoba: os };
+    var zak = { db: DB, rola: V ? "zamestnavatel" : "zamestnanec", osoba: os };
     if (x.typ === "dochadzka") pr = P.podpisat(Object.assign(zak, { typ: "dochadzka", dokument: x.dokument, nazov: "Dochádzka " + mesNazov(x.mesiac) + " – " + m, subor: "dochadzka_" + ym,
-      titul: "Podpis dochádzky", vyhlasenie: "Potvrdzujem, že výkaz dochádzky za " + mesNazov(x.mesiac) + " je správny.",
+      titul: V ? "Potvrdenie dochádzky za zamestnávateľa" : "Podpis dochádzky", vyhlasenie: V ? "Potvrdzujem výkaz dochádzky za " + mesNazov(x.mesiac) + " – " + m + "." : "Potvrdzujem, že výkaz dochádzky za " + mesNazov(x.mesiac) + " je správny.",
       obsah: JSON.stringify((d.riadky || []).map(function (r) { return [r.datum, r.typ, r.prichod, r.odchod, r.odpracovane_min, r.stravne]; })),
       html: function (pod) { return dochHtml(x, d.riadky || [], pod, false); } }));
     else if (x.typ === "stravne") {
       var s = d.stravne || {};
-      pr = P.podpisat(Object.assign(zak, { typ: "mesiac", dokument: d.dokument, nazov: "Stravné " + mesNazov(x.mesiac) + " – " + m, subor: "stravne_" + ym, titul: "Podpis – stravné",
-        vyhlasenie: "Potvrdzujem vyúčtovanie stravného za " + mesNazov(x.mesiac) + " (k výplate " + eur(s.k_vyplate) + ") a zálohu stravného na " + mesNazov(posun(x.mesiac, 1)) + " (" + eur(s.zaloha_dalsi) + ").",
+      pr = P.podpisat(Object.assign(zak, { typ: "mesiac", dokument: d.dokument, nazov: "Stravné " + mesNazov(x.mesiac) + " – " + m, subor: "stravne_" + ym, titul: V ? "Stravné – podpis za zamestnávateľa" : "Podpis – stravné",
+        vyhlasenie: (V ? m + ": " : "") + "Potvrdzujem vyúčtovanie stravného za " + mesNazov(x.mesiac) + " (k výplate " + eur(s.k_vyplate) + ") a zálohu stravného na " + mesNazov(posun(x.mesiac, 1)) + " (" + eur(s.zaloha_dalsi) + ").",
         obsah: JSON.stringify([d.dokument, s.skutocne, s.zaloha, s.zaloha_dalsi, ((s.plan_dalsi || {}).smeny || []).map(function (r) { return [r.datum, r.miesto, r.min, r.suma]; })]),
         html: function (pod) { return stravHtml(d, pod); } }));
     }
     else if (x.typ === "cp" || x.typ === "hotovost") pr = d.podpisat();
-    else if (x.typ === "absencia") pr = window.LBZ_DOCHADZKA && LBZ_DOCHADZKA.listokPodpis ? LBZ_DOCHADZKA.listokPodpis(d.a, m, os) : Promise.resolve({ ok: false, text: "Obnov appku" });
+    else if (x.typ === "absencia") pr = window.LBZ_DOCHADZKA && LBZ_DOCHADZKA.listokPodpis ? LBZ_DOCHADZKA.listokPodpis(d.a, m, os, zak.rola) : Promise.resolve({ ok: false, text: "Obnov appku" });
     else if (x.typ === "dokument") pr = P.podpisat(Object.assign(zak, { typ: "dokument", dokument: x.dokument, nazov: x.nazov + " – " + m, subor: "dokument_" + x.id,
       titul: papier(x) ? "Potvrdenie o prečítaní" : oboz(x) ? "Potvrdenie o oboznámení" : "Podpis dokumentu",
       vyhlasenie: papier(x) ? "Prečítal(a) som si dokument „" + x.nazov + "“. Originál podpíšem na papieri." : oboz(x) ? "Bol(a) som oboznámený(á) s dokumentom „" + x.nazov + "“, porozumel(a) som mu a budem ho dodržiavať." : "Prečítal(a) som si dokument „" + x.nazov + "“ a podpisujem ho.", obsah: d.hash,
@@ -299,7 +317,8 @@
     pr.then(function (r) {
       if (S.o !== o) return; o.prace = false;
       if (r && r.zrusene) { casti(); return; }
-      if (r && r.ok) { o.hotovo = true; o.upr = null; o.sprava = { typ: "ok", text: papier(x) ? "✅ Potvrdené. Originál podpíšeš na papieri." : oboz(x) ? "✅ Ďakujeme, oboznámenie je potvrdené." : "✅ Podpísané. Ďakujeme! PDF s podpisom je uložené v tvojich dokumentoch." }; teloKresli(); obnovKartu(); }
+      if (r && r.ok && V) { o.hotovo = true; o.sprava = { typ: "ok", text: "✅ Podpísané za zamestnávateľa. PDF je v dokumentoch zamestnanca." }; teloKresli(); obnovKartu(); }
+      else if (r && r.ok) { o.hotovo = true; o.upr = null; o.sprava = { typ: "ok", text: papier(x) ? "✅ Potvrdené. Originál podpíšeš na papieri." : oboz(x) ? "✅ Ďakujeme, oboznámenie je potvrdené." : "✅ Podpísané. Ďakujeme! PDF s podpisom je uložené v tvojich dokumentoch." }; teloKresli(); obnovKartu(); }
       else { o.sprava = { typ: "chyba", text: (r && r.text) || "Podpis sa nepodaril" }; casti(); }
     });
   }
@@ -426,12 +445,20 @@
     }).catch(function (e) { st.prace = false; st.sprava = { typ: "chyba", text: chyba(e) }; sekObnov(os); });
   }
 
+  // CEO: ✏️ Upraviť → otvorí modul s dokumentom zamestnanca (dochádzka / cestovné príkazy)
+  function vUpravit(x) {
+    zavri(true);
+    if ((x.typ === "dochadzka" || x.typ === "stravne") && window.LBZ_DOCHADZKA && LBZ_DOCHADZKA.otvorOsobu) { LBZ_DOCHADZKA.otvorOsobu(x.osoba_id, x.mesiac); if (window.lbzOtvorModul) lbzOtvorModul("dochadzka"); }
+    else if ((x.typ === "cp" || x.typ === "hotovost") && window.LBZ_CESTY && LBZ_CESTY.otvor) { LBZ_CESTY.otvor(x.osoba_id, x.mesiac); if (window.lbzOtvorModul) lbzOtvorModul("cestovne"); }
+  }
+
   // ---------- kliky ----------
   document.addEventListener("click", function (e) {
-    var t = e.target && e.target.closest && e.target.closest("[data-np-otvor],[data-np],[data-np-opr],[data-np-vybav],[data-np-sub],[data-np-sek],[data-np-nzmaz],[data-np-dzrus],[data-np-obr-x]");
+    var t = e.target && e.target.closest && e.target.closest("[data-np-otvor],[data-np-otvorv],[data-np],[data-np-opr],[data-np-vybav],[data-np-sub],[data-np-sek],[data-np-nzmaz],[data-np-dzrus],[data-np-obr-x]");
     if (!t || !DB) return;
     var d = t.dataset, o = S.o;
     if (d.npOtvor != null) { e.preventDefault(); otvor(+d.npOtvor); return; }
+    if (d.npOtvorv != null) { e.preventDefault(); otvor(+d.npOtvorv, true); return; }
     if (d.npObrX) { var w = t.closest(".np-obr"); if (w) w.remove(); return; }
     if (d.npSub) { e.preventDefault(); otvorSubor(d.npSub, d.nazov || "Dokument"); return; }
     if (d.npVybav) {
@@ -461,6 +488,7 @@
     if (d.npOpr != null) { var r = ((o.data && o.data.riadky) || [])[+d.npOpr]; if (!r) return; o.upr = { r: r }; o.sprava = null; casti(); scrollUpr(); return; }
     switch (d.np) {
       case "zavri": zavri(); obnovKartu(); break;
+      case "v-upr": vUpravit(o.x); break;
       case "podpis": podpis(); break;
       case "upr": o.upr = o.x.typ === "dochadzka" ? { navod: true } : {}; o.sprava = null; casti(); scrollUpr(); break;
       case "upr-den": o.upr = { r: null }; casti(); scrollUpr(); break;
