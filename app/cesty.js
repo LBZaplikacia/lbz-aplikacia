@@ -54,9 +54,32 @@
     var a = { p_mesiac: C.m }; if (C.osoba) a.p_osoba = C.osoba;
     return rpc("cp_mesiac", a).then(function (d) {
       if (!d || !d.ok) { C.d = { chyba: (d && d.text) || "Nenačítané" }; kresli(); return; }
-      C.d = d; if (!C.osoba) C.osoba = d.osoba_id; C.karta = null; C.pod = null; kresli(); nacitajPodpisy();
+      C.d = d; if (!C.osoba) C.osoba = d.osoba_id; C.karta = null; C.pod = null; kresli(); nacitajPodpisy(); nacitajZmeny();
       if (C.uprav) { var c = cesta(C.uprav); if (c) { C.f = kopia(c); if (C.f.km == null && C.f.zdroj !== "import") prepocitajKm(); } else { C.uprav = null; C.f = null; } kresli(); }
     }).catch(function (e) { C.d = { chyba: chyba(e) }; kresli(); });
+  }
+  // úpravy ciest z predošlých dní čakajúce na schválenie vedením (s105)
+  function nacitajZmeny() {
+    var os = C.d && C.d.osoba_id; if (!os) return;
+    rpc("cp_zmeny_zoznam", { p_osoba: os }).then(function (z) { C.zm = Array.isArray(z) ? z : []; kresli(); }).catch(function () { C.zm = []; });
+  }
+  function zmenyMes() { var m = String(C.m || "").slice(0, 7); return (C.zm || []).filter(function (z) { return String(z.datum).slice(0, 7) === m; }); }
+  function zmenyHtml(l, spravca) {
+    if (!l.length) return "";
+    return '<section class="card" style="border:2px solid #CBA75B"><h3>⏳ Úpravy na schválenie <span class="pill warn num">' + l.length + "</span></h3>" +
+      (spravca ? "" : '<p class="muted" style="margin:0 0 8px">Úpravy ciest z predošlých dní schvaľuje vedenie. Kým ich neschváli, platí pôvodná cesta.</p>') +
+      l.map(function (z) {
+        return '<div style="padding:8px 0;border-top:1px solid rgba(0,0,0,.08)"><b>' + (spravca ? esc(z.meno) + " · " : "") + esc(datumSk(z.datum)) + "</b>" +
+          '<div class="cp-miesta">' + (z.popis || []).map(esc).join("<br>") + "</div>" +
+          (spravca ? '<div class="cp-akcie"><button class="btn btn-primary" data-cp-zm="' + z.id + '" data-ano="1">✔ Schváliť</button><button class="btn" data-cp-zm="' + z.id + '" data-ano="0">✖ Zamietnuť</button></div>' : "") + "</div>";
+      }).join("") + "</section>";
+  }
+  function zmenaRozhodni(id, ano, hotovo) {
+    if (!ano && !lbzPotvrd("Zamietnuť túto úpravu? Ostane pôvodná cesta.")) return;
+    rpc("cp_zmena_rozhodni", { p_id: id, p_ano: ano }).then(function (r) {
+      if (!r || !r.ok) { lbzInfo((r && r.text) || "Nepodarilo sa"); return; }
+      C.karta = null; hotovo && hotovo(); window.dispatchEvent(new Event("lbz-prekresli"));
+    }).catch(function (x) { lbzInfo(chyba(x)); });
   }
   function cesta(id) { return ((C.d && C.d.cesty) || []).filter(function (c) { return c.id === id; })[0] || null; }
   function kopia(c) { return JSON.parse(JSON.stringify(c)); }
@@ -129,7 +152,7 @@ var arch = cesty.length > 0 && cesty.every(function (c) { return c.uzamknute; })
 if (arch) nove = '<p class="login-sprava ok" role="status">🔒 Archív zo starej tabuľky – len na čítanie (podpísané na papieri).</p><div class="cp-akcie"><button class="btn" data-cp="tlac">🖨️ Tlačiť za mesiac</button></div>';
 else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p class="login-sprava ok" role="status">📋 Cesty sú prenesené zo starej tabuľky. Skontroluj ich, prípadne uprav (časy, miesta, km), potvrď a potom dole podpíš cestovný príkaz.</p>' + nove;
     var info = '<p class="muted" style="font-size:13px;margin:6px 0">Hromadný cestovný príkaz na ' + esc(mesiacNazov(C.m)) + " (§ 3 ods. 3 zákona č. 283/2002 Z. z.). Každý deň rozvozu sa vytvorí sám z trasy – na konci dňa ho skontroluj, doplň miesta, kde si ešte bol (napr. po tovar), a potvrď. Služobné auto: kilometre sa len evidujú, stravné sa počíta samo.</p>";
-    return hl + info + spr + nove +
+    return hl + info + spr + zmenyHtml(zmenyMes(), d.spravca) + nove +
       '<div class="cp-sum"><span>Ciest: ' + cesty.length + "</span><span>Spolu: " + esc(kmTxt(Math.round(sumKm * 10) / 10)) + "</span><span>Stravné spolu: " + eur(sumStr) + "</span></div>" +
       (C.filter === "schval" ? '<div class="login-sprava ok" role="status" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0">✔ Zobrazené len cesty na schválenie (' + naSchv.length + ') <button class="btn" data-cp="filter-vsetky">Zobraziť všetky</button>' + (naSchv.length && d.spravca ? '<button class="btn btn-primary" data-cp="schval-vsetky">✔ Schváliť všetky (' + naSchv.length + ")</button>" : "") + "</div>" +
         (naSchv.length ? naSchv.map(denHtml).join("") : '<div class="empty"><strong>Všetko v tomto mesiaci je schválené ✅</strong></div>') :
@@ -145,8 +168,8 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
       '<div class="row"><span>Cestovný príkaz – schválil (zamestnávateľ)</span><span>' + txt(zv) + "</span></div>" +
       '<div class="row"><span>Stravné ' + eur(sumStr) + " prevzaté v hotovosti</span><span>" + txt(hz) + "</span></div></div>" +
       '<div class="cp-akcie">' +
-        (zz ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Podpísané</span>' : '<button class="btn btn-primary" data-cp="podpis-cp">✍️ Podpísať cestovný príkaz</button>') +
-        (d.spravca ? (zv ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Schválené zamestnávateľom</span>' : '<button class="btn" data-cp="podpis-cp-v">✍️ Schváliť a podpísať za zamestnávateľa</button>') : "") +
+        (zz ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Podpísané</span>' : zmenyMes().length ? '<span class="muted">⏳ Podpis až po schválení úprav (' + zmenyMes().length + ")</span>" : '<button class="btn btn-primary" data-cp="podpis-cp">✍️ Podpísať cestovný príkaz</button>') +
+        (d.spravca && zmenyMes().length && !zv ? '<span class="muted">⏳ Najprv schváľ alebo zamietni úpravy hore</span>' : d.spravca ? (zv ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Schválené zamestnávateľom</span>' : '<button class="btn" data-cp="podpis-cp-v">✍️ Schváliť a podpísať za zamestnávateľa</button>') : "") +
         (Number(sumStr) > 0 ? (hz ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Hotovosť prevzatá</span>' : '<button class="btn" data-cp="podpis-hot">💶 Potvrdiť prevzatie hotovosti</button>') : "") +
         (d.spravca && hz ? (ma(ho, "zamestnavatel") ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Vyplatené</span>' : '<button class="btn" data-cp="podpis-hot-v">✍️ Vyplatil (zamestnávateľ)</button>') : "") +
         (p.cp && p.cp.pdf ? '<button class="btn" data-cp="pdf-cp">📄 Podpísaný príkaz (PDF)</button>' : "") +
@@ -161,6 +184,7 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
       '<div class="cp-riadok"><span>🚚 ' + (c.zaciatok ? esc(hm(c.zaciatok)) : "<i>čas?</i>") + " – " + (c.koniec ? esc(hm(c.koniec)) : "<i>čas?</i>") + " (" + esc(hodiny(trvanie(c))) + ")</span><span>📏 " + esc(kmTxt(c.km)) + "</span><span>🍽 " + eur(c.stravne) + "</span></div>" +
       '<div class="cp-miesta">' + (m.length ? esc(m.join(" → ")) : "<i>bez miest – doplň</i>") + "</div>" +
       (c.poznamka ? '<div class="cp-miesta">📝 ' + esc(c.poznamka) + "</div>" : "") +
+      ((C.zm || []).some(function (z) { return z.cesta_id === c.id; }) ? '<div class="cp-miesta"><b>⏳ úprava čaká na schválenie vedením</b></div>' : "") +
       '<div class="cp-akcie"><button class="btn' + (c.stav === "navrh" ? " btn-primary" : "") + '" data-cp-uprav="' + c.id + '">' + (c.uzamknute ? "🔍 Pozrieť" : c.stav === "navrh" ? "✅ Skontrolovať" : "✏️ Upraviť / pozrieť") + "</button>" +
 
       (C.d.spravca && c.stav === "schvalene" && !c.uzamknute ? '<button class="btn" data-cp-schval="' + c.id + '" data-ano="0">Zrušiť schválenie</button>' : "") + "</div></section>";
@@ -239,6 +263,7 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
       .then(function (r) {
         C.prace = false;
         if (!r || !r.ok) { C.sprava = { typ: "chyba", text: (r && r.text) || "Neuložené" }; kresli(); return; }
+        if (r.caka) { C.sprava = { typ: "ok", text: "⏳ " + r.text }; C.uprav = null; C.f = null; window.dispatchEvent(new Event("lbz-prekresli")); nacitaj(); return; }
         C.sprava = { typ: "ok", text: potvrdit ? "Cesta " + datumSk(f.datum) + " je skontrolovaná – stravné " + eur(r.cesta.stravne) : "Uložené" };
         if (potvrdit) { C.uprav = null; C.f = null; }
         window.dispatchEvent(new Event("lbz-prekresli"));
@@ -252,6 +277,7 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
     var t = e.target.closest("button, [data-cp]"); if (!t || !koren.contains(t)) return;
     var ds = t.dataset;
     if (ds.cpUprav) { var c = cesta(+ds.cpUprav); if (!c) return; C.uprav = c.id; C.f = kopia(c); C.vloz = null; C.sprava = null; kresli(); if ((C.f.body || []).length && C.f.zdroj !== "import") prepocitajKm(C.f.km == null ? null : "casy"); var ed = document.getElementById("cp-editor"); if (ed) ed.scrollIntoView({ block: "start", behavior: "smooth" }); return; }
+    if (ds.cpZm) { zmenaRozhodni(+ds.cpZm, ds.ano === "1", nacitaj); return; }
     if (ds.cpSchval) {
       rpc("cp_schval", { p_id: +ds.cpSchval, p_ano: ds.ano === "1" }).then(function (r) { C.sprava = { typ: r && r.ok ? "ok" : "chyba", text: r && r.ok ? (ds.ano === "1" ? "Schválené" : "Schválenie zrušené") : (r && r.text) || "Chyba" }; nacitaj(); window.dispatchEvent(new Event("lbz-prekresli")); })
         .catch(function (x) { lbzInfo(chyba(x)); });
@@ -449,14 +475,19 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
       var bolo = C.karta; C.karta = { cas: Date.now(), d: bolo ? bolo.d : null };
       rpc("cp_na_kontrolu").then(function (d) { var st = JSON.stringify(C.karta.d); C.karta.d = d && d.ok ? d : null; if (JSON.stringify(C.karta.d) !== st) window.dispatchEvent(new Event("lbz-prekresli")); }).catch(function () {});
     }
-    var d = C.karta.d, pm = (d && d.podpisat) || []; if (!d || !(+d.kontrola || +d.schvalit || pm.length)) return "";
-    return '<section class="card"><h3>🧾 Cestovný príkaz</h3>' +
+    var d = C.karta.d, pm = (d && d.podpisat) || [];
+    if (d && +d.zmeny && !C.karta.zoz) { C.karta.zoz = "nacitavam"; rpc("cp_zmeny_zoznam", {}).then(function (z) { if (C.karta) { C.karta.zoz = Array.isArray(z) ? z : []; window.dispatchEvent(new Event("lbz-prekresli")); } }).catch(function () {}); }
+    var zoz = C.karta && Array.isArray(C.karta.zoz) ? C.karta.zoz : [];
+    if (!d || !(+d.kontrola || +d.schvalit || pm.length || zoz.length)) return "";
+    if (zoz.length && !(+d.kontrola || +d.schvalit || pm.length)) return '<div class="cp-karta-zm">' + zmenyHtml(zoz, true).replace("⏳ Úpravy na schválenie", "🧾 Úpravy cestovných príkazov na schválenie") + "</div>";
+    return (zoz.length ? '<div class="cp-karta-zm">' + zmenyHtml(zoz, true).replace("⏳ Úpravy na schválenie", "🧾 Úpravy cestovných príkazov na schválenie") + "</div>" : "") + '<section class="card"><h3>🧾 Cestovný príkaz</h3>' +
 pm.map(function (m) { return '<p style="margin:0 0 8px">⚠️ Treba ešte skontrolovať cestovný príkaz za <b>' + esc(mesiacNazov(m + "-01")) + "</b>, prípadne ho upraviť a potom podpísať.</p>" + '<button class="btn btn-primary" data-mod="cestovne" data-cp-mes="' + esc(m) + '-01" style="margin-bottom:8px">🧾 Otvoriť ' + esc(mesiacNazov(m + "-01")) + "</button>"; }).join("") +
       (+d.kontrola ? '<p style="margin:0 0 8px">Skontroluj ' + (+d.kontrola === 1 ? "dnešnú cestu" : d.kontrola + " cesty / ciest") + " – doplň miesta, kde si ešte bol, a potvrď.</p>" : "") +
       ((d.schvalit_zoznam || []).length ? '<p style="margin:0 0 6px"><b>Na schválenie:</b></p>' + d.schvalit_zoznam.map(function (z) { return '<button class="btn btn-primary" style="display:block;width:100%;margin:0 0 8px;text-align:left" data-mod="cestovne" data-cp-mes="' + esc(z.mesiac) + '" data-cp-osoba="' + z.osoba_id + '" data-cp-filter="schval">✔ ' + esc(z.meno) + " – " + esc(mesiacNazov(z.mesiac)) + ": " + z.pocet + " " + (z.pocet === 1 ? "cesta" : z.pocet < 5 ? "cesty" : "ciest") + "</button>"; }).join("") : (+d.schvalit ? '<p style="margin:0 0 8px">Na schválenie: ' + d.schvalit + "</p>" : "")) +
       (+d.kontrola || (+d.schvalit && !(d.schvalit_zoznam || []).length) ? '<button class="btn' + (pm.length ? "" : " btn-primary") + '" data-mod="cestovne" data-cp-mes="' + dnes().slice(0, 8) + '01">🧾 Otvoriť cestovný príkaz</button>' : "") + "</section>";
   }
 
+  document.addEventListener("click", function (e) { var b = e.target && e.target.closest && e.target.closest(".cp-karta-zm [data-cp-zm]"); if (b) { e.stopPropagation(); zmenaRozhodni(+b.dataset.cpZm, b.dataset.ano === "1"); } }, true);
   // tlačidlo s data-cp-mes (karta na Prehľade) otvorí modul na danom mesiaci
 document.addEventListener("click", function (e) { var b = e.target && e.target.closest && e.target.closest("[data-cp-mes]"); if (b) { C.m = b.dataset.cpMes; C.uprav = null; C.f = null; C.sprava = null; C.filter = b.dataset.cpFilter || null; if (b.dataset.cpOsoba) C.osoba = +b.dataset.cpOsoba; } }, true);
 
