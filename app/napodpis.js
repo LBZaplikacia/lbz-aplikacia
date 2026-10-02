@@ -396,8 +396,8 @@
         '<button type="button" class="btn" data-np-sek="zrus" data-os="' + os + '">Zrušiť</button></div></div>';
     } else h += '<div class="f-akcie"><button type="button" class="btn" data-np-sek="nahraj" data-os="' + os + '">📎 Nahrať dokument</button></div>';
     if (i.spravca) {
-      var p = st.podpis;
-      h += '<h4 style="margin:14px 0 4px">✍️ Poslané na podpis</h4>' + (p == null ? '<p class="muted" style="margin:0">Načítavam…</p>' : !p.length ? '<p class="muted" style="margin:0">Nič.</p>' :
+      var p = st.podpis == null ? null : st.podpis.filter(function (x) { return !x.podpisane; }); // podpísané sú v „Podpísané v appke“ (Terézia 2. 10. 2026)
+      h += '<h4 style="margin:14px 0 4px">✍️ Poslané na podpis</h4>' + (p == null ? '<p class="muted" style="margin:0">Načítavam…</p>' : !p.length ? '<p class="muted" style="margin:0">Nič nečaká na podpis.</p>' :
         '<div class="rows">' + p.map(function (x) {
           return '<div class="np-sek-r"><button type="button" class="row zm-dok-riadok" data-np-sub="' + esc(x.cesta) + '" data-nazov="' + esc(x.nazov) + '"><span>' + (x.podpisane ? "✅ " : "⏳ ") + esc(x.nazov) + '</span><span class="muted">' +
             (x.podpisane ? (PAPIER.indexOf(x.druh) > -1 ? "prečítané " : "podpísané ") + esc(new Date(x.podpisane).toLocaleDateString("sk-SK")) + (PAPIER.indexOf(x.druh) > -1 ? " · originál na papieri" : "") : "čaká" + (x.termin ? " · do " + esc(datumK(x.termin)) : "")) + " ›</span></button>" +
