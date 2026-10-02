@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.30.54 BETA";
+  var VERZIA = "0.30.55 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -462,7 +462,7 @@
     pushStavNacitaj();
     if (stav.pushStav !== "vypnute" && stav.pushStav !== "zakazane") return "";
     return '<section class="card schv-karta"><h3>🔕 Upozornenia sú vypnuté</h3><p class="muted" style="margin:0">Zapni ich, aby ti správy z chatu a žiadosti prišli do mobilu aj vtedy, keď je appka zavretá – aj s číslom na ikone.</p>' +
-      (stav.pushStav === "zakazane" ? '<p class="s-varovanie" style="margin:0">Upozornenia sú pre appku zakázané v telefóne. Povoľ ich: podrž prst na ikone appky → Informácie o aplikácii → Upozornenia → zapnúť.</p>' : pushTlacidlo()) + "</section>";
+      (stav.pushStav === "zakazane" ? '<p class="s-varovanie" style="margin:0">Upozornenia sú pre appku zakázané v telefóne. Povoľ ich: podrž prst na ikone appky → Informácie o aplikácii → Upozornenia → zapnúť.</p>' + pushTlacidlo() : pushTlacidlo()) + "</section>";
   }
   function kartaPushUcet() {
     pushStavNacitaj();
