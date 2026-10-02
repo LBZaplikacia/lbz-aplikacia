@@ -312,6 +312,8 @@
     var d = Z.detail; if (!d || !d.spravca) return "";
     if (PA.osoba !== Z.osoba) { PA.vysledok = null; paNacitajStav(); }
     var st = PA.stav || {}, z = d.z || {}, url = st.priecinok || z.dokumenty_url, v = PA.vysledok;
+    // zmluva / dohoda už je v Dokumentoch zamestnanca → generovanie sa nezobrazí (Terézia 2. 10. 2026)
+    var maZmluvu = DK.osoba === Z.osoba && (DK.zoznam || []).some(function (x) { return /zmluv|dohod/i.test(String(x.nazov || "") + " " + String(x.subor || "")); });
     var info = st.nacitavam ? '<span class="muted">Zisťujem stav v tabuľke…</span>'
       : st.row ? "<span>V tabuľke (riadok " + esc(st.row) + "): <b>" + esc(st.stav || "zatiaľ negenerované") + "</b></span>"
       : st.ok === false ? '<span class="zm-chyba-pol">' + esc(st.text || "Skript nedostupný") + "</span>"
@@ -321,7 +323,8 @@
       '<p style="margin:0">' + info + "</p>" +
       (v ? '<div class="f-sprava f-' + (v.ok ? "ok" : "chyba") + '">' + esc(v.ok ? "✅ " + (v.stav || "Hotovo") + (v.stav && /^Hotovo/.test(v.stav) ? " – PDF sú v appke v Dokumentoch zamestnanca aj v priečinku na Disku, e-mail s kontrolným zoznamom ti prišiel." : "") : (v.chyby && v.chyby.length ? "Dokumenty sa nevygenerovali, oprav:" : (v.text || v.stav || "Chyba"))) +
         (v.chyby && v.chyby.length ? '<ul class="zm-zmeny">' + v.chyby.map(function (c) { return "<li>" + esc(c) + "</li>"; }).join("") + "</ul>" : "") + "</div>" : "") +
-      '<div class="f-akcie"><button class="btn btn-primary" type="button" data-zm="pa-dialog"' + (PA.prace ? " disabled" : "") + ">" + (PA.prace ? "Pracujem… (do 1 min)" : "📄 Vygenerovať dokumenty") + "</button>" +
+      (maZmluvu ? '<p class="muted" style="margin:0">✅ Zmluva / dohoda už je nahratá v Dokumentoch zamestnanca.</p>' : "") +
+      '<div class="f-akcie">' + (maZmluvu ? "" : '<button class="btn btn-primary" type="button" data-zm="pa-dialog"' + (PA.prace ? " disabled" : "") + ">" + (PA.prace ? "Pracujem… (do 1 min)" : "📄 Vygenerovať dokumenty") + "</button>") +
       (url ? '<a class="btn" href="' + esc(url) + '" target="_blank" rel="noopener">📁 Priečinok</a>' : "") +
       (url ? '<button class="btn" type="button" data-zm="pa-dok"' + (PA.prace ? " disabled" : "") + ">🔄 Dokumenty z Disku do appky</button>" : "") +
       (st.row && url ? '<button class="btn" type="button" data-zm="pa-mzdarke"' + (PA.prace ? " disabled" : "") + ">📧 Poslať mzdárke</button>" : "") + "</div></section>";

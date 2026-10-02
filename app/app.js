@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.30.28 BETA";
+  var VERZIA = "0.30.29 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -70,7 +70,7 @@
   function ikona(k) { return '<svg class="ik" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (P[k] || P.viac) + "</svg>"; }
   // čo je v spodnej lište v mobile (max 4 + Viac)
   var LISTA = {
-    it: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "kniha_jazd"], ceo: ["prehlad", "chat", "dochadzka", "kniha_jazd"],
+    it: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "kniha_jazd"], ceo: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "kniha_jazd"],
     prevadzkar: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "rozpis"], prevadzka: ["prehlad", "chat", "sklad", "balenie"],
     zamestnanec: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "rozpis"], furman: ["prehlad", "chat", "trasa", "dochadzka"],
     zakaznicky_servis: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "objednavky"], uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci"],
@@ -532,7 +532,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (zamZapnute() && ZAM.karta) kh.zdrav = ZAM.karta();
       if (cestyZapnute()) { var kCp = CES.karta(); if (kCp) kh.cp = kCp; }
       // osobné odbery a automatický pracovný čas sa dajú tiež presúvať a skryť v „Prispôsobiť prehľad“
-      var kOdb = OBJ && OBJ.mozemOdbery() && OSTRY && r !== "ceo" ? OBJ.kartaOdbery() : "";
+      var kOdb = OBJ && OBJ.mozemOdbery() && OSTRY ? OBJ.kartaOdbery() : "";
       if (kOdb) kh.odbery = kOdb;
       var akt = window.lbzAktivita && lbzAktivita.dnes();
       if (akt != null) kh.aktivita = '<section class="card akt-karta"><h3>⏱ Pracovný čas sa ráta automaticky</h3><p style="margin:0">Dnes: <b class="num">' + Math.floor(akt / 60) + " h " + (akt % 60) + " min</b></p>" +
