@@ -60,7 +60,8 @@
     }
     var d = S.karta.d; if (!d) return "";
     var pol = d.polozky || [], pr = d.pripomienky || [], nh = d.nahrane || [], zv = d.za_zamestnavatela || [];
-    if (!pol.length && !pr.length && !nh.length && !zv.length) return "";
+    var ne = window.LBZ_MESACNY && LBZ_MESACNY.nepodpisali ? LBZ_MESACNY.nepodpisali() : null; // mesačné listy, ktoré zamestnanci ešte nepodpísali (bývalá karta „Na podpis“)
+    if (!pol.length && !pr.length && !nh.length && !zv.length && !ne) return "";
     var h = '<section class="card np-karta">';
     if (pol.length) {
       h += '<h3>✍️ Máš podpísať <span class="pill warn num">' + pol.length + "</span></h3>" +
@@ -72,6 +73,7 @@
         }).join("") + "</div>";
     }
     // CEO/IT: dokumenty, ktoré zamestnanec podpísal a čakajú na podpis zamestnávateľa (Terézia 2. 10. 2026)
+    if (!zv.length && ne) h += (pol.length ? '<h4 class="np-h4">' : "<h3>") + "🏢 Za zamestnávateľa" + (pol.length ? "</h4>" : "</h3>");
     if (zv.length) {
       h += (pol.length ? '<h4 class="np-h4">' : "<h3>") + '🏢 Podpísať za zamestnávateľa <span class="pill warn num">' + zv.length + "</span>" + (pol.length ? "</h4>" : "</h3>") +
         '<p class="muted np-pozn">Zamestnanec už podpísal. Otvor dokument, skontroluj ho, ak treba ✏️ uprav a potom podpíš prstom.</p><div class="np-zoz">' +
@@ -81,6 +83,8 @@
             '</small></span><span class="np-sip">›</span></button>';
         }).join("") + "</div>";
     }
+    if (ne) h += '<div class="np-zoz"><button type="button" class="np-pol" data-mod="dochadzka" data-pm-otvor="1"><span class="np-ik" aria-hidden="true">⏳</span>' +
+      '<span class="np-t"><b>Ešte nepodpísali: ' + ne.n + "</b><small>dochádzka a stravné za " + esc(mesNazov(ne.mesiac)) + (ne.termin ? " · termín " + datumK(ne.termin) : "") + '</small></span><span class="np-sip">›</span></button></div>';
     if (pr.length) {
       h += '<h4 class="np-h4">✏️ Pripomienky k dokumentom <span class="pill warn num">' + pr.length + "</span></h4>" + pr.map(function (x) {
         return '<div class="np-pr"><div><b>' + esc(x.meno) + "</b> · " + esc(x.nazov || x.dokument) + '<br><span class="np-pr-t">„' + esc(x.text) + '“</span> <small class="muted">' +

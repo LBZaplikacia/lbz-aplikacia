@@ -344,7 +344,7 @@
       }).catch(function () { /* */ });
     }
     var d = S.karta.d;
-    var vyr = d && d.vyr && d.vyr.length ? d.vyr : null, pod = d && (d.moj || d.zamestnavatel || d.nepodpisali);
+    var vyr = d && d.vyr && d.vyr.length ? d.vyr : null, pod = !window.LBZ_NAPODPIS && d && (d.moj || d.zamestnavatel || d.nepodpisali); // s kartou „Máš podpísať“ ostáva tu len vyrovnanie hodín (Terézia 2. 10.)
     if (!d || (!pod && !vyr)) return "";
     var h = '<section class="card"><h3>' + (pod ? "✍️ Na podpis" : "⚖️ Hodiny do konca roka") + "</h3>";
     if (d.moj) h += '<p style="margin:0 0 8px">Podpíš <b>mesačný list za ' + esc(mNazov(d.mesiac)) + "</b> – dochádzka a stravné (do " + datum(d.moj.termin) + ").</p>";
@@ -376,6 +376,7 @@
   document.head.appendChild(st);
 
   window.LBZ_MESACNY = {
+    nepodpisali: function () { var d = S.karta && S.karta.d; return d && d.nepodpisali ? { n: d.nepodpisali, termin: d.termin, mesiac: d.mesiac } : null; },
     nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; S.moja = undefined; S.list = null; S.prehlad = null; S.karta = null; S.pohlad = null; },
     mount: function (el, o) {
       if (S.el !== el) {
