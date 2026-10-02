@@ -1,14 +1,20 @@
-// LBZ aplikácia – ✉️ Email (Gmail) – zákaznícky servis (eshop@), CEO a IT (ceo@) – s107
+// LBZ aplikácia – ✉️ Email (Gmail) – zákaznícky servis (eshop@), CEO a IT (ceo@) – s107, vzhľad ako Gmail v0.30.70
 // Celá schránka cez Edge Function „gmail“ (servisný účet s delegovaním). Odosiela sa len kliknutím človeka.
 (function () {
   "use strict";
 
   var DB = null, ROLA = null, koren = null;
   var S = { stitok: "INBOX", hladaj: "", d: null, dalej: null, nacitavam: false, chyba: null, vlakno: null, nacitavamV: false,
-            pis: null, posielam: false, sprava: null, schranka: "", kat: "", obj: {}, navrhujem: false };
+            pis: null, posielam: false, sprava: null, schranka: "", kat: "", obj: {}, navrhujem: false, pocty: null };
   var KAT = { objednavka: ["Objednávka", "#2e7d32"], reklamacia: ["Reklamácia", "#c62828"], otazka: ["Otázka", "#1565c0"], faktura: ["Faktúra", "#6d4c41"],
              spolupraca: ["Spolupráca", "#8e24aa"], newsletter: ["Newsletter", "#757575"], spam: ["Spam", "#9e9e9e"], ine: ["Iné", "#9e9e9e"] };
-  var STITKY = [["INBOX", "Doručené"], ["UNREAD", "Neprečítané"], ["DRAFT", "Koncepty"], ["STARRED", "S hviezdičkou"], ["SENT", "Odoslané"], ["", "Všetky"], ["TRASH", "Kôš"]];
+  // [štítok, názov, ikona, ktorý počet ukázať (ako Gmail: pri Doručených neprečítané, inde celkový počet)]
+  var STITKY = [["INBOX", "Doručené", "📥", "neprec"], ["UNREAD", "Neprečítané", "✉️", "spolu"], ["STARRED", "S hviezdičkou", "⭐", "spolu"], ["DRAFT", "Koncepty", "📝", "spolu"],
+                ["SENT", "Odoslané", "📤", ""], ["", "Všetky", "🗂️", ""], ["SPAM", "Spam", "⚠️", "neprec"], ["TRASH", "Kôš", "🗑️", ""]];
+  var FARBY = ["#c0392b", "#8e44ad", "#2471a3", "#138d75", "#b9770e", "#6d4c41", "#ad1457", "#00838f"];
+  function farba(t) { var h = 0; t = String(t || ""); for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return FARBY[Math.abs(h) % FARBY.length]; }
+  function inicial(od) { var m = meno(od).replace(/[^A-Za-zÀ-ž0-9]/g, ""); return (m.charAt(0) || "?").toUpperCase(); }
+  var RE_OBJ = /\b[Ff][Oo0]\d{6}\b/g;   // čísla objednávok FO003654 (aj fo… / F0…)
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
   function chyba(e) { return (e && (e.message || e.text || e.error_description)) || String(e || "Chyba"); }
@@ -31,9 +37,12 @@
   }
 
   // ---------- načítanie ----------
+  function nacitajPocty() {
+    volaj({ akcia: "pocty" }).then(function (d) { S.pocty = d.pocty || null; S.schranka = d.schranka || S.schranka; kresli(); }).catch(function () { /* počty sú bonus */ });
+  }
   function nacitaj(dalsie) {
     if (!DB) return;
-    S.nacitavam = true; S.chyba = null; if (!dalsie) { S.d = null; S.dalej = null; } kresli();
+    S.nacitavam = true; S.chyba = null; if (!dalsie) { S.d = null; S.dalej = null; nacitajPocty(); } kresli();
     if (S.stitok === "DRAFT" && !S.hladaj) {
       volaj({ akcia: "koncepty" }).then(function (d) {
         S.nacitavam = false; S.schranka = d.schranka || S.schranka; S.d = (d.koncepty || []).map(function (k) { k.koncept = true; return k; }); kresli();
@@ -53,6 +62,7 @@
       var nep = S.vlakno.spravy.some(function (m) { return m.stitky.indexOf("UNREAD") > -1; });
       if (nep) volaj({ akcia: "upravit", id: id, odober: ["UNREAD"] }).then(function () {
         (S.d || []).forEach(function (v) { if (v.id === id) v.neprecitane = false; });
+        nacitajPocty();
       }).catch(function () {});
     }).catch(function (e) { S.nacitavamV = false; S.sprava = { typ: "chyba", text: chyba(e) }; kresli(); });
   }
@@ -129,26 +139,33 @@
   // ---------- kreslenie ----------
   function hlaska() { return S.sprava ? '<div class="em-hlaska em-' + S.sprava.typ + '">' + esc(S.sprava.text) + ' <button class="em-x" data-em="zavri" aria-label="Zavrieť">×</button></div>' : ""; }
   function kresliZoznam() {
-    var h = '<div class="head em-head"><h2>✉️ Email</h2><button class="btn" data-em="novy">+ Nový e-mail</button></div>' +
-      '<p class="muted em-schr">' + esc(S.schranka || (ROLA === "zakaznicky_servis" ? "eshop@legendarnebuchty.sk" : "ceo@legendarnebuchty.sk")) + "</p>" + hlaska();
-    h += '<div class="em-filtre">' + STITKY.map(function (s) { return '<button class="chip' + (S.stitok === s[0] && !S.hladaj ? " active" : "") + '" data-em-stitok="' + s[0] + '">' + s[1] + "</button>"; }).join("") + "</div>";
-    h += '<form class="em-hladaj" data-em-form="hladaj"><input id="em-q" type="search" placeholder="Hľadať (meno, e-mail, slovo, číslo objednávky…)" value="' + esc(S.hladaj) + '"><button class="btn ghost" type="submit">Hľadať</button></form>';
+    var schr = S.schranka || (ROLA === "zakaznicky_servis" ? "eshop@legendarnebuchty.sk" : "ceo@legendarnebuchty.sk");
+    var h = '<form class="em-hladaj" data-em-form="hladaj" role="search"><span class="em-lupa" aria-hidden="true">🔍</span>' +
+      '<input id="em-q" type="search" aria-label="Hľadať v pošte" placeholder="Hľadať v pošte · ' + esc(schr) + '" value="' + esc(S.hladaj) + '">' +
+      (S.hladaj ? '<button class="em-x" type="button" data-em="zrushladaj" aria-label="Zrušiť hľadanie">×</button>' : "") + "</form>" + hlaska();
+    h += '<div class="em-filtre em-pas">' + STITKY.map(function (s) {
+      var p = S.pocty && s[3] && S.pocty[s[0]] ? S.pocty[s[0]][s[3]] : 0;
+      return '<button class="chip em-st' + (S.stitok === s[0] && !S.hladaj ? " active" : "") + '" data-em-stitok="' + s[0] + '">' + s[2] + " " + s[1] +
+        (p ? ' <b class="em-poc">' + (p > 999 ? "999+" : p) + "</b>" : "") + "</button>";
+    }).join("") + "</div>";
     if (S.chyba) return h + '<p class="em-chyba">' + esc(S.chyba) + "</p>";
     if (!S.d) return h + '<p class="muted">Načítavam…</p>';
     if (!S.d.length) return h + '<div class="em-prazdne">Žiadne e-maily.</div>';
     var pocty = {}; S.d.forEach(function (v) { if (v.kategoria) pocty[v.kategoria] = (pocty[v.kategoria] || 0) + 1; });
-    if (Object.keys(pocty).length) h += '<div class="em-filtre em-kat"><button class="chip' + (!S.kat ? " active" : "") + '" data-em-kat="">Všetko</button>' +
-      Object.keys(KAT).filter(function (k) { return pocty[k]; }).map(function (k) { return '<button class="chip' + (S.kat === k ? " active" : "") + '" data-em-kat="' + k + '">' + KAT[k][0] + " " + pocty[k] + "</button>"; }).join("") + "</div>";
+    if (Object.keys(pocty).length) h += '<div class="em-filtre em-pas em-kat"><button class="chip' + (!S.kat ? " active" : "") + '" data-em-kat="">Všetko <b class="em-poc">' + S.d.length + "</b></button>" +
+      Object.keys(KAT).filter(function (k) { return pocty[k]; }).map(function (k) { return '<button class="chip' + (S.kat === k ? " active" : "") + '" data-em-kat="' + k + '"><i class="em-bod" style="background:' + KAT[k][1] + '"></i>' + KAT[k][0] + ' <b class="em-poc">' + pocty[k] + "</b></button>"; }).join("") + "</div>";
     var lst = S.kat ? S.d.filter(function (v) { return v.kategoria === S.kat; }) : S.d;
     h += '<div class="em-zoznam">' + lst.map(function (v) {
-      if (v.koncept) return '<button class="em-pol" data-em-koncept="' + esc(v.id) + '">' +
+      if (v.koncept) return '<button class="em-pol" data-em-koncept="' + esc(v.id) + '"><span class="em-av" style="background:#9e9e9e">📝</span><span class="em-telo">' +
         '<div class="em-r1"><span class="em-od"><span class="em-kon">Koncept</span> ' + esc(v.komu ? meno(v.komu) : "(bez príjemcu)") + "</span><small>" + esc(kedy(v.datum)) + "</small></div>" +
-        '<div class="em-pred">' + esc(v.predmet || "(bez predmetu)") + '</div><div class="em-uk">' + esc(String(v.text || "").slice(0, 140)) + "</div></button>";
+        '<div class="em-pred">' + esc(v.predmet || "(bez predmetu)") + '</div><div class="em-uk">' + esc(String(v.text || "").slice(0, 140)) + "</div></span></button>";
       return '<button class="em-pol' + (v.neprecitane ? " em-nep" : "") + '" data-em-id="' + esc(v.id) + '">' +
+        '<span class="em-av" style="background:' + farba(adresa(v.od)) + '">' + esc(inicial(v.od)) + '</span><span class="em-telo">' +
         '<div class="em-r1"><span class="em-od">' + esc(meno(v.od)) + (v.pocet > 1 ? ' <small>(' + v.pocet + ")</small>" : "") + "</span><small>" + (v.prilohy ? "📎 " : "") + esc(kedy(v.datum)) + "</small></div>" +
         '<div class="em-pred">' + (v.kategoria && KAT[v.kategoria] ? '<span class="em-stit" style="background:' + KAT[v.kategoria][1] + '">' + KAT[v.kategoria][0] + "</span> " : "") +
-        ((v.objednavky || []).length ? '<span class="em-objc">📦 ' + esc(v.objednavky.join(", ")) + "</span> " : "") + esc(v.predmet || "(bez predmetu)") + "</div><div class=\"em-uk\">" + esc(v.ukazka || "") + "</div></button>";
+        ((v.objednavky || []).length ? '<span class="em-objc">📦 ' + esc(v.objednavky.join(", ")) + "</span> " : "") + esc(v.predmet || "(bez predmetu)") + "</div><div class=\"em-uk\">" + esc(v.ukazka || "") + "</div></span></button>";
     }).join("") + "</div>";
+    h += '<button class="em-fab" data-em="novy" aria-label="Napísať nový e-mail">✏️ Napísať</button>';
     if (S.dalej) h += '<div class="em-tl"><button class="btn ghost" data-em="dalsie"' + (S.nacitavam ? " disabled" : "") + ">" + (S.nacitavam ? "Načítavam…" : "Načítať staršie") + "</button></div>";
     return h;
   }
@@ -167,7 +184,7 @@
         '<small class="muted">Komu: ' + esc(m.komu) + (m.kopia ? " · Kópia: " + esc(m.kopia) : "") + "</small>" + telo +
         (m.prilohy.length ? '<div class="em-pril">' + m.prilohy.map(function (p, j) { return '<button class="chip" data-em-pril="' + i + ":" + j + '">📎 ' + esc(p.nazov) + " · " + velkost(p.velkost) + "</button>"; }).join("") + "</div>" : "") + "</div>";
     }).join("");
-    var cisla = []; v.spravy.forEach(function (m) { (String(m.predmet || "") + " " + String(m.text || "")).replace(/\b[A-Z]\d{6,8}\b/g, function (c) { if (cisla.indexOf(c) < 0) cisla.push(c); }); });
+    var cisla = []; v.spravy.forEach(function (m) { (String(m.predmet || "") + " " + String(m.text || "")).replace(RE_OBJ, function (c) { c = "FO" + c.slice(2); if (cisla.indexOf(c) < 0) cisla.push(c); }); });
     if (cisla.length) h += '<div class="em-obj">' + cisla.slice(0, 5).map(function (c) {
       var o = S.obj[c];
       return '<div class="em-objk"><button class="chip" data-em-obj="' + c + '">📦 ' + c + "</button>" +
@@ -226,6 +243,7 @@
     switch (d.em) {
       case "spat": S.vlakno = null; S.pis = null; S.sprava = null; kresli(); if (!S.d) nacitaj(); return;
       case "zavri": S.sprava = null; kresli(); return;
+      case "zrushladaj": S.hladaj = ""; S.kat = ""; nacitaj(); return;
       case "dalsie": nacitaj(true); return;
       case "novy": S.vlakno = null; novy("novy"); return;
       case "odpoved": novy("odpoved"); return;
@@ -252,6 +270,17 @@
   st.textContent =
     ".em-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.em-schr{margin:0 0 8px;font-size:.85em}" +
     ".em-filtre{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.em-hladaj{display:flex;gap:6px;margin-bottom:10px}" +
+    ".em-hladaj{position:relative;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:28px;padding:2px 8px 2px 14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}" +
+    ".em-hladaj input{border:0!important;background:transparent!important;padding:10px 6px!important;outline:none}.em-lupa{opacity:.6}" +
+    ".em-pas{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:2px}.em-pas::-webkit-scrollbar{display:none}.em-pas .chip{white-space:nowrap;flex:0 0 auto}" +
+    ".em-poc{font-weight:700;margin-left:2px}.em-st.active .em-poc{color:inherit}.em-bod{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}" +
+    ".em-pol{display:flex!important;gap:12px;align-items:flex-start}.em-telo{flex:1;min-width:0;display:block}" +
+    ".em-av{flex:0 0 38px;width:38px;height:38px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;margin-top:2px}" +
+    ".em-pol:hover{background:var(--accent-soft)}.em-nep{background:var(--surface)}.em-pol:not(.em-nep){background:color-mix(in srgb,var(--surface) 92%,var(--line))}" +
+    ".em-od,.em-pred{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.em-r1 .em-od{min-width:0}" +
+    ".em-fab{position:fixed;right:18px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:6;border:0;border-radius:16px;padding:14px 20px;font:inherit;font-weight:700;cursor:pointer;" +
+    "background:var(--accent-soft,#f5ecd9);color:inherit;box-shadow:0 3px 10px rgba(0,0,0,.25)}@media (min-width:761px){.em-fab{bottom:28px;right:32px}}" +
+    ".em{padding-bottom:80px}" +
     ".em-hladaj input,.em-pis input,.em-pis textarea{flex:1;width:100%;box-sizing:border-box;font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:inherit}" +
     ".em-zoznam{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}" +
     ".em-pol{all:unset;cursor:pointer;display:block;padding:9px 12px;border-bottom:1px solid var(--line)}.em-pol:last-child{border-bottom:0}.em-pol:focus-visible{outline:2px solid var(--accent)}" +
