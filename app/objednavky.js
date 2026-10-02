@@ -411,6 +411,32 @@ if (f.id === "o-stav") {
       poznamka: o.poznamka, upozornenie: o.upozornenie, suma: o.suma, polozky: pol, nazvy: nazvy };
     window.LBZ_FURMANKY.tlacStitkyZ({ nazov: "Osobný odber" }, [obj]).catch(function (e) { window.alert("Štítok sa nedá vytlačiť: " + ((e && e.message) || e)); });
   };
+  // poznámka objednávky prehľadne: časti oddelené „|“ zvlášť (bez duplicít), riadky „názov 20 ks“ ako zoznam s počtom
+  function poznamkaHtml(t) {
+    var vid = {};
+    var casti = String(t || "").split(/\s*\|\s*/).map(function (s) { return s.trim(); }).filter(function (s) {
+      var k = s.toLowerCase(); if (!s || vid[k]) return false; vid[k] = 1; return true;
+    });
+    var jePol = function (k) { return /^\s*[^\d\s].*?\s(\d+)\s*(ks|x|×)\.?\s*$/i.test(k) || /^\s*(\d+)\s*(ks|x|×)\s+\S/i.test(k); };
+    return casti.map(function (c) {
+      var text = [], pol = [];
+      c.split(/\n+/).forEach(function (r) {
+        r = r.trim(); if (!r) return;
+        var d = r.indexOf(":"), kusy = (d > -1 ? r.slice(d + 1) : r).split(/[,;]\s*/).filter(function (k) { return k.trim(); });
+        if (kusy.length && kusy.every(jePol)) {
+          if (d > -1 && r.slice(0, d).trim()) text.push(r.slice(0, d).trim());
+          kusy.forEach(function (k) {
+            var m = k.match(/^\s*(.*?)\s(\d+)\s*(?:ks|x|×)\.?\s*$/i) || k.match(/^\s*(\d+)\s*(?:ks|x|×)\s+(.*)$/i);
+            if (m) pol.push(/^\d+$/.test(m[1]) ? { n: m[2], ks: m[1] } : { n: m[1], ks: m[2] });
+          });
+        } else text.push(r);
+      });
+      return (text.length ? '<span style="display:block">' + text.map(esc).join("<br>") + "</span>" : "") +
+        (pol.length ? '<span style="display:block;margin-top:4px">' + pol.map(function (p) {
+          return '<span style="display:flex;justify-content:space-between;gap:10px;border-top:1px dashed rgba(88,57,52,.25);padding:3px 0"><span>' + esc(p.n) + '</span><b style="white-space:nowrap">' + esc(p.ks) + " ks</b></span>";
+        }).join("") + "</span>" : "");
+    }).join('<span style="display:block;border-top:2px solid var(--gold);margin:6px 0"></span>');
+  }
   function kartaOdbery() {
     if (!DB) return "";
     if (O.odbery === null) {
@@ -421,7 +447,7 @@ if (f.id === "o-stav") {
     return '<section class="card o-odbery"><h3>🛍️ Osobné odbery <span class="pill num">' + z.length + "</span></h3><div class=\"rows\">" + z.map(function (o) {
       return '<div class="row o-odber"><span><b>' + esc(o.meno || "") + "</b> · " + esc(o.cislo) + "<br>" +
         '<span class="muted">' + esc((o.polozky || []).map(function (p) { return p.ks + "× " + p.nazov; }).join(", ")) + "</span>" +
-        (o.poznamka ? '<span style="display:block;margin-top:6px;padding:6px 10px;background:#fff4cc;border-left:4px solid var(--gold);border-radius:6px;color:var(--ink);font-weight:600;white-space:pre-wrap">📝 ' + esc(o.poznamka) + "</span>" : "") + "</span>" +
+        (o.poznamka ? '<span style="display:block;margin-top:6px;padding:6px 10px;background:#fff4cc;border-left:4px solid var(--gold);border-radius:6px;color:var(--ink);font-weight:600;white-space:pre-wrap">📝 ' + poznamkaHtml(o.poznamka) + "</span>" : "") + "</span>" +
         '<span class="num">' + esc(eur(o.suma)) + "<br>" + esc(o.platba || "") + (o.telefon ? '<br><a href="tel:' + esc(o.telefon) + '">📞</a>' : "") +
         '<br><button type="button" class="btn" style="min-height:36px;padding:6px 10px;margin-top:6px" data-c="' + esc(o.cislo) + '" onclick="window.LBZ_OBJ_STITOK && window.LBZ_OBJ_STITOK(this.dataset.c)">🏷️ Štítok</button>' + "</span></div>";
     }).join("") + "</div></section>";
