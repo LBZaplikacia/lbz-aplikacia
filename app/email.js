@@ -1,4 +1,4 @@
-// LBZ aplikácia – ✉️ Email (Gmail) – zákaznícky servis (eshop@), CEO a IT (ceo@) – s107, vzhľad ako Gmail v0.30.71 (priečinky v menu)
+// LBZ aplikácia – ✉️ Email (Gmail) – zákaznícky servis (eshop@), CEO a IT (ceo@) – s107, vzhľad ako Gmail v0.30.72 (priečinky v menu, potiahnutie do koša)
 // Celá schránka cez Edge Function „gmail“ (servisný účet s delegovaním). Odosiela sa len kliknutím človeka.
 (function () {
   "use strict";
@@ -145,7 +145,47 @@
   }
 
   // ---------- kreslenie ----------
-  function hlaska() { return S.sprava ? '<div class="em-hlaska em-' + S.sprava.typ + '">' + esc(S.sprava.text) + ' <button class="em-x" data-em="zavri" aria-label="Zavrieť">×</button></div>' : ""; }
+  function hlaska() { return S.sprava ? '<div class="em-hlaska em-' + S.sprava.typ + '"><span>' + esc(S.sprava.text) + (S.sprava.spat ? ' <button class="btn ghost em-spat" data-em="vratkos">↩ Späť</button>' : "") + '</span> <button class="em-x" data-em="zavri" aria-label="Zavrieť">×</button></div>' : ""; }
+
+  // ---------- potiahnutie e-mailu prstom do strany = do koša (s „Späť“) ----------
+  var tah = null, poTahu = 0;
+  function tahStart(e) {
+    var r = e.target.closest(".em-pol[data-em-id]"); if (!r || S.vlakno || S.stitok === "TRASH" || e.touches.length !== 1) { tah = null; return; }
+    tah = { r: r, x: e.touches[0].clientX, y: e.touches[0].clientY, dx: 0, smer: null };
+  }
+  function tahPohyb(e) {
+    if (!tah) return; var t = e.touches[0], dx = t.clientX - tah.x, dy = t.clientY - tah.y;
+    if (!tah.smer) { if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return; tah.smer = Math.abs(dx) > Math.abs(dy) ? "h" : "v"; if (tah.smer === "h") tah.r.parentNode.classList.add("em-tahanie"); }
+    if (tah.smer !== "h") return;
+    if (e.cancelable) e.preventDefault();
+    tah.r.parentNode.style.backgroundPosition = (dx > 0 ? "left 18px" : "right 18px") + " top " + Math.round(tah.r.offsetTop + tah.r.offsetHeight / 2 - 11) + "px";
+    tah.dx = dx; tah.r.style.transition = "none"; tah.r.style.transform = "translateX(" + dx + "px)"; tah.r.style.opacity = String(Math.max(0.35, 1 - Math.abs(dx) / tah.r.offsetWidth));
+  }
+  function tahKoniec() {
+    if (!tah) return; var t = tah; tah = null; if (t.smer !== "h") return; poTahu = Date.now();
+    var w = t.r.offsetWidth; t.r.style.transition = "transform .2s, opacity .2s";
+    if (Math.abs(t.dx) > w * 0.35) {
+      t.r.style.transform = "translateX(" + (t.dx > 0 ? w : -w) + "px)"; t.r.style.opacity = "0";
+      setTimeout(function () { doKosa(t.r.getAttribute("data-em-id")); }, 200);
+    } else {
+      t.r.style.transform = ""; t.r.style.opacity = "";
+      setTimeout(function () { if (t.r.parentNode) { t.r.parentNode.classList.remove("em-tahanie"); t.r.parentNode.style.backgroundPosition = ""; } }, 200);
+    }
+  }
+  function doKosa(id) {
+    var v = (S.d || []).filter(function (x) { return x.id === id; })[0];
+    S.d = (S.d || []).filter(function (x) { return x.id !== id; });
+    S.kos = { id: id, v: v }; S.sprava = { typ: "ok", text: "🗑️ Presunuté do koša.", spat: true }; kresli();
+    volaj({ akcia: "upravit", id: id, kos: true }).then(function () { nacitajPocty(); }).catch(function (er) {
+      if (v) S.d.unshift(v); S.kos = null; S.sprava = { typ: "chyba", text: "Nepresunuté: " + chyba(er) }; kresli();
+    });
+  }
+  function vratZKosa() {
+    var k = S.kos; if (!k) return; S.kos = null; S.sprava = null;
+    if (k.v && S.d) { S.d.push(k.v); S.d.sort(function (x, y) { return (Number(y.neprecitane) - Number(x.neprecitane)) || (y.datum - x.datum); }); }
+    kresli();
+    volaj({ akcia: "upravit", id: k.id, obnov: true }).then(function () { nacitajPocty(); }).catch(function (er) { S.sprava = { typ: "chyba", text: "Nevrátené: " + chyba(er) }; nacitaj(); });
+  }
   function kresliZoznam() {
     var schr = S.schranka || (ROLA === "zakaznicky_servis" ? "eshop@legendarnebuchty.sk" : "ceo@legendarnebuchty.sk");
     var akt = STITKY.filter(function (s) { return s[0] === S.stitok; })[0] || STITKY[0];
@@ -233,6 +273,7 @@
 
   // ---------- udalosti ----------
   function klik(e) {
+    if (Date.now() - poTahu < 450) { e.preventDefault(); return; }   // klik hneď po potiahnutí neotvára e-mail
     if (S.menu && !e.target.closest(".em-menu-w")) { S.menu = false; kresli(); }
     var t = e.target.closest("[data-em],[data-em-id],[data-em-koncept],[data-em-stitok],[data-em-pril],[data-em-zrus],[data-em-kat],[data-em-obj]"); if (!t || !koren.contains(t)) return;
     var d = t.dataset;
@@ -253,7 +294,8 @@
     if (d.emZrus) { citajPole(); S.pis.prilohy.splice(+d.emZrus, 1); kresli(); return; }
     switch (d.em) {
       case "spat": S.vlakno = null; S.pis = null; S.sprava = null; kresli(); if (!S.d) nacitaj(); return;
-      case "zavri": S.sprava = null; kresli(); return;
+      case "zavri": S.sprava = null; S.kos = null; kresli(); return;
+      case "vratkos": vratZKosa(); return;
       case "menu": S.menu = !S.menu; kresli(); return;
       case "zrushladaj": S.hladaj = ""; S.kat = ""; nacitaj(); return;
       case "dalsie": nacitaj(true); return;
@@ -293,6 +335,8 @@
     ".em-fab{position:fixed;right:18px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:6;border:0;border-radius:16px;padding:14px 20px;font:inherit;font-weight:700;cursor:pointer;" +
     "background:var(--accent-soft,#f5ecd9);color:inherit;box-shadow:0 3px 10px rgba(0,0,0,.25)}@media (min-width:761px){.em-fab{bottom:28px;right:32px}}" +
     ".em{padding-bottom:80px}" +
+    ".em-zoznam{position:relative}.em-zoznam .em-pol{touch-action:pan-y;position:relative;background:var(--surface)}.em-zoznam .em-pol:not(.em-nep){background:color-mix(in srgb,var(--surface) 92%,var(--line))}.em-zoznam.em-tahanie{background:#c62828 url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'%3E%3Cpath d='M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14'/%3E%3C/svg%3E\") no-repeat;background-position:right 18px top 50%}" +
+    ".em-hlaska span{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.em-spat{padding:4px 10px;font-size:.9em}" +
     ".em-lista{display:flex;gap:8px;align-items:center;margin-bottom:8px}.em-lista .em-hladaj{flex:1;margin:0;min-width:0}" +
     ".em-menu-w{position:relative;flex:0 0 auto}.em-menu-b{border:1px solid var(--line);background:var(--surface);color:inherit;border-radius:24px;padding:10px 12px;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.06)}" +
     ".em-menu{position:absolute;left:0;top:calc(100% + 4px);z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.18);min-width:250px;padding:6px}" +
@@ -319,7 +363,11 @@
     nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; S.d = null; S.vlakno = null; S.pis = null; S.sprava = null; },
     mozem: mozem,
     mount: function (el) {
-      if (koren !== el) { koren = el; el.addEventListener("click", klik); el.addEventListener("submit", odoslanieFormu); }
+      if (koren !== el) {
+        koren = el; el.addEventListener("click", klik); el.addEventListener("submit", odoslanieFormu);
+        el.addEventListener("touchstart", tahStart, { passive: true }); el.addEventListener("touchmove", tahPohyb, { passive: false });
+        el.addEventListener("touchend", tahKoniec); el.addEventListener("touchcancel", tahKoniec);
+      }
       if (S.d && !S.nacitavam) kresli(); else nacitaj();
     }
   };
