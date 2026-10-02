@@ -115,8 +115,11 @@
       return h;
     }
     var navrh = bezRobota(p.ai_navrh);
-    if (p.typ === "sprava" && (Date.now() - new Date(p.vytvorene).getTime()) > 7 * 864e5)
-      h += '<p class="soc-upoz">Správa je staršia ako 7 dní – Meta nemusí odoslanie dovoliť. Vtedy odpíš priamo v Business Suite a označ ako vybavené.</p>';
+    if (p.typ === "sprava" && (Date.now() - new Date(p.vytvorene).getTime()) > 7 * 864e5) {
+      return h + '<p class="soc-upoz">Správa je staršia ako 7 dní – Meta už nedovolí odpovedať z appky. Ak treba, odpíš v Business Suite a potom označ Vybavené inde.</p>' +
+        '<div class="soc-tl"><a class="btn" href="https://business.facebook.com/latest/inbox/all" target="_blank" rel="noopener">Otvoriť v Business Suite ↗</a>' +
+        '<button class="btn ghost" data-soc="vybavene">Vybavené inde</button><button class="btn ghost" data-soc="preskocit">Preskočiť</button></div>';
+    }
     h += '<label class="soc-lbl" for="soc-text">' + (navrh ? "Návrh odpovede od AI – uprav podľa seba" : "Tvoja odpoveď") + "</label>" +
       '<textarea id="soc-text" rows="5" placeholder="Napíš odpoveď…">' + esc(navrh) + "</textarea>" +
       '<div class="soc-tl"><button class="btn" data-soc="odosli"' + (S.posielam ? " disabled" : "") + ">" + (S.posielam ? "Odosielam…" : "Odoslať na " + (p.platforma === "ig" ? "Instagram" : "Facebook")) + "</button>" +
