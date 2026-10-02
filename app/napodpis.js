@@ -12,7 +12,7 @@
   var MIESTA = { "ZBOJSKÁ": "Zbojská", "ROZVOZ": "Rozvoz", "SLUŽOBKA": "Služobka", "OBCHOD": "Služobka", "BUCHTOMOBIL": "Buchťáč", "ADMINISTRATÍVA": "Administratíva" };
   var TYPY = { praca: "Odpracované", dovolenka: "Dovolenka", pn: "PN", ocr: "OČR", lekar: "Lekár", nv: "Náhradné voľno" };
   var IKONA = { dochadzka: "🕒", stravne: "🍽️", cp: "🧾", hotovost: "💶", absencia: "🏖️", dokument: "📄" };
-  var DRUH_PODPIS = [["zmluva", "Pracovná zmluva"], ["dohoda", "Dohoda"], ["dodatok", "Dodatok"], ["gdpr", "GDPR / súhlas"], ["ine", "Iný dokument"]];
+  var DRUH_PODPIS = [["zmluva", "Pracovná zmluva"], ["dohoda", "Dohoda"], ["dodatok", "Dodatok"], ["gdpr", "GDPR / súhlas"], ["oboznamenie", "Oboznámenie (predpis, pravidlá)"], ["ine", "Iný dokument"]];
   var DRUH_NAHRAJ = ["Potvrdenie o návšteve školy", "Súhlas zákonného zástupcu", "Priepustka od lekára", "Potvrdenie o zdravotnej spôsobilosti / zdravotný preukaz",
     "Potvrdenie z úradu práce / Sociálnej poisťovne", "Vyhlásenie na zdaňovanie (NČZD)"];
   var ZAMESTNAVATEL = "V sedle u Falťanov s.r.o., IČO 47206934";
@@ -41,6 +41,8 @@
   // zmluva, dohoda, dodatok: zamestnanec v appke len potvrdí prečítanie, originál podpisuje na papieri (Terézia 2. 10. 2026)
   var PAPIER = ["zmluva", "dohoda", "dodatok"];
   function papier(x) { return x && x.typ === "dokument" && PAPIER.indexOf(x.druh) > -1; }
+  // oboznámenie (GPS, pracovný poriadok, HACCP…): prečítať a potvrdiť podpisom prstom, 15 dní (Terézia 2. 10. 2026)
+  function oboz(x) { return x && x.typ === "dokument" && x.druh === "oboznamenie"; }
   function nazov(x) {
     if (x.typ === "absencia") return x.nazov + " " + datumK(x.od) + (x.do !== x.od ? " – " + datumK(x.do) : "");
     if (x.typ === "dokument") return x.nazov;
@@ -64,7 +66,7 @@
       h += '<h3>✍️ Máš podpísať <span class="pill warn num">' + pol.length + "</span></h3>" +
         '<p class="muted np-pozn">Ťukni na dokument – prečítaj si ho, a ak je v poriadku, podpíš ho prstom. Ak niečo nesedí, navrhni úpravu.</p><div class="np-zoz">' +
         pol.map(function (x, i) {
-          var info = x.cakajuce_upravy ? "⏳ úprava čaká na schválenie" : x.pripomienka ? "✏️ pripomienka odoslaná" : (x.po_termine ? "⚠️ termín bol " : papier(x) ? "prečítať do " : "podpísať do ") + datumK(x.termin) + (papier(x) ? " · podpis na papieri" : "");
+          var info = x.cakajuce_upravy ? "⏳ úprava čaká na schválenie" : x.pripomienka ? "✏️ pripomienka odoslaná" : (x.po_termine ? "⚠️ termín bol " : papier(x) ? "prečítať do " : oboz(x) ? "prečítať a podpísať do " : "podpísať do ") + datumK(x.termin) + (papier(x) ? " · podpis na papieri" : "");
           return '<button type="button" class="np-pol' + (x.po_termine ? " np-po" : "") + '" data-np-otvor="' + i + '"><span class="np-ik" aria-hidden="true">' + (IKONA[x.typ] || "📄") + "</span>" +
             '<span class="np-t"><b>' + esc(nazov(x)) + "</b><small>" + esc(info) + '</small></span><span class="np-sip">›</span></button>';
         }).join("") + "</div>";
@@ -127,6 +129,13 @@
       "<tr><th>Odtlačok SHA-256 dokumentu</th><td style=\"word-break:break-all\">" + esc(hash || "") + "</td></tr></table>" +
       "<p>Potvrdzujem, že som si dokument „" + esc(x.nazov) + "“ prečítal(a). Originál dokumentu podpíšem vlastnoručne na papieri.</p>" +
       '<div class="pdp-riadok">' + slot(pod, "zamestnanec", "zamestnanec – potvrdenie o prečítaní") + "</div>";
+    if (oboz(x)) return "<h1>Potvrdenie o oboznámení</h1><table>" +
+      '<tr><th style="width:38%">Dokument</th><td><b>' + esc(x.nazov) + "</b></td></tr>" +
+      "<tr><th>Zamestnanec</th><td>" + esc(meno()) + "</td></tr><tr><th>Zamestnávateľ</th><td>" + esc(ZAMESTNAVATEL) + "</td></tr>" +
+      "<tr><th>Odtlačok SHA-256 dokumentu</th><td style=\"word-break:break-all\">" + esc(hash || "") + "</td></tr></table>" +
+      "<p>Svojím podpisom potvrdzujem, že som bol(a) oboznámený(á) s dokumentom „" + esc(x.nazov) + "“, jeho obsahu som porozumel(a) a budem ho dodržiavať. " +
+      "Tento podpisový list patrí k dokumentu s uvedeným odtlačkom.</p>" +
+      '<div class="pdp-riadok">' + slot(pod, "zamestnanec", "podpis zamestnanca") + "</div>";
     return "<h1>Podpis dokumentu</h1><table>" +
       '<tr><th style="width:38%">Dokument</th><td><b>' + esc(x.nazov) + "</b></td></tr>" +
       "<tr><th>Druh</th><td>" + esc((DRUH_PODPIS.filter(function (d) { return d[0] === x.druh; })[0] || ["", x.druh])[1]) + "</td></tr>" +
@@ -185,6 +194,7 @@
       else if (x.typ === "absencia") h = window.LBZ_DOCHADZKA && LBZ_DOCHADZKA.listokHtml ? LBZ_DOCHADZKA.listokHtml(d.a, meno(), null) : "";
       else if (x.typ === "dokument") h = '<div class="np-pdf" id="np-pdf"><p class="muted">Načítavam dokument…</p></div>' +
         (papier(x) ? '<p class="np-papier">📄 Tento dokument si len prečítaj a potvrď. <b>Originál podpíšeš vlastnoručne na papieri</b> – pripraví ti ho vedenie.</p>' : "") +
+        (oboz(x) ? '<p class="np-papier">📘 Prečítaj si dokument celý. Podpisom potvrdíš, že si sa s ním oboznámil(a) a budeš ho dodržiavať. Ak niečomu nerozumieš, ťukni na ✏️ a opýtaj sa.</p>' : "") +
         (x.poznamka ? '<p class="muted">Poznámka: ' + esc(x.poznamka) + "</p>" : "");
     }
     el.innerHTML = h || (o.nac ? '<p class="muted">Načítavam…</p>' : "");
@@ -210,7 +220,7 @@
     var b = blok();
     p.innerHTML = (b && !o.nac ? '<p class="np-blok">' + esc(b) + "</p>" : "") +
       '<div class="np-tl"><button type="button" class="btn" data-np="upr"' + (o.nac || o.prace ? " disabled" : "") + ">✏️ Navrhnúť úpravu</button>" +
-      '<button type="button" class="btn btn-primary" data-np="podpis"' + (b || o.prace ? " disabled" : "") + ">" + (o.prace ? "Pracujem…" : papier(o.x) ? "✅ Prečítal(a) som" : "✍️ Podpísať") + "</button></div>";
+      '<button type="button" class="btn btn-primary" data-np="podpis"' + (b || o.prace ? " disabled" : "") + ">" + (o.prace ? "Pracujem…" : papier(o.x) ? "✅ Prečítal(a) som" : oboz(o.x) ? "✍️ Prešiel/a som si – podpísať" : "✍️ Podpísať") + "</button></div>";
   }
   function uprHtml() {
     var o = S.o, x = o.x, u = o.upr; if (!u) return "";
@@ -281,15 +291,15 @@
     else if (x.typ === "cp" || x.typ === "hotovost") pr = d.podpisat();
     else if (x.typ === "absencia") pr = window.LBZ_DOCHADZKA && LBZ_DOCHADZKA.listokPodpis ? LBZ_DOCHADZKA.listokPodpis(d.a, m, os) : Promise.resolve({ ok: false, text: "Obnov appku" });
     else if (x.typ === "dokument") pr = P.podpisat(Object.assign(zak, { typ: "dokument", dokument: x.dokument, nazov: x.nazov + " – " + m, subor: "dokument_" + x.id,
-      titul: papier(x) ? "Potvrdenie o prečítaní" : "Podpis dokumentu",
-      vyhlasenie: papier(x) ? "Prečítal(a) som si dokument „" + x.nazov + "“. Originál podpíšem na papieri." : "Prečítal(a) som si dokument „" + x.nazov + "“ a podpisujem ho.", obsah: d.hash,
+      titul: papier(x) ? "Potvrdenie o prečítaní" : oboz(x) ? "Potvrdenie o oboznámení" : "Podpis dokumentu",
+      vyhlasenie: papier(x) ? "Prečítal(a) som si dokument „" + x.nazov + "“. Originál podpíšem na papieri." : oboz(x) ? "Bol(a) som oboznámený(á) s dokumentom „" + x.nazov + "“, porozumel(a) som mu a budem ho dodržiavať." : "Prečítal(a) som si dokument „" + x.nazov + "“ a podpisujem ho.", obsah: d.hash,
       html: function (pod) { return dokHtml(x, d.hash, pod); } }));
     if (!pr) return;
     o.prace = true; casti();
     pr.then(function (r) {
       if (S.o !== o) return; o.prace = false;
       if (r && r.zrusene) { casti(); return; }
-      if (r && r.ok) { o.hotovo = true; o.upr = null; o.sprava = { typ: "ok", text: papier(x) ? "✅ Potvrdené. Originál podpíšeš na papieri." : "✅ Podpísané. Ďakujeme! PDF s podpisom je uložené v tvojich dokumentoch." }; teloKresli(); obnovKartu(); }
+      if (r && r.ok) { o.hotovo = true; o.upr = null; o.sprava = { typ: "ok", text: papier(x) ? "✅ Potvrdené. Originál podpíšeš na papieri." : oboz(x) ? "✅ Ďakujeme, oboznámenie je potvrdené." : "✅ Podpísané. Ďakujeme! PDF s podpisom je uložené v tvojich dokumentoch." }; teloKresli(); obnovKartu(); }
       else { o.sprava = { typ: "chyba", text: (r && r.text) || "Podpis sa nepodaril" }; casti(); }
     });
   }
