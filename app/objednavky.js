@@ -411,7 +411,7 @@ if (f.id === "o-stav") {
     return '<section class="card o-odbery"><h3>🛍️ Osobné odbery <span class="pill num">' + z.length + "</span></h3><div class=\"rows\">" + z.map(function (o) {
       return '<div class="row o-odber"><span><b>' + esc(o.meno || "") + "</b> · " + esc(o.cislo) + "<br>" +
         '<span class="muted">' + esc((o.polozky || []).map(function (p) { return p.ks + "× " + p.nazov; }).join(", ")) + "</span>" +
-        (o.poznamka ? '<br><span class="muted">„' + esc(o.poznamka) + "“</span>" : "") + "</span>" +
+        (o.poznamka ? '<span style="display:block;margin-top:6px;padding:6px 10px;background:#fff4cc;border-left:4px solid var(--gold);border-radius:6px;color:var(--ink);font-weight:600;white-space:pre-wrap">📝 ' + esc(o.poznamka) + "</span>" : "") + "</span>" +
         '<span class="num">' + esc(eur(o.suma)) + "<br>" + esc(o.platba || "") + (o.telefon ? '<br><a href="tel:' + esc(o.telefon) + '">📞</a>' : "") + "</span></div>";
     }).join("") + "</div></section>";
   }
