@@ -58,8 +58,8 @@
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
       '<b style="color:#b3261e;font-size:14px">' + nadpis + "</b>" +
       '<span style="display:flex;gap:6px">' +
-      '<a class="btn" style="padding:4px 10px;font-size:13px" href="' + EZNAMKA + '" target="_blank" rel="noopener">🛒 Kúpiť</a>' +
-      (u.modul ? '<button class="btn" style="padding:4px 10px;font-size:13px" data-mod="vozovy_park">🚐 Detail</button>' : "") +
+      '<a class="btn" style="padding:1px 7px;font-size:11px;min-height:0;height:auto;line-height:1.4;border-radius:6px" href="' + EZNAMKA + '" target="_blank" rel="noopener">🛒 Kúpiť</a>' +
+      (u.modul ? '<button class="btn" style="padding:1px 7px;font-size:11px;min-height:0;height:auto;line-height:1.4;border-radius:6px" data-mod="vozovy_park">🚐 Detail</button>' : "") +
       "</span></div>" + h + "</section>";
   }
 
