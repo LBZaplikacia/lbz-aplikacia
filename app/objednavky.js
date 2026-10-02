@@ -401,6 +401,16 @@ if (f.id === "o-stav") {
   }
 
   // ---------- karta Osobné odbery (Prehľad) ----------
+  // štítok osobného odberu – rovnaký ako štítky furmaniek (tlač z karty na Prehľade)
+  window.LBZ_OBJ_STITOK = function (cislo) {
+    var o = (O.odbery || []).filter(function (x) { return x.cislo === cislo; })[0];
+    if (!o || !window.LBZ_FURMANKY || !window.LBZ_FURMANKY.tlacStitkyZ) { window.alert("Štítok sa nedá vytlačiť – obnovte appku."); return; }
+    var pol = {}, nazvy = {};
+    (o.polozky || []).forEach(function (p) { var k = p.kod || p.nazov; pol[k] = (Number(pol[k]) || 0) + Number(p.ks || 0); nazvy[k] = p.nazov; });
+    var obj = { cislo: o.cislo, meno: o.meno, telefon: o.telefon, ulica: "Osobný odber – Zbojská", faktura: o.faktura, platba: o.platba,
+      poznamka: o.poznamka, upozornenie: o.upozornenie, suma: o.suma, polozky: pol, nazvy: nazvy };
+    window.LBZ_FURMANKY.tlacStitkyZ({ nazov: "Osobný odber" }, [obj]).catch(function (e) { window.alert("Štítok sa nedá vytlačiť: " + ((e && e.message) || e)); });
+  };
   function kartaOdbery() {
     if (!DB) return "";
     if (O.odbery === null) {
@@ -412,7 +422,8 @@ if (f.id === "o-stav") {
       return '<div class="row o-odber"><span><b>' + esc(o.meno || "") + "</b> · " + esc(o.cislo) + "<br>" +
         '<span class="muted">' + esc((o.polozky || []).map(function (p) { return p.ks + "× " + p.nazov; }).join(", ")) + "</span>" +
         (o.poznamka ? '<span style="display:block;margin-top:6px;padding:6px 10px;background:#fff4cc;border-left:4px solid var(--gold);border-radius:6px;color:var(--ink);font-weight:600;white-space:pre-wrap">📝 ' + esc(o.poznamka) + "</span>" : "") + "</span>" +
-        '<span class="num">' + esc(eur(o.suma)) + "<br>" + esc(o.platba || "") + (o.telefon ? '<br><a href="tel:' + esc(o.telefon) + '">📞</a>' : "") + "</span></div>";
+        '<span class="num">' + esc(eur(o.suma)) + "<br>" + esc(o.platba || "") + (o.telefon ? '<br><a href="tel:' + esc(o.telefon) + '">📞</a>' : "") +
+        '<br><button type="button" class="btn" style="min-height:36px;padding:6px 10px;margin-top:6px" data-c="' + esc(o.cislo) + '" onclick="window.LBZ_OBJ_STITOK && window.LBZ_OBJ_STITOK(this.dataset.c)">🏷️ Štítok</button>' + "</span></div>";
     }).join("") + "</div></section>";
   }
 
