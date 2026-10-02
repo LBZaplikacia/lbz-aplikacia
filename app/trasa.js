@@ -218,7 +218,7 @@ function jazdaHtml(t) {
         '<label class="btn t-foto-tl">📷 Fotka<input type="file" accept="image/*" capture="environment" data-t-foto="' + esc(a.cislo) + '" hidden></label>' +
         (!vybav ? '<button class="btn" data-t="preskocit">⏭️ Preskočiť</button>' : '<button class="btn" data-t-akcia="spat" data-c="' + esc(a.cislo) + '">↩️ Späť</button>') + "</div>") +
       "</section>" +
-      '<p class="muted t-akt-stav">Vybavené ' + hotovo + " z " + z.length + (T.gpsChyba ? " · GPS vypnuté – „Som na mieste“ stlačte ručne" : "") + (rozvozBezi() ? " · 📱 nechaj obrazovku zapnutú" : "") + "</p>";
+      '<p class="muted t-akt-stav">Vybavené ' + hotovo + " z " + z.length + (T.gpsChyba ? " · GPS vypnuté – „Som na mieste“ stlačte ručne" : "") + "</p>";
   }
   function pohladTrasa() {
     var d = T.data, t = d && d.trasa;
