@@ -38,6 +38,9 @@
   function slot(pod, rola, popis) { return window.lbzPodpis ? lbzPodpis.slot(pod, rola, popis) : '<span class="pdp-slot">.............................................<br>' + esc(popis) + "</span>"; }
 
   // ---------- karta na Prehľade ----------
+  // zmluva, dohoda, dodatok: zamestnanec v appke len potvrdí prečítanie, originál podpisuje na papieri (Terézia 2. 10. 2026)
+  var PAPIER = ["zmluva", "dohoda", "dodatok"];
+  function papier(x) { return x && x.typ === "dokument" && PAPIER.indexOf(x.druh) > -1; }
   function nazov(x) {
     if (x.typ === "absencia") return x.nazov + " " + datumK(x.od) + (x.do !== x.od ? " – " + datumK(x.do) : "");
     if (x.typ === "dokument") return x.nazov;
@@ -61,7 +64,7 @@
       h += '<h3>✍️ Máš podpísať <span class="pill warn num">' + pol.length + "</span></h3>" +
         '<p class="muted np-pozn">Ťukni na dokument – prečítaj si ho, a ak je v poriadku, podpíš ho prstom. Ak niečo nesedí, navrhni úpravu.</p><div class="np-zoz">' +
         pol.map(function (x, i) {
-          var info = x.cakajuce_upravy ? "⏳ úprava čaká na schválenie" : x.pripomienka ? "✏️ pripomienka odoslaná" : (x.po_termine ? "⚠️ termín bol " : "podpísať do ") + datumK(x.termin);
+          var info = x.cakajuce_upravy ? "⏳ úprava čaká na schválenie" : x.pripomienka ? "✏️ pripomienka odoslaná" : (x.po_termine ? "⚠️ termín bol " : papier(x) ? "prečítať do " : "podpísať do ") + datumK(x.termin) + (papier(x) ? " · podpis na papieri" : "");
           return '<button type="button" class="np-pol' + (x.po_termine ? " np-po" : "") + '" data-np-otvor="' + i + '"><span class="np-ik" aria-hidden="true">' + (IKONA[x.typ] || "📄") + "</span>" +
             '<span class="np-t"><b>' + esc(nazov(x)) + "</b><small>" + esc(info) + '</small></span><span class="np-sip">›</span></button>';
         }).join("") + "</div>";
@@ -118,6 +121,12 @@
       '<div class="pdp-riadok">' + slot(pod, "zamestnanec", "podpis zamestnanca") + slot(pod, "zamestnavatel", "za zamestnávateľa") + "</div>";
   }
   function dokHtml(x, hash, pod) {
+    if (papier(x)) return "<h1>Potvrdenie o prečítaní dokumentu</h1><table>" +
+      '<tr><th style="width:38%">Dokument</th><td><b>' + esc(x.nazov) + "</b></td></tr>" +
+      "<tr><th>Zamestnanec</th><td>" + esc(meno()) + "</td></tr><tr><th>Zamestnávateľ</th><td>" + esc(ZAMESTNAVATEL) + "</td></tr>" +
+      "<tr><th>Odtlačok SHA-256 dokumentu</th><td style=\"word-break:break-all\">" + esc(hash || "") + "</td></tr></table>" +
+      "<p>Potvrdzujem, že som si dokument „" + esc(x.nazov) + "“ prečítal(a). Originál dokumentu podpíšem vlastnoručne na papieri.</p>" +
+      '<div class="pdp-riadok">' + slot(pod, "zamestnanec", "zamestnanec – potvrdenie o prečítaní") + "</div>";
     return "<h1>Podpis dokumentu</h1><table>" +
       '<tr><th style="width:38%">Dokument</th><td><b>' + esc(x.nazov) + "</b></td></tr>" +
       "<tr><th>Druh</th><td>" + esc((DRUH_PODPIS.filter(function (d) { return d[0] === x.druh; })[0] || ["", x.druh])[1]) + "</td></tr>" +
@@ -175,6 +184,7 @@
       else if (x.typ === "cp" || x.typ === "hotovost") h = d.html(null);
       else if (x.typ === "absencia") h = window.LBZ_DOCHADZKA && LBZ_DOCHADZKA.listokHtml ? LBZ_DOCHADZKA.listokHtml(d.a, meno(), null) : "";
       else if (x.typ === "dokument") h = '<div class="np-pdf" id="np-pdf"><p class="muted">Načítavam dokument…</p></div>' +
+        (papier(x) ? '<p class="np-papier">📄 Tento dokument si len prečítaj a potvrď. <b>Originál podpíšeš vlastnoručne na papieri</b> – pripraví ti ho vedenie.</p>' : "") +
         (x.poznamka ? '<p class="muted">Poznámka: ' + esc(x.poznamka) + "</p>" : "");
     }
     el.innerHTML = h || (o.nac ? '<p class="muted">Načítavam…</p>' : "");
@@ -200,7 +210,7 @@
     var b = blok();
     p.innerHTML = (b && !o.nac ? '<p class="np-blok">' + esc(b) + "</p>" : "") +
       '<div class="np-tl"><button type="button" class="btn" data-np="upr"' + (o.nac || o.prace ? " disabled" : "") + ">✏️ Navrhnúť úpravu</button>" +
-      '<button type="button" class="btn btn-primary" data-np="podpis"' + (b || o.prace ? " disabled" : "") + ">" + (o.prace ? "Pracujem…" : "✍️ Podpísať") + "</button></div>";
+      '<button type="button" class="btn btn-primary" data-np="podpis"' + (b || o.prace ? " disabled" : "") + ">" + (o.prace ? "Pracujem…" : papier(o.x) ? "✅ Prečítal(a) som" : "✍️ Podpísať") + "</button></div>";
   }
   function uprHtml() {
     var o = S.o, x = o.x, u = o.upr; if (!u) return "";
@@ -271,14 +281,15 @@
     else if (x.typ === "cp" || x.typ === "hotovost") pr = d.podpisat();
     else if (x.typ === "absencia") pr = window.LBZ_DOCHADZKA && LBZ_DOCHADZKA.listokPodpis ? LBZ_DOCHADZKA.listokPodpis(d.a, m, os) : Promise.resolve({ ok: false, text: "Obnov appku" });
     else if (x.typ === "dokument") pr = P.podpisat(Object.assign(zak, { typ: "dokument", dokument: x.dokument, nazov: x.nazov + " – " + m, subor: "dokument_" + x.id,
-      titul: "Podpis dokumentu", vyhlasenie: "Prečítal(a) som si dokument „" + x.nazov + "“ a podpisujem ho.", obsah: d.hash,
+      titul: papier(x) ? "Potvrdenie o prečítaní" : "Podpis dokumentu",
+      vyhlasenie: papier(x) ? "Prečítal(a) som si dokument „" + x.nazov + "“. Originál podpíšem na papieri." : "Prečítal(a) som si dokument „" + x.nazov + "“ a podpisujem ho.", obsah: d.hash,
       html: function (pod) { return dokHtml(x, d.hash, pod); } }));
     if (!pr) return;
     o.prace = true; casti();
     pr.then(function (r) {
       if (S.o !== o) return; o.prace = false;
       if (r && r.zrusene) { casti(); return; }
-      if (r && r.ok) { o.hotovo = true; o.upr = null; o.sprava = { typ: "ok", text: "✅ Podpísané. Ďakujeme! PDF s podpisom je uložené v tvojich dokumentoch." }; teloKresli(); obnovKartu(); }
+      if (r && r.ok) { o.hotovo = true; o.upr = null; o.sprava = { typ: "ok", text: papier(x) ? "✅ Potvrdené. Originál podpíšeš na papieri." : "✅ Podpísané. Ďakujeme! PDF s podpisom je uložené v tvojich dokumentoch." }; teloKresli(); obnovKartu(); }
       else { o.sprava = { typ: "chyba", text: (r && r.text) || "Podpis sa nepodaril" }; casti(); }
     });
   }
@@ -355,13 +366,14 @@
       h += '<h4 style="margin:14px 0 4px">✍️ Poslané na podpis</h4>' + (p == null ? '<p class="muted" style="margin:0">Načítavam…</p>' : !p.length ? '<p class="muted" style="margin:0">Nič.</p>' :
         '<div class="rows">' + p.map(function (x) {
           return '<div class="np-sek-r"><button type="button" class="row zm-dok-riadok" data-np-sub="' + esc(x.cesta) + '" data-nazov="' + esc(x.nazov) + '"><span>' + (x.podpisane ? "✅ " : "⏳ ") + esc(x.nazov) + '</span><span class="muted">' +
-            (x.podpisane ? "podpísané " + esc(new Date(x.podpisane).toLocaleDateString("sk-SK")) : "čaká" + (x.termin ? " · do " + esc(datumK(x.termin)) : "")) + " ›</span></button>" +
+            (x.podpisane ? (PAPIER.indexOf(x.druh) > -1 ? "prečítané " : "podpísané ") + esc(new Date(x.podpisane).toLocaleDateString("sk-SK")) + (PAPIER.indexOf(x.druh) > -1 ? " · originál na papieri" : "") : "čaká" + (x.termin ? " · do " + esc(datumK(x.termin)) : "")) + " ›</span></button>" +
             (x.podpisane ? "" : '<button type="button" class="np-x" data-np-dzrus="' + x.id + '" data-os="' + os + '" title="Zrušiť">✖</button>') + "</div>";
         }).join("") + "</div>");
       if (st.form === "podpis") {
         h += '<div class="np-form"><label class="field"><span class="label">Druh</span><select id="np-p-druh">' + DRUH_PODPIS.map(function (d) { return '<option value="' + d[0] + '">' + esc(d[1]) + "</option>"; }).join("") + "</select></label>" +
           '<label class="field"><span class="label">Názov (uvidí ho zamestnanec)</span><input type="text" id="np-p-naz" maxlength="150" placeholder="napr. Dohoda o brigádnickej práci študentov"></label>' +
-          '<label class="field"><span class="label">Podpísať do</span><input type="date" id="np-p-ter"></label>' +
+          '<p class="muted" style="margin:0 0 6px">Zmluva, dohoda, dodatok: zamestnanec v appke len potvrdí, že si ich prečítal – originál podpíšete na papieri. GDPR a iné dokumenty podpíše v appke.</p>' +
+          '<label class="field"><span class="label">Termín</span><input type="date" id="np-p-ter"></label>' +
           '<label class="field"><span class="label">Súbor PDF</span><input type="file" id="np-p-sub" accept="application/pdf"></label>' +
           '<div class="np-tl"><button type="button" class="btn btn-primary" data-np-sek="podpis-ok" data-os="' + os + '"' + (st.prace ? " disabled" : "") + ">" + (st.prace ? "Posielam…" : "✍️ Poslať na podpis") + "</button>" +
           '<button type="button" class="btn" data-np-sek="zrus" data-os="' + os + '">Zrušiť</button></div></div>';
@@ -470,7 +482,7 @@
     ".np-pdf .np-str{display:block;margin:0 auto 10px;box-shadow:0 1px 4px rgba(0,0,0,.2)}.np-upr{max-width:900px;margin:12px auto;background:var(--surface,#fff);border:2px solid var(--gold,#CBA75B);border-radius:12px;padding:12px}" +
     ".np-upr h3{margin:0 0 6px}.np-2{display:grid;grid-template-columns:1fr 1fr;gap:8px}.np-upr textarea,.np-upr input,.np-upr select,.np-form input,.np-form select{width:100%;min-height:44px;font:inherit;border:1px solid var(--line,#ddd);border-radius:8px;padding:8px;background:var(--bg,#fff);color:inherit}" +
     ".np-paticka{padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line,#e6dccb);background:var(--surface,#fff)}.np-tl{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}" +
-    ".np-paticka .np-tl .btn{flex:1;min-height:48px;font-size:16px}.np-blok{margin:0 0 8px;font-size:13px;color:#8a4b00}body.np-otvorene{overflow:hidden}#np-msg .f-sprava{max-width:900px;margin:10px auto}" +
+    ".np-paticka .np-tl .btn{flex:1;min-height:48px;font-size:16px}.np-blok{margin:0 0 8px;font-size:13px;color:#8a4b00}.np-papier{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:#fff4dc;border:1px solid #CBA75B;color:#5a3d00;font-size:14px}body.np-otvorene{overflow:hidden}#np-msg .f-sprava{max-width:900px;margin:10px auto}" +
     ".np-sek-r{display:flex;align-items:center;gap:6px}.np-sek-r .row{flex:1}.np-x{border:0;background:none;font-size:16px;cursor:pointer;min-width:40px;min-height:40px}.np-form{margin-top:8px;padding:10px;border:1px dashed var(--line,#ddd);border-radius:10px}";
   document.head.appendChild(st);
 
