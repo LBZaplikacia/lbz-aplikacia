@@ -418,7 +418,7 @@ if (f.id === "o-stav") {
       var k = s.toLowerCase(); if (!s || vid[k]) return false; vid[k] = 1; return true;
     });
     var jePol = function (k) { return /^\s*[^\d\s].*?\s(\d+)\s*(ks|x|×)\.?\s*$/i.test(k) || /^\s*(\d+)\s*(ks|x|×)\s+\S/i.test(k); };
-    return casti.map(function (c) {
+    return casti.map(function (c, ci) {
       var text = [], pol = [];
       c.split(/\n+/).forEach(function (r) {
         r = r.trim(); if (!r) return;
@@ -431,7 +431,7 @@ if (f.id === "o-stav") {
           });
         } else text.push(r);
       });
-      return (text.length ? '<span style="display:block">' + text.map(esc).join("<br>") + "</span>" : "") +
+      return (text.length ? '<span style="display:' + (ci ? "block" : "inline") + '">' + text.map(esc).join("<br>") + "</span>" : "") +
         (pol.length ? '<span style="display:block;margin-top:4px">' + pol.map(function (p) {
           return '<span style="display:flex;justify-content:space-between;gap:10px;border-top:1px dashed rgba(88,57,52,.25);padding:3px 0"><span>' + esc(p.n) + '</span><b style="white-space:nowrap">' + esc(p.ks) + " ks</b></span>";
         }).join("") + "</span>" : "");
@@ -446,7 +446,7 @@ if (f.id === "o-stav") {
     var z = O.odbery || []; if (!z.length) return "";
     return '<section class="card o-odbery"><h3>🛍️ Osobné odbery <span class="pill num">' + z.length + "</span></h3><div class=\"rows\">" + z.map(function (o) {
       return '<div class="row o-odber"><span><b>' + esc(o.meno || "") + "</b> · " + esc(o.cislo) + "<br>" +
-        '<span class="muted">' + esc((o.polozky || []).map(function (p) { return p.ks + "× " + p.nazov; }).join(", ")) + "</span>" +
+        '<span style="display:block;margin-top:4px">' + (o.polozky || []).map(function (p) { return '<span style="display:flex;gap:8px;padding:1px 0"><b style="min-width:2.6em;text-align:right;white-space:nowrap">' + esc(p.ks) + '×</b><span>' + esc(p.nazov) + "</span></span>"; }).join("") + "</span>" +
         (o.poznamka ? '<span style="display:block;margin-top:6px;padding:6px 10px;background:#fff4cc;border-left:4px solid var(--gold);border-radius:6px;color:var(--ink);font-weight:600;white-space:pre-wrap">📝 ' + poznamkaHtml(o.poznamka) + "</span>" : "") + "</span>" +
         '<span class="num">' + esc(eur(o.suma)) + "<br>" + esc(o.platba || "") + (o.telefon ? '<br><a href="tel:' + esc(o.telefon) + '">📞</a>' : "") +
         '<br><button type="button" class="btn" style="min-height:36px;padding:6px 10px;margin-top:6px" data-c="' + esc(o.cislo) + '" onclick="window.LBZ_OBJ_STITOK && window.LBZ_OBJ_STITOK(this.dataset.c)">🏷️ Štítok</button>' + "</span></div>";
