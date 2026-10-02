@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.30.57 BETA";
+  var VERZIA = "0.30.58 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -33,7 +33,7 @@
     { kod: "kniha_jazd",      nazov: "Kniha jázd" },
     { kod: "cestovne",        nazov: "Cestovné príkazy" },
     { kod: "objednavky",      nazov: "Objednávky" },
-    { kod: "komentare",       nazov: "Komentáre FB/IG" },
+    { kod: "komentare",       nazov: "Sociálne siete FB/IG" },
     { kod: "zamestnanci",     nazov: "Zamestnanci" },
     { kod: "exporty",         nazov: "Exporty pre účtovníctvo" },
     { kod: "moje_objednavky", nazov: "Moje objednávky" },
@@ -115,6 +115,7 @@
   var DOCH = window.LBZ_DOCHADZKA || null;
   var KNIHA = window.LBZ_KNIHA || null;
   var VP = window.LBZ_VOZPARK || null;
+  var SOC = window.LBZ_SOCIALNE || null;
   var VYB = window.LBZ_VYBAVIT || null;
   var ULO = window.LBZ_ULOHY || null;
   var CHAT = window.LBZ_CHAT || null;
@@ -348,6 +349,7 @@
       if (m.kod === "dochadzka") m.aktivny = dochadzkaZapnuta();
       if (m.kod === "kniha_jazd") m.aktivny = knihaZapnuta();
       if (m.kod === "vozovy_park") m.aktivny = !!(VP && VP.mozem());
+      if (m.kod === "komentare") m.aktivny = !!(SOC && SOC.mozem());
       if (m.kod === "cestovne") m.aktivny = cestyZapnute();
       if (m.kod === "chat") m.aktivny = chatZapnuty();
       if (m.kod === "zamestnanci") { m.aktivny = zamZapnute(); KRATKO.zamestnanci = stav.rola === "zamestnanec" ? "Údaje" : "Ľudia"; if (stav.rola === "zamestnanec") m.nazov = "Moje údaje"; }
@@ -580,6 +582,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
     if (dochadzkaZapnuta() && stav.modul === "dochadzka") return '<div id="doch-root"></div>';
     if (knihaZapnuta() && stav.modul === "kniha_jazd") return '<div id="kniha-root"></div>';
       if (VP && VP.mozem() && stav.modul === "vozovy_park") return '<div id="vp-root"></div>';
+      if (SOC && SOC.mozem() && stav.modul === "komentare") return '<div id="soc-root"></div>';
     if (zamZapnute() && stav.modul === "zamestnanci") return '<div id="zam-root"></div>';
     if (cestyZapnute() && stav.modul === "cestovne") return '<div id="cp-root"></div>';
     if (chatZapnuty() && stav.modul === "chat") return '<div id="chat-root" class="chat-root"></div>';
@@ -684,6 +687,8 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
     if (kn && KNIHA) KNIHA.mount(kn);
     var vpr = document.getElementById("vp-root");
     if (vpr && VP) VP.mount(vpr);
+    var socr = document.getElementById("soc-root");
+    if (socr && SOC) SOC.mount(socr);
     var zr = document.getElementById("zam-root");
     if (zr && ZAM) ZAM.mount(zr);
     var cpr = document.getElementById("cp-root");
@@ -759,6 +764,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (window.LBZ_NAPODPIS) LBZ_NAPODPIS.nastavDb(null, null);
       if (KNIHA) KNIHA.nastavDb(null, null);
     if (VP) VP.nastavDb(null, null);
+    if (SOC) SOC.nastavDb(null, null);
       if (VYB) VYB.nastavDb(null, null);
       if (ULO) ULO.nastavDb(null, null);
       if (ZAM) ZAM.nastavDb(null, null);
@@ -822,6 +828,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (window.LBZ_NAPODPIS) LBZ_NAPODPIS.nastavDb(null, null);
       if (KNIHA) KNIHA.nastavDb(null, null);
     if (VP) VP.nastavDb(null, null);
+    if (SOC) SOC.nastavDb(null, null);
       if (VYB) VYB.nastavDb(null, null);
       if (ULO) ULO.nastavDb(null, null);
       if (ZAM) ZAM.nastavDb(null, null);
@@ -849,6 +856,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (window.LBZ_NAPODPIS) LBZ_NAPODPIS.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
       if (KNIHA) KNIHA.nastavDb(db, stav.rola);
       if (VP) VP.nastavDb(interny() ? db : null, stav.rola);
+      if (SOC) SOC.nastavDb(interny() ? db : null, stav.rola);
       if (VYB) VYB.nastavDb(db, stav.rola);
       if (ULO) ULO.nastavDb(db, stav.rola);
       // skratky z ikony appky (dlhé podržanie): ?akcia=vybavit / ?akcia=uloha
@@ -933,7 +941,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
   }
 })();
 
-// ---------- obsah upozornenia po kliknutí na push (v0.30.57, 2. 10. 2026) ----------
+// ---------- obsah upozornenia po kliknutí na push (v0.30.58, 2. 10. 2026) ----------
 // sw.js pri kliknutí na upozornenie pridá do adresy ?oznam={t,b,c}; appka ho tu ukáže v okienku
 // a uloží do zoznamu posledných 20 upozornení v tomto zariadení (localStorage lbz_oznamy).
 (function () {
