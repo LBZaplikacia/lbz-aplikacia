@@ -513,25 +513,13 @@ var obal = document.getElementById("tlac-oblast");
     gpsId = null; T.gps = null;
     try { if (zamok) zamok.release(); } catch (e) {} zamok = null;
   }
-  // pripomienka: obrazovka počas rozvozu vypnutá ≥ 3 min mimo zastávky → krátka hláška (po 8 s sama zmizne) a krátka vibrácia, bez zvuku.
-  // Nepripomína pri zákazníkovi (do 300 m od zastávky) ani keď furman odišiel z appky cez odkaz na navigáciu alebo telefonát.
-var SKRYTE = 0, SKRYTE_OK = false, ODKAZ_KLIK = 0, SPRAVA_CAS = null;
-document.addEventListener("click", function (e) { var a = e.target && e.target.closest && e.target.closest("a[href]"); if (a && /google\.[a-z.]+\/maps|maps\.google|maps\.app\.goo\.gl|waze\.com|^geo:|^tel:|^intent:/i.test(a.getAttribute("href") || "")) ODKAZ_KLIK = Date.now(); }, true);
+  // po návrate do appky (zapnutá obrazovka) znova zapnúť GPS a zámok obrazovky – bez hlášky (rozhodnutie Terézie 2. 10.)
 function rozvozBezi() {
 var tr = T.data && T.data.trasa;
 return ROLA === "furman" && sluzobny() && T.id != null && tr && tr.stav !== "ukoncena" && String(tr.datum).slice(0, 10) === dnesIso() && zastavky().some(function (x) { return x.stav === "caka"; });
 }
 document.addEventListener("visibilitychange", function () {
-if (document.hidden) {
-var vz = null; try { var az = T.gps && T.data ? aktualna() : null; vz = az ? vzdialenost(az) : null; } catch (e) {}
-SKRYTE = Date.now(); SKRYTE_OK = Date.now() - ODKAZ_KLIK < 10000 || (vz != null && vz < 300); return;
-}
-var min = SKRYTE ? Math.round((Date.now() - SKRYTE) / 60000) : 0, ok = SKRYTE_OK; SKRYTE = 0; SKRYTE_OK = false;
-if (min >= 3 && !ok && rozvozBezi()) {
-var s = { typ: "chyba", text: "📱 Obrazovka bola vypnutá " + min + " min – počas jazdy ju nechaj zapnutú." };
-T.sprava = s; prekresli(); try { if (navigator.vibrate) navigator.vibrate(200); } catch (e) {}
-clearTimeout(SPRAVA_CAS); SPRAVA_CAS = setTimeout(function () { if (T.sprava === s) { T.sprava = null; prekresli(); } }, 8000);
-}
+if (document.hidden) return;
 if (T.id != null && koren && koren.isConnected) zapniJazdu();
 });
   function klik(e) {
