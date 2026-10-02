@@ -207,7 +207,8 @@ function jazdaHtml(t) {
       (t.stav === "ukoncena" ? "" : !naMieste && !vybav ?
         '<div class="t-akt-tl">' +
         (a.telefon ? '<a class="btn t-velke-tl t-tl-tel" href="' + tel(a.telefon) + '">📞 ZAVOLAŤ</a>' : "") +
-        '<button class="btn t-velke-tl t-tl-miesto" data-t-miesto="' + esc(a.cislo) + '">📍 SOM NA MIESTE</button></div>'
+        '<button class="btn t-velke-tl t-tl-miesto" data-t-miesto="' + esc(a.cislo) + '">📍 SOM NA MIESTE</button>' +
+        (dob ? '<button class="btn t-velke-tl t-tl-plat" data-t-akcia="platba" data-c="' + esc(a.cislo) + '">💳 QR NA PLATBU ' + esc(eur(a.suma)) + "</button>" : "") + "</div>"
         : !vybav ?
         '<div class="t-akt-tl">' + (dob ? '<button class="btn t-velke-tl t-tl-plat" data-t-akcia="platba" data-c="' + esc(a.cislo) + '">💳 ZAPLATIŤ ' + esc(eur(a.suma)) + "</button>" : "") +
         '<button class="btn t-velke-tl t-tl-ok" data-t-akcia="dorucene" data-c="' + esc(a.cislo) + '">✅ DORUČENÉ</button>' +
