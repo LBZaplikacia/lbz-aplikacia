@@ -1,6 +1,6 @@
 // Service worker: appka sa otvorí aj pri slabom signáli (uložené základné súbory).
 // Pri každej novej verzii appky zvýš číslo VERZIA – zariadenia si ju stiahnu samé.
-const VERZIA = "0.30.55";
+const VERZIA = "0.30.56";
 const CACHE = "lbz-v" + VERZIA;
 const SUPABASE = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
 const SUBORY = ["./", "index.html", "styles.css", "app.js", "sklad.js", "furmanky.js", "rozpis.js", "objednavky.js", "balenie.js", "trasa.js", "dochadzka.js", "mesacny.js", "kniha.js", "vozpark.js", "vybavit.js", "zamestnanci.js", "cesty.js", "napodpis.js", "ulohy.js", "chat.js", "lib/qr.js", "lib/dialog.js", "lib/diktat.js", "lib/pdfview.js", "lib/push.js", "lib/aktivita.js", "lib/sviatky.js", "lib/podpis.js", "config.js", "manifest.webmanifest", "icons/logo.svg", "icons/icon-192.png", "icons/badge-96.png", "icons/monochrome-192.png", "vybavit.html", "manifest-vybavit.webmanifest"];
@@ -50,7 +50,9 @@ self.addEventListener("push", e => {
 });
 self.addEventListener("notificationclick", e => {
   e.notification.close();
-  const url = new URL((e.notification.data && e.notification.data.url) || "/", self.location.origin).href;
+  const u0 = new URL((e.notification.data && e.notification.data.url) || "/", self.location.origin);
+  try { u0.searchParams.set("oznam", JSON.stringify({ t: e.notification.title || "", b: e.notification.body || "", c: Date.now() })); } catch (x) { /* */ }
+  const url = u0.href;
   e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(zoz => {
     for (const c of zoz) { if (c.url.startsWith(self.location.origin)) { c.navigate(url); return c.focus(); } }
     return self.clients.openWindow(url);

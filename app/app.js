@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.30.55 BETA";
+  var VERZIA = "0.30.56 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -469,7 +469,7 @@
     var s = stav.pushStav, text = s === "zapnute" ? "✅ Na tomto zariadení sú zapnuté." : s === "zakazane" ? "🔕 Zakázané v nastaveniach telefónu – podrž prst na ikone appky → Informácie o aplikácii → Upozornenia → zapnúť." :
       s === "nepodporuje" ? (/iPhone|iPad/.test(navigator.userAgent) ? "Na iPhone fungujú, keď appku pridáš na plochu (Zdieľať → Pridať na plochu) a otvoríš ju z ikony." : "Tento prehliadač upozornenia nepodporuje.") : s ? "Na tomto zariadení sú vypnuté." : "Zisťujem…";
     return '<section class="card" style="max-width:520px"><h3>🔔 Upozornenia do mobilu</h3><p class="muted" style="margin:0">' + esc(text) + "</p>" +
-      (s === "vypnute" ? pushTlacidlo() : "") + (s === "zapnute" ? '<button class="btn" data-push-test>Poslať skúšobné upozornenie</button>' : "") +
+      (s === "vypnute" || s === "zakazane" ? pushTlacidlo() : "") + (s === "zapnute" ? '<button class="btn" data-push-test>Poslať skúšobné upozornenie</button>' : "") + '<button class="btn" type="button" onclick="window.LBZ_OZNAMY && window.LBZ_OZNAMY()">📜 Posledné upozornenia</button>' +
       (stav.pushSprava ? '<p class="muted" style="margin:0">' + esc(stav.pushSprava) + "</p>" : "") +
       '<p class="muted r-mala" style="margin:0">Upozornenia chodia na účet, ktorý je na tomto zariadení práve prihlásený. Ak ti na Samsungu/Xiaomi neprichádzajú pri zavretej appke, vypni pre Chrome šetrenie batérie (Nastavenia → Aplikácie → Chrome → Batéria → Bez obmedzení).</p></section>';
   }
@@ -931,4 +931,59 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") reg.update(); });
     }).catch(function () {});
   }
+})();
+
+// ---------- obsah upozornenia po kliknutí na push (v0.30.56, 2. 10. 2026) ----------
+// sw.js pri kliknutí na upozornenie pridá do adresy ?oznam={t,b,c}; appka ho tu ukáže v okienku
+// a uloží do zoznamu posledných 20 upozornení v tomto zariadení (localStorage lbz_oznamy).
+(function () {
+  "use strict";
+  function nacitaj() { try { return JSON.parse(localStorage.getItem("lbz_oznamy") || "[]"); } catch (x) { return []; } }
+  function uloz(z) { try { localStorage.setItem("lbz_oznamy", JSON.stringify(z.slice(0, 20))); } catch (x) { /* */ } }
+  function cas(c) { try { return new Date(c).toLocaleString("sk-SK", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }); } catch (x) { return ""; } }
+  function riadok(o, hlavny) {
+    var r = document.createElement("div");
+    r.style.cssText = hlavny ? "margin:0 0 6px" : "margin:8px 0 0;padding-top:8px;border-top:1px dashed #e4dccf;font-size:14px";
+    var t = document.createElement("div"); t.style.cssText = "font-weight:700;color:#583934" + (hlavny ? ";font-size:17px" : "");
+    t.textContent = o.t || "Legendárne buchty";
+    var b = document.createElement("div"); b.style.cssText = "white-space:pre-wrap;overflow-wrap:anywhere;margin-top:2px"; b.textContent = o.b || "";
+    var c = document.createElement("div"); c.style.cssText = "color:#8a7a74;font-size:12px;margin-top:2px"; c.textContent = cas(o.c);
+    r.appendChild(t); r.appendChild(b); r.appendChild(c);
+    return r;
+  }
+  function ukaz(o) {
+    var stare = document.getElementById("lbz-oznam"); if (stare) stare.remove();
+    var box = document.createElement("div"); box.id = "lbz-oznam";
+    box.style.cssText = "position:fixed;left:12px;right:12px;bottom:96px;z-index:9999;max-width:560px;margin:0 auto;max-height:60vh;overflow:auto;" +
+      "background:#fff;color:#2a2220;border-left:6px solid #CBA75B;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.25);padding:14px 16px;font-size:15px;line-height:1.4";
+    var hl = document.createElement("div"); hl.style.cssText = "font-size:12px;color:#8a7a74;margin-bottom:4px"; hl.textContent = "🔔 Upozornenie";
+    box.appendChild(hl);
+    if (o) box.appendChild(riadok(o, true));
+    var star = nacitaj().filter(function (x) { return !o || x.c !== o.c; }).slice(0, 10);
+    var zoz = document.createElement("div"); zoz.style.display = o ? "none" : "block";
+    if (!star.length && !o) zoz.textContent = "Zatiaľ žiadne upozornenia v tomto zariadení.";
+    star.forEach(function (x) { zoz.appendChild(riadok(x, false)); });
+    var akcie = document.createElement("div"); akcie.style.cssText = "display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap";
+    if (o && star.length) {
+      var bs = document.createElement("button"); bs.type = "button"; bs.className = "btn"; bs.textContent = "Staršie (" + star.length + ")";
+      bs.onclick = function () { zoz.style.display = zoz.style.display === "none" ? "block" : "none"; };
+      akcie.appendChild(bs);
+    }
+    var bz = document.createElement("button"); bz.type = "button"; bz.className = "btn btn-primary"; bz.textContent = "Zavrieť";
+    bz.onclick = function () { box.remove(); };
+    akcie.appendChild(bz);
+    box.appendChild(zoz); box.appendChild(akcie);
+    document.body.appendChild(box);
+  }
+  window.LBZ_OZNAMY = function () { ukaz(null); };
+  try {
+    var q = new URLSearchParams(location.search), raw = q.get("oznam");
+    if (!raw) return;
+    var o = JSON.parse(raw);
+    q.delete("oznam");
+    history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q.toString() : "") + location.hash);
+    var z = nacitaj().filter(function (x) { return x.c !== o.c; });
+    z.unshift(o); uloz(z);
+    if (document.body) ukaz(o); else document.addEventListener("DOMContentLoaded", function () { ukaz(o); });
+  } catch (x) { /* poškodený parameter – ignorovať */ }
 })();
