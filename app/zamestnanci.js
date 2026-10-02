@@ -37,6 +37,9 @@
       ["rodne_cislo", "Rodné číslo", "t"], ["cislo_op", "Číslo občianskeho preukazu", "t"], ["statna_prislusnost", "Štátna príslušnosť", "t"], ["rodinny_stav", "Rodinný stav", "t"],
       ["zdravotna_poistovna", "Zdravotná poisťovňa", "s", POISTOVNE], ["iban", "IBAN (výplata)", "t"], ["ztp", "Preukaz ZŤP", "b"],
       ["deti", "Deti (meno, priezvisko, rodné číslo – každé na riadok)", "a"], ["zakonny_zastupca", "Zákonný zástupca (ak je mladší ako 18)", "a"], ["cudzinec", "Cudzinec: štát narodenia, povolenie na pobyt", "t"]] },
+    // odmena podľa zmluvy/dohody – podklad pre výpočet miezd v appke (Terézia 2. 10. 2026); upravuje len vedenie
+    { id: "odmena", nazov: "💶 Odmena", tab: "c", citlive: true, pomer: true, polia: [
+      ["hodinova_mzda", "Hodinová mzda / odmena (€/h)", "m"], ["mesacna_mzda", "Mesačná mzda (€) – pri pracovnej zmluve", "m"]] },
     { id: "dokumenty", nazov: "📁 Dokumenty", tab: "z", pomer: true, polia: [["dokumenty_url", "Priečinok s dokumentmi (odkaz na Disk)", "u"], ["dochadzka_subor", "Stará dochádzka (ID súboru)", "t"]] }
   ];
 
@@ -222,6 +225,7 @@
     if (v == null || v === "") return '<span class="muted">—</span>';
     if (p[2] === "b") return v === true || v === "true" ? "áno" : "nie";
     if (p[2] === "d") return esc(datum(v));
+    if (p[2] === "m") return esc(Number(v).toLocaleString("sk-SK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + " €";
     if (p[2] === "u") return '<a href="' + esc(v) + '" target="_blank" rel="noopener">Otvoriť ↗</a>';
     if (p[2] === "e") return '<a href="mailto:' + esc(v) + '">' + esc(v) + "</a>";
     if (p[2] === "p") return '<a href="tel:' + esc(String(v).replace(/\s/g, "")) + '">' + esc(v) + "</a>";
@@ -237,8 +241,8 @@
       return '<select id="' + id + '" data-zm-pole="' + p[0] + '" data-zm-tab="' + sekcia.tab + '"><option value=""></option>' + opt.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (o[0] === val ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join("") + "</select>";
     }
     if (p[2] === "a") return '<textarea id="' + id + '" rows="3" data-zm-pole="' + p[0] + '" data-zm-tab="' + sekcia.tab + '">' + esc(val) + "</textarea>";
-    var typ = { d: "date", n: "number", e: "email", p: "tel", u: "url" }[p[2]] || "text";
-    return '<input id="' + id + '" type="' + typ + '" data-zm-pole="' + p[0] + '" data-zm-tab="' + sekcia.tab + '" value="' + esc(String(val).slice(0, typ === "date" ? 10 : 999)) + '"' + (p[0] === "narocnost" ? ' min="1" max="6"' : "") + ">";
+    var typ = { d: "date", n: "number", m: "number", e: "email", p: "tel", u: "url" }[p[2]] || "text";
+    return '<input id="' + id + '" type="' + typ + '" data-zm-pole="' + p[0] + '" data-zm-tab="' + sekcia.tab + '" value="' + esc(String(val).slice(0, typ === "date" ? 10 : 999)) + '"' + (p[0] === "narocnost" ? ' min="1" max="6"' : p[2] === "m" ? ' step="0.01" min="0" inputmode="decimal"' : "") + ">";
   }
   function mozemUpravit(s) {
     var d = Z.detail; if (!d) return false;
