@@ -84,7 +84,7 @@
         }).join("") + "</div>";
     }
     if (ne) h += '<div class="np-zoz"><button type="button" class="np-pol" data-mod="dochadzka" data-pm-otvor="1"><span class="np-ik" aria-hidden="true">⏳</span>' +
-      '<span class="np-t"><b>Ešte nepodpísali: ' + ne.n + "</b><small>dochádzka a stravné za " + esc(mesNazov(ne.mesiac)) + (ne.termin ? " · termín " + datumK(ne.termin) : "") + '</small></span><span class="np-sip">›</span></button></div>';
+      '<span class="np-t"><b>Ešte nepodpísali: ' + ne.n + "</b><small>" + esc([ne.doch ? "dochádzka " + ne.doch : "", ne.strav ? "stravné " + ne.strav : ""].filter(Boolean).join(" · ") || "dochádzka a stravné") + " za " + esc(mesNazov(ne.mesiac)) + (ne.termin ? " · termín " + datumK(ne.termin) : "") + '</small></span><span class="np-sip">›</span></button></div>';
     if (pr.length) {
       h += '<h4 class="np-h4">✏️ Pripomienky k dokumentom <span class="pill warn num">' + pr.length + "</span></h4>" + pr.map(function (x) {
         return '<div class="np-pr"><div><b>' + esc(x.meno) + "</b> · " + esc(x.nazov || x.dokument) + '<br><span class="np-pr-t">„' + esc(x.text) + '“</span> <small class="muted">' +

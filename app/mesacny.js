@@ -145,27 +145,32 @@
     if (!p.ok) return '<div class="empty"><span class="muted">' + esc(p.text || "Prehľad sa nedá načítať.") + "</span></div>";
     var ludia = p.ludia || [], m = p.mesiac, prebieha = m >= aktualny();
     var cakaZ = ludia.filter(function (x) { return x.stav === "caka_zamestnanec"; }).length;
+    var cakaD = ludia.filter(function (x) { return x.doch === "nie"; }).length; // dochádzku podpisuje len ten, kto v mesiaci pracoval (s103)
+    var hot = ludia.reduce(function (a, x) { return a + Number(x.hotovost || 0); }, 0);
     var cakaV = ludia.filter(function (x) { return x.stav === "caka_zamestnavatel"; });
     var vyb = cakaV.filter(function (x) { return S.vyber[x.osoba_id]; }).length;
     var sum = ludia.reduce(function (a, x) { return a + Number(x.k_vyplate || 0); }, 0);
     var h = '<section class="card pm-karta"><h3>Mesačné listy – ' + esc(mNazov(m)) + "</h3>" +
       (prebieha ? '<p class="pm-stav pm-info">Mesiac ešte prebieha – len náhľad.</p>' :
-        '<p class="pm-stav pm-info">Termín podpisu: do ' + datum(p.termin) + ". Nepodpísali: <b>" + cakaZ + "</b> · čaká na zamestnávateľa: <b>" + cakaV.length + "</b></p>") +
+        '<p class="pm-stav pm-info">Termín podpisu: do ' + datum(p.termin) + ". Nepodpísali dochádzku: <b>" + cakaD + "</b> · stravné: <b>" + cakaZ + "</b> · čaká na zamestnávateľa: <b>" + cakaV.length + "</b></p>" +
+        (p.vsetko_podpisane ? '<p class="pm-stav pm-ok">✅ Všetko za mesiac je podpísané – môžeš vyplatiť stravné v hotovosti.</p>' : "")) +
       '<div class="pm-tab-obal"><table class="pm-tab pm-tim"><thead><tr>' + (p.smiem_zamestnavatel && !prebieha ? "<th></th>" : "") +
-      "<th>Zamestnanec</th><th>Podpis</th><th>Hodiny</th><th>Stravné</th><th>Rozdiel</th><th>Záloha ďalší</th><th>K výplate</th></tr></thead><tbody>" +
+      "<th>Zamestnanec</th><th>Dochádzka</th><th>Stravné – podpis</th><th>Hodiny</th><th>Stravné</th><th>Rozdiel</th><th>Záloha ďalší</th><th>K výplate</th><th>Z cesťáku</th><th>V hotovosti</th></tr></thead><tbody>" +
       ludia.map(function (x) {
         var pod = x.stav === "podpisane" ? "✅ obaja" : x.stav === "caka_zamestnavatel" ? "✍️ zamestnanec" : x.stav === "caka_zamestnanec" ? "⏳ nie" : "–";
+        var dch = x.doch === "obaja" ? "✅ obaja" : x.doch === "zamestnanec" ? "✍️ zamestnanec" : x.doch === "nie" ? "⏳ nie" : "– nepracoval/a";
         var chk = x.stav === "caka_zamestnavatel" ? '<input type="checkbox" data-pm-vyb="' + x.osoba_id + '"' + (S.vyber[x.osoba_id] ? " checked" : "") + ">" : "";
         return "<tr>" + (p.smiem_zamestnavatel && !prebieha ? "<td>" + chk + "</td>" : "") +
-          '<td><button class="btn-link" data-pm-osoba="' + x.osoba_id + '">' + esc(x.meno) + "</button></td><td>" + pod + "</td><td>" + hod(x.min_prace) + "</td><td>" + eur(x.skutocne) +
-          "</td><td>" + eurZ(x.rozdiel) + "</td><td>" + eur(x.zaloha_dalsi) + "</td><td><b>" + eur(x.k_vyplate) + "</b></td></tr>";
+          '<td><button class="btn-link" data-pm-osoba="' + x.osoba_id + '">' + esc(x.meno) + "</button></td><td>" + dch + "</td><td>" + pod + "</td><td>" + hod(x.min_prace) + "</td><td>" + eur(x.skutocne) +
+          "</td><td>" + eurZ(x.rozdiel) + "</td><td>" + eur(x.zaloha_dalsi) + "</td><td><b>" + eur(x.k_vyplate) + "</b></td><td>" + (Number(x.cp_stravne) ? eur(x.cp_stravne) : "–") + "</td><td><b>" + eur(x.hotovost) + "</b></td></tr>";
       }).join("") +
-      '</tbody><tfoot><tr><td colspan="' + (p.smiem_zamestnavatel && !prebieha ? 7 : 6) + '">Spolu k výplate</td><td><b>' + eur(sum) + "</b></td></tr></tfoot></table></div>";
+      '</tbody><tfoot><tr><td colspan="' + (p.smiem_zamestnavatel && !prebieha ? 8 : 7) + '">Spolu k výplate</td><td><b>' + eur(sum) + "</b></td><td></td><td><b>" + eur(hot) + "</b></td></tr></tfoot></table></div>";
     var tl = "";
     if (p.smiem_zamestnavatel && !prebieha && cakaV.length) {
       tl += '<button class="btn" data-pm="vyber-vsetko">' + (vyb === cakaV.length ? "Zrušiť výber" : "Vybrať všetkých (" + cakaV.length + ")") + "</button>" +
         '<button class="btn btn-primary" data-pm="podpis-hrom"' + (vyb ? "" : " disabled") + ">✍️ Podpísať za zamestnávateľa (" + vyb + ")</button>";
     }
+    if (!prebieha) tl += '<button class="btn' + (p.vsetko_podpisane ? " btn-primary" : "") + '" data-pm="hotovost"' + (p.vsetko_podpisane ? "" : ' disabled title="Ešte nie je všetko podpísané"') + ">💶 Výplata stravného v hotovosti</button>";
     tl += '<button class="btn" data-pm="csv">⬇️ Stravné pre mzdárku (CSV)</button>';
     return h + '<div class="pm-tl">' + tl + "</div></section>";
   }
@@ -272,6 +277,24 @@
       });
   }
 
+  // výplata stravného v hotovosti – meno a suma (mesačný list + stravné z cesťáku), Terézia 2. 10. 2026
+  function hotovostTlac() {
+    var p = S.prehlad; if (!p || !p.ok) return;
+    var ludia = (p.ludia || []).filter(function (x) { return Number(x.hotovost || 0) > 0; });
+    var spolu = ludia.reduce(function (a, x) { return a + Number(x.hotovost || 0); }, 0);
+    var h = '<div style="font-family:Arial,sans-serif;font-size:11pt;color:#000"><h2 style="margin:0 0 4px">Výplata stravného v hotovosti – ' + esc(mNazov(p.mesiac)) + "</h2>" +
+      '<p style="margin:0 0 10px">V sedle u Falťanov s. r. o. · vyhotovené ' + esc(new Date().toLocaleDateString("sk-SK")) + "</p>" +
+      '<table style="border-collapse:collapse;width:100%"><thead><tr>' + ["Meno", "Suma", "Prevzal/a (podpis)"].map(function (c, i) { return '<th style="border:1px solid #000;padding:4px 6px;text-align:' + (i === 1 ? "right" : "left") + '">' + c + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      ludia.map(function (x) { return '<tr><td style="border:1px solid #000;padding:6px">' + esc(x.meno) + '</td><td style="border:1px solid #000;padding:6px;text-align:right">' + eur(x.hotovost) + '</td><td style="border:1px solid #000;padding:6px;width:40%"></td></tr>'; }).join("") +
+      '</tbody><tfoot><tr><th style="border:1px solid #000;padding:6px;text-align:left">Spolu</th><th style="border:1px solid #000;padding:6px;text-align:right">' + eur(spolu) + '</th><td style="border:1px solid #000"></td></tr></tfoot></table>' +
+      '<p style="margin:24px 0 0">Vyplatil/a: ______________________________</p></div>';
+    var obal = document.getElementById("tlac-oblast");
+    if (!obal) { obal = document.createElement("div"); obal.id = "tlac-oblast"; document.body.appendChild(obal); }
+    obal.className = ""; obal.innerHTML = h; document.body.classList.add("tlaci");
+    var hotovo = function () { document.body.classList.remove("tlaci"); obal.innerHTML = ""; window.removeEventListener("afterprint", hotovo); };
+    window.addEventListener("afterprint", hotovo);
+    setTimeout(function () { window.print(); setTimeout(hotovo, 1500); }, 80);
+  }
   function csv() {
     var p = S.prehlad; if (!p || !p.ok) return;
     var r = [["Meno", "Mesiac", "Dni práce", "Hodiny", "Stravné skutočné", "Záloha (podpísaná)", "Rozdiel", "Záloha na ďalší mesiac", "Stravné k výplate", "Podpis zamestnanca", "Podpis zamestnávateľa"]];
@@ -310,6 +333,7 @@
       }
       case "podpis-hrom": podpisZamestnavatel(Object.keys(S.vyber).filter(function (k) { return S.vyber[k]; }).map(Number)); return;
       case "csv": csv(); return;
+      case "hotovost": hotovostTlac(); return;
     }
   }
   function zmena(e) {
@@ -336,7 +360,9 @@
           mesiac: m,
           moj: l && l.ok && l.stav === "caka_zamestnanec" ? { termin: l.termin, k_vyplate: l.stravne && l.stravne.k_vyplate } : null,
           zamestnavatel: p && p.ok ? p.ludia.filter(function (y) { return y.stav === "caka_zamestnavatel"; }).length : 0,
-          nepodpisali: p && p.ok ? p.ludia.filter(function (y) { return y.stav === "caka_zamestnanec"; }).length : 0,
+          nepodpisali: p && p.ok ? p.ludia.filter(function (y) { return y.stav === "caka_zamestnanec" || y.doch === "nie"; }).length : 0,
+          nep_doch: p && p.ok ? p.ludia.filter(function (y) { return y.doch === "nie"; }).length : 0,
+          nep_strav: p && p.ok ? p.ludia.filter(function (y) { return y.stav === "caka_zamestnanec"; }).length : 0,
           termin: p && p.ok ? p.termin : null,
           vyr: x[2] && x[2].ok ? x[2].ludia.filter(function (y) { return y.tpp && Math.abs(y.zostatok_min || 0) >= 60; }).map(function (y) { return { meno: y.meno, min: y.zostatok_min }; }) : []
         };
@@ -376,7 +402,7 @@
   document.head.appendChild(st);
 
   window.LBZ_MESACNY = {
-    nepodpisali: function () { var d = S.karta && S.karta.d; return d && d.nepodpisali ? { n: d.nepodpisali, termin: d.termin, mesiac: d.mesiac } : null; },
+    nepodpisali: function () { var d = S.karta && S.karta.d; return d && d.nepodpisali ? { n: d.nepodpisali, doch: d.nep_doch, strav: d.nep_strav, termin: d.termin, mesiac: d.mesiac } : null; },
     nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; S.moja = undefined; S.list = null; S.prehlad = null; S.karta = null; S.pohlad = null; },
     mount: function (el, o) {
       if (S.el !== el) {
