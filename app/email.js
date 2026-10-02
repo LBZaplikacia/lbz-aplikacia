@@ -5,7 +5,9 @@
 
   var DB = null, ROLA = null, koren = null;
   var S = { stitok: "INBOX", hladaj: "", d: null, dalej: null, nacitavam: false, chyba: null, vlakno: null, nacitavamV: false,
-            pis: null, posielam: false, sprava: null, schranka: "" };
+            pis: null, posielam: false, sprava: null, schranka: "", kat: "", obj: {}, navrhujem: false };
+  var KAT = { objednavka: ["Objednávka", "#2e7d32"], reklamacia: ["Reklamácia", "#c62828"], otazka: ["Otázka", "#1565c0"], faktura: ["Faktúra", "#6d4c41"],
+             spolupraca: ["Spolupráca", "#8e24aa"], newsletter: ["Newsletter", "#757575"], spam: ["Spam", "#9e9e9e"], ine: ["Iné", "#9e9e9e"] };
   var STITKY = [["INBOX", "Doručené"], ["UNREAD", "Neprečítané"], ["DRAFT", "Koncepty"], ["STARRED", "S hviezdičkou"], ["SENT", "Odoslané"], ["", "Všetky"], ["TRASH", "Kôš"]];
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -134,13 +136,18 @@
     if (S.chyba) return h + '<p class="em-chyba">' + esc(S.chyba) + "</p>";
     if (!S.d) return h + '<p class="muted">Načítavam…</p>';
     if (!S.d.length) return h + '<div class="em-prazdne">Žiadne e-maily.</div>';
-    h += '<div class="em-zoznam">' + S.d.map(function (v) {
+    var pocty = {}; S.d.forEach(function (v) { if (v.kategoria) pocty[v.kategoria] = (pocty[v.kategoria] || 0) + 1; });
+    if (Object.keys(pocty).length) h += '<div class="em-filtre em-kat"><button class="chip' + (!S.kat ? " active" : "") + '" data-em-kat="">Všetko</button>' +
+      Object.keys(KAT).filter(function (k) { return pocty[k]; }).map(function (k) { return '<button class="chip' + (S.kat === k ? " active" : "") + '" data-em-kat="' + k + '">' + KAT[k][0] + " " + pocty[k] + "</button>"; }).join("") + "</div>";
+    var lst = S.kat ? S.d.filter(function (v) { return v.kategoria === S.kat; }) : S.d;
+    h += '<div class="em-zoznam">' + lst.map(function (v) {
       if (v.koncept) return '<button class="em-pol" data-em-koncept="' + esc(v.id) + '">' +
         '<div class="em-r1"><span class="em-od"><span class="em-kon">Koncept</span> ' + esc(v.komu ? meno(v.komu) : "(bez príjemcu)") + "</span><small>" + esc(kedy(v.datum)) + "</small></div>" +
         '<div class="em-pred">' + esc(v.predmet || "(bez predmetu)") + '</div><div class="em-uk">' + esc(String(v.text || "").slice(0, 140)) + "</div></button>";
       return '<button class="em-pol' + (v.neprecitane ? " em-nep" : "") + '" data-em-id="' + esc(v.id) + '">' +
         '<div class="em-r1"><span class="em-od">' + esc(meno(v.od)) + (v.pocet > 1 ? ' <small>(' + v.pocet + ")</small>" : "") + "</span><small>" + (v.prilohy ? "📎 " : "") + esc(kedy(v.datum)) + "</small></div>" +
-        '<div class="em-pred">' + esc(v.predmet || "(bez predmetu)") + "</div><div class=\"em-uk\">" + esc(v.ukazka || "") + "</div></button>";
+        '<div class="em-pred">' + (v.kategoria && KAT[v.kategoria] ? '<span class="em-stit" style="background:' + KAT[v.kategoria][1] + '">' + KAT[v.kategoria][0] + "</span> " : "") +
+        ((v.objednavky || []).length ? '<span class="em-objc">📦 ' + esc(v.objednavky.join(", ")) + "</span> " : "") + esc(v.predmet || "(bez predmetu)") + "</div><div class=\"em-uk\">" + esc(v.ukazka || "") + "</div></button>";
     }).join("") + "</div>";
     if (S.dalej) h += '<div class="em-tl"><button class="btn ghost" data-em="dalsie"' + (S.nacitavam ? " disabled" : "") + ">" + (S.nacitavam ? "Načítavam…" : "Načítať staršie") + "</button></div>";
     return h;
@@ -160,7 +167,14 @@
         '<small class="muted">Komu: ' + esc(m.komu) + (m.kopia ? " · Kópia: " + esc(m.kopia) : "") + "</small>" + telo +
         (m.prilohy.length ? '<div class="em-pril">' + m.prilohy.map(function (p, j) { return '<button class="chip" data-em-pril="' + i + ":" + j + '">📎 ' + esc(p.nazov) + " · " + velkost(p.velkost) + "</button>"; }).join("") + "</div>" : "") + "</div>";
     }).join("");
-    if (!S.pis) h += '<div class="em-tl"><button class="btn" data-em="odpoved">↩ Odpovedať</button><button class="btn ghost" data-em="preposlat">↪ Preposlať</button></div>';
+    var cisla = []; v.spravy.forEach(function (m) { (String(m.predmet || "") + " " + String(m.text || "")).replace(/\b[A-Z]\d{6,8}\b/g, function (c) { if (cisla.indexOf(c) < 0) cisla.push(c); }); });
+    if (cisla.length) h += '<div class="em-obj">' + cisla.slice(0, 5).map(function (c) {
+      var o = S.obj[c];
+      return '<div class="em-objk"><button class="chip" data-em-obj="' + c + '">📦 ' + c + "</button>" +
+        (o === "…" ? ' <small class="muted">načítavam…</small>' : o ? (o.ok ? ' <span><b>' + esc(o.stav || "?") + "</b>" + (o.termin ? " · rozvoz " + esc(o.termin) : "") + (o.meno ? " · " + esc(o.meno) : "") + (o.doprava ? " · " + esc(o.doprava) : "") + "</span>" : ' <small class="em-chyba">' + esc(o.text) + "</small>") : "") + "</div>";
+    }).join("") + "</div>";
+    if (!S.pis) h += '<div class="em-tl"><button class="btn" data-em="ainavrh"' + (S.navrhujem ? " disabled" : "") + ">" + (S.navrhujem ? "✨ Píšem návrh…" : "✨ Návrh odpovede (AI)") + "</button>" +
+      '<button class="btn ghost" data-em="odpoved">↩ Odpovedať</button><button class="btn ghost" data-em="preposlat">↪ Preposlať</button></div>';
     return h;
   }
   function kresliPis() {
@@ -193,8 +207,11 @@
 
   // ---------- udalosti ----------
   function klik(e) {
-    var t = e.target.closest("[data-em],[data-em-id],[data-em-koncept],[data-em-stitok],[data-em-pril],[data-em-zrus]"); if (!t || !koren.contains(t)) return;
+    var t = e.target.closest("[data-em],[data-em-id],[data-em-koncept],[data-em-stitok],[data-em-pril],[data-em-zrus],[data-em-kat],[data-em-obj]"); if (!t || !koren.contains(t)) return;
     var d = t.dataset;
+    if (d.emKat !== undefined) { S.kat = d.emKat; kresli(); return; }
+    if (d.emObj) { var c = d.emObj; S.obj[c] = "…"; kresli();
+      volaj({ akcia: "objednavka", cislo: c }).then(function (o) { S.obj[c] = o; kresli(); }).catch(function (er) { S.obj[c] = { ok: false, text: chyba(er) }; kresli(); }); return; }
     if (d.emId) { S.pis = null; otvor(d.emId); return; }
     if (d.emKoncept) {
       var k = (S.d || []).filter(function (x) { return x.id === d.emKoncept; })[0]; if (!k) return;
@@ -203,7 +220,7 @@
                 vlakno: k.vlakno || null, in_reply_to: k.in_reply_to || null, references: k.references || null, koncept: k.id };
       kresli(); return;
     }
-    if (d.emStitok !== undefined) { S.stitok = d.emStitok; S.hladaj = ""; S.vlakno = null; nacitaj(); return; }
+    if (d.emStitok !== undefined) { S.stitok = d.emStitok; S.hladaj = ""; S.kat = ""; S.vlakno = null; nacitaj(); return; }
     if (d.emPril) { var x = d.emPril.split(":"), m = S.vlakno.spravy[+x[0]]; stiahni(m.id, m.prilohy[+x[1]]); return; }
     if (d.emZrus) { citajPole(); S.pis.prilohy.splice(+d.emZrus, 1); kresli(); return; }
     switch (d.em) {
@@ -212,6 +229,11 @@
       case "dalsie": nacitaj(true); return;
       case "novy": S.vlakno = null; novy("novy"); return;
       case "odpoved": novy("odpoved"); return;
+      case "ainavrh": if (!S.vlakno || S.navrhujem) return; S.navrhujem = true; S.sprava = null; kresli();
+        volaj({ akcia: "ai_navrh", id: S.vlakno.id }).then(function (d) {
+          S.navrhujem = false; novy("odpoved"); if (S.pis) { S.pis.text = (d.navrh || "") + S.pis.text; kresli(); }
+          S.sprava = { typ: "ok", text: "Návrh od AI je v odpovedi – skontroluj a uprav pred odoslaním." }; kresli();
+        }).catch(function (er) { S.navrhujem = false; S.sprava = { typ: "chyba", text: "Návrh sa nepodaril: " + chyba(er) }; kresli(); }); return;
       case "preposlat": novy("preposlat"); return;
       case "zrusit": S.pis = null; S.sprava = null; kresli(); return;
       case "odosli": odosli(); return;
@@ -242,7 +264,8 @@
     ".em-pril{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.em-pis{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px}" +
     ".em-pis h3{margin:0 0 8px}.em-pis label{display:block;font-size:.85em;color:var(--muted);margin-bottom:6px}.em-pis label input{margin-top:2px;color:var(--text,inherit)}" +
     ".em-file{cursor:pointer}.em-pozn{font-size:.82em}.em-hlaska{padding:8px 10px;border-radius:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}" +
-    ".em-kon{color:var(--warn);font-weight:700;font-size:.85em}.em-ok{background:var(--accent-soft)}.em-chyba.em-hlaska{background:var(--warn-soft);color:inherit}.em-x{all:unset;cursor:pointer;font-size:1.1em;padding:0 4px}";
+    ".em-kon{color:var(--warn);font-weight:700;font-size:.85em}.em-stit{display:inline-block;color:#fff;font-size:.72em;font-weight:700;border-radius:6px;padding:1px 6px;vertical-align:middle}" +
+    ".em-objc{font-size:.8em;color:var(--muted)}.em-kat{margin-top:-2px}.em-obj{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:10px;display:flex;flex-direction:column;gap:6px}.em-objk{font-size:.9em}.em-ok{background:var(--accent-soft)}.em-chyba.em-hlaska{background:var(--warn-soft);color:inherit}.em-x{all:unset;cursor:pointer;font-size:1.1em;padding:0 4px}";
   document.head.appendChild(st);
 
   window.LBZ_EMAIL = {
