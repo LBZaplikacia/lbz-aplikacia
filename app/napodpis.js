@@ -373,7 +373,7 @@
         h += '<div class="np-form"><label class="field"><span class="label">Druh</span><select id="np-p-druh">' + DRUH_PODPIS.map(function (d) { return '<option value="' + d[0] + '">' + esc(d[1]) + "</option>"; }).join("") + "</select></label>" +
           '<label class="field"><span class="label">Názov (uvidí ho zamestnanec)</span><input type="text" id="np-p-naz" maxlength="150" placeholder="napr. Dohoda o brigádnickej práci študentov"></label>' +
           '<p class="muted" style="margin:0 0 6px">Zmluva, dohoda, dodatok: zamestnanec v appke len potvrdí, že si ich prečítal – originál podpíšete na papieri. GDPR a iné dokumenty podpíše v appke.</p>' +
-          '<label class="field"><span class="label">Termín</span><input type="date" id="np-p-ter"></label>' +
+          '<label class="field"><span class="label">Termín (prázdne = deň pred nástupom)</span><input type="date" id="np-p-ter"></label>' +
           '<label class="field"><span class="label">Súbor PDF</span><input type="file" id="np-p-sub" accept="application/pdf"></label>' +
           '<div class="np-tl"><button type="button" class="btn btn-primary" data-np-sek="podpis-ok" data-os="' + os + '"' + (st.prace ? " disabled" : "") + ">" + (st.prace ? "Posielam…" : "✍️ Poslať na podpis") + "</button>" +
           '<button type="button" class="btn" data-np-sek="zrus" data-os="' + os + '">Zrušiť</button></div></div>';
