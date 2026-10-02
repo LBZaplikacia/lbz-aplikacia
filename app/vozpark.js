@@ -50,19 +50,17 @@
       var txt = p.stav === "neplatna" ? "platnosť skončila " + datum(p.platne_do)
         : p.stav === "skoro" ? "platí len do " + datum(p.platne_do)
         : "nemá zaevidovanú diaľničnú známku";
-      h += '<div class="row"><span><b>' + esc(p.nazov) + "</b>" + (p.spz ? ' <span class="muted">' + esc(p.spz) + "</span>" : "") + "</span><span>" + esc(txt) + "</span></div>";
-      if (p.akcia) h += '<div class="muted" style="margin:-2px 0 6px">Najbližšia akcia: <b>' + datum(p.akcia) + "</b></div>";
+      h += '<div style="font-size:13px;line-height:1.35;margin-top:3px"><b>' + esc(p.nazov) + "</b>" + (p.spz ? ' <span class="muted">' + esc(p.spz) + "</span>" : "") + " – " + esc(txt) + (p.akcia ? ' <span class="muted">(akcia ' + datum(p.akcia) + ")</span>" : "") + "</div>";
     });
     var nadpis = najhorsie === "neplatna" ? "⚠️ Skontrolujte diaľničnú známku – vypršala platnosť"
       : najhorsie === "chyba" ? "⚠️ Skontrolujte diaľničnú známku" : "⚠️ Diaľničná známka čoskoro vyprší";
-    return '<section class="card vp-upoz" style="border:2px solid #b3261e;background:rgba(179,38,30,.06)">' +
-      '<h3 style="color:#b3261e">' + nadpis + "</h3>" +
-      '<div class="rows">' + h + "</div>" +
-      '<p class="muted" style="margin:6px 0 10px">Bez platnej známky sa nesmie ísť po diaľnici ani rýchlostnej ceste – hrozí pokuta.</p>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-      '<a class="btn btn-primary" href="' + EZNAMKA + '" target="_blank" rel="noopener">🛒 Kúpiť známku na eznamka.sk</a>' +
-      (u.modul ? '<button class="btn" data-mod="vozovy_park">🚐 Vozový park</button>' : "") +
-      "</div></section>";
+    return '<section class="card vp-upoz" style="border:1px solid #b3261e;border-left:5px solid #b3261e;background:rgba(179,38,30,.06);padding:8px 12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
+      '<b style="color:#b3261e;font-size:14px">' + nadpis + "</b>" +
+      '<span style="display:flex;gap:6px">' +
+      '<a class="btn" style="padding:4px 10px;font-size:13px" href="' + EZNAMKA + '" target="_blank" rel="noopener">🛒 Kúpiť</a>' +
+      (u.modul ? '<button class="btn" style="padding:4px 10px;font-size:13px" data-mod="vozovy_park">🚐 Detail</button>' : "") +
+      "</span></div>" + h + "</section>";
   }
 
   // ---------- modul ----------
