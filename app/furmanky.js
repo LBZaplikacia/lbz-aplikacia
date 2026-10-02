@@ -474,7 +474,7 @@ function smsKandidati() {
         (F.data && F.data.furmanka && F.data.furmanka.rozvoz ? '<div class="f-mini f-trasa-obj"><label class="f-check"><input type="checkbox" data-f-prio="' + esc(o.cislo) + '"' + (o.priorita ? " checked" : "") + "> ⭐ Priorita</label>" +
           '<label>Vykládka <input class="f-vykl" inputmode="numeric" data-f-vykl="' + esc(o.cislo) + '" value="' + (o.vykladka_min != null ? esc(o.vykladka_min) : "") + '" placeholder="' + (jeDobierka(o) ? 10 : 5) + '"> min</label>' +
           '<span class="muted">' + (o.poradie_pevne ? "poradie " + esc(o.poradie) + ". (pevné)" : "poradie auto") + "</span></div>" : "") +
-        (o.poznamka || o.upozornenie ? '<div class="f-pozn">' + HLAVICKA[8][1](o) + "</div>" : "") +
+        (window.LBZ_POZN ? window.LBZ_POZN(o.poznamka, o.upozornenie) : (o.poznamka || o.upozornenie ? '<div class="f-pozn">' + HLAVICKA[8][1](o) + "</div>" : "")) +
         '<div class="rows">' + pol.map(function (p) {
           return '<div class="row"' + (p.farba ? ' style="background:' + esc(p.farba) + ';color:#1d1412"' : "") + "><span>" + esc(p.nazov) + "</span>" +
             '<input class="f-ks" inputmode="decimal" aria-label="Počet ' + esc(p.nazov) + '" data-f-bunka="' + esc(o.cislo) + '" data-kod="' + esc(p.kod) + '" value="' + esc(p.ks) + '"></div>';

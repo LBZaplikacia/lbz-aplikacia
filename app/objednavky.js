@@ -133,7 +133,7 @@ nacitajSms(cislo);
           '<td class="o-st" style="--st:' + esc(farbaStavu(o.status, farby)) + '">' + esc(o.status || "–") + "</td>" +
           '<td class="o-dop">' + dopravaPill(o.doprava) + (o.platba_nazov || o.platba ? '<div class="o-plat">' + esc(o.platba_nazov || o.platba) + "</div>" : "") + "</td>" +
           '<td class="o-zak"><span class="o-link">' + esc(o.meno || "") + "</span>" + (o.email ? ' <span class="muted">' + esc(o.email) + "</span>" : "") +
-            (o.poznamka ? '<div class="o-pozn">' + esc(o.poznamka) + "</div>" : "") + (stitky ? '<div class="o-stitky">' + stitky + "</div>" : "") + "</td>" +
+            window.LBZ_POZN(o.poznamka, o.upozornenie) + (stitky ? '<div class="o-stitky">' + stitky + "</div>" : "") + "</td>" +
           '<td class="o-dat">' + esc(dat(o.vytvorena)) + "</td>" +
           '<td class="num o-suma">' + esc(eur(o.suma)) + "</td>" +
           '<td class="o-dok">' + (o.faktura ? '<span class="o-fa">' + esc(o.faktura) + "</span>" + (o.zaplatena ? ' <span class="o-zapl" title="Zaplatená">✓</span>' : "") : '<span class="muted">–</span>') +
@@ -435,8 +435,13 @@ if (f.id === "o-stav") {
         (pol.length ? '<span style="display:block;margin-top:4px">' + pol.map(function (p) {
           return '<span style="display:flex;justify-content:space-between;gap:10px;border-top:1px dashed rgba(88,57,52,.25);padding:3px 0"><span>' + esc(p.n) + '</span><b style="white-space:nowrap">' + esc(p.ks) + " ks</b></span>";
         }).join("") + "</span>" : "");
-    }).join('<span style="display:block;border-top:2px solid var(--gold);margin:6px 0"></span>');
+    }).join('<span style="display:block;height:6px"></span>');
   }
+  // jednotný blok poznámky (poznámka zákazníka, interná z Upgates, doplnená v appke, upozornenie) – všade rovnako
+  window.LBZ_POZN = function () {
+    var t = [].slice.call(arguments).filter(Boolean).join(" | ");
+    return t ? '<span class="lbz-pozn" style="display:block;margin-top:6px;padding:6px 10px;background:#fff4cc;border-left:4px solid var(--gold);border-radius:6px;color:var(--ink);font-weight:600;font-size:14px;line-height:1.4;overflow-wrap:anywhere;text-align:left">📝 ' + poznamkaHtml(t) + "</span>" : "";
+  };
   function kartaOdbery() {
     if (!DB) return "";
     if (O.odbery === null) {
@@ -447,7 +452,7 @@ if (f.id === "o-stav") {
     return '<section class="card o-odbery"><h3>🛍️ Osobné odbery <span class="pill num">' + z.length + "</span></h3><div class=\"rows\">" + z.map(function (o) {
       return '<div class="row o-odber"><span><b>' + esc(o.meno || "") + "</b> · " + esc(o.cislo) + "<br>" +
         '<span style="display:block;margin-top:4px">' + (o.polozky || []).map(function (p) { return '<span style="display:flex;gap:8px;padding:1px 0"><b style="min-width:2.6em;text-align:right;white-space:nowrap">' + esc(p.ks) + '×</b><span>' + esc(p.nazov) + "</span></span>"; }).join("") + "</span>" +
-        (o.poznamka ? '<span style="display:block;margin-top:6px;padding:6px 10px;background:#fff4cc;border-left:4px solid var(--gold);border-radius:6px;color:var(--ink);font-weight:600;white-space:pre-wrap">📝 ' + poznamkaHtml(o.poznamka) + "</span>" : "") + "</span>" +
+        window.LBZ_POZN(o.poznamka, o.upozornenie) + "</span>" +
         '<span class="num">' + esc(eur(o.suma)) + "<br>" + esc(o.platba || "") + (o.telefon ? '<br><a href="tel:' + esc(o.telefon) + '">📞</a>' : "") +
         '<br><button type="button" class="btn" style="min-height:36px;padding:6px 10px;margin-top:6px" data-c="' + esc(o.cislo) + '" onclick="window.LBZ_OBJ_STITOK && window.LBZ_OBJ_STITOK(this.dataset.c)">🏷️ Štítok</button>' + "</span></div>";
     }).join("") + "</div></section>";
