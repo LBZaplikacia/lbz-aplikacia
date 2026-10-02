@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.30.58 BETA";
+  var VERZIA = "0.30.59 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -44,7 +44,7 @@
   // ikony modulov (bočná lišta na PC, spodná lišta v mobile)
   var IKONY = {
     prehlad: "🏠", chat: "💬", sklad: "🧊", furmanky: "🚚", balenie: "📦", trasa: "🗺️", rozpis: "📅", dochadzka: "🕒", kniha_jazd: "🚗", vozovy_park: "🚐",
-    objednavky: "🧾", cestovne: "🧾", komentare: "💬", zamestnanci: "👥", exporty: "📊", moje_objednavky: "🛍️", sledovanie: "📍", nastavenia: "⚙️"
+    objednavky: "🧾", cestovne: "🧾", komentare: "💬", zamestnanci: "👥", exporty: "📊", moje_objednavky: "🛍️", sledovanie: "📍", newsletter: "📰", nastavenia: "⚙️"
   };
   // jednotné čiarové ikony (SVG) – lišta na PC aj v mobile
   var P = {
@@ -65,6 +65,7 @@
     exporty: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     moje_objednavky: '<path d="M6 7h12l-1 14H7z"/><path d="M9 7a3 3 0 0 1 6 0"/>',
     sledovanie: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+    newsletter: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
     nastavenia: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
     viac: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'
   };
@@ -78,7 +79,7 @@
     majitelka_arealu: ["aktivita", "odbery", "prehlad", "kniha_jazd"], zakaznik: ["prehlad", "moje_objednavky", "sledovanie"]
   };
   var KRATKO = { cestovne: "Cesťák", rozpis: "Rozpis", balenie: "Balenie", trasa: "Trasa", dochadzka: "Dochádzka", kniha_jazd: "Jazdy", zamestnanci: "Ľudia", komentare: "Komentáre",
-    exporty: "Exporty", moje_objednavky: "Objednávky", sledovanie: "Furmanka", nastavenia: "Účet" };
+    exporty: "Exporty", newsletter: "Newsletter", moje_objednavky: "Objednávky", sledovanie: "Furmanka", nastavenia: "Účet" };
 
   var PRISTUPY = {
     it: MODULY.map(function (m) { return m.kod; }),
@@ -116,6 +117,7 @@
   var KNIHA = window.LBZ_KNIHA || null;
   var VP = window.LBZ_VOZPARK || null;
   var SOC = window.LBZ_SOCIALNE || null;
+  var NL = window.LBZ_NEWSLETTER || null;
   var VYB = window.LBZ_VYBAVIT || null;
   var ULO = window.LBZ_ULOHY || null;
   var CHAT = window.LBZ_CHAT || null;
@@ -350,6 +352,7 @@
       if (m.kod === "kniha_jazd") m.aktivny = knihaZapnuta();
       if (m.kod === "vozovy_park") m.aktivny = !!(VP && VP.mozem());
       if (m.kod === "komentare") m.aktivny = !!(SOC && SOC.mozem());
+      if (m.kod === "newsletter") m.aktivny = !!(NL && NL.mozem());
       if (m.kod === "cestovne") m.aktivny = cestyZapnute();
       if (m.kod === "chat") m.aktivny = chatZapnuty();
       if (m.kod === "zamestnanci") { m.aktivny = zamZapnute(); KRATKO.zamestnanci = stav.rola === "zamestnanec" ? "Údaje" : "Ľudia"; if (stav.rola === "zamestnanec") m.nazov = "Moje údaje"; }
@@ -583,6 +586,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
     if (knihaZapnuta() && stav.modul === "kniha_jazd") return '<div id="kniha-root"></div>';
       if (VP && VP.mozem() && stav.modul === "vozovy_park") return '<div id="vp-root"></div>';
       if (SOC && SOC.mozem() && stav.modul === "komentare") return '<div id="soc-root"></div>';
+      if (NL && NL.mozem() && stav.modul === "newsletter") return '<div id="nl-root"></div>';
     if (zamZapnute() && stav.modul === "zamestnanci") return '<div id="zam-root"></div>';
     if (cestyZapnute() && stav.modul === "cestovne") return '<div id="cp-root"></div>';
     if (chatZapnuty() && stav.modul === "chat") return '<div id="chat-root" class="chat-root"></div>';
@@ -689,6 +693,8 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
     if (vpr && VP) VP.mount(vpr);
     var socr = document.getElementById("soc-root");
     if (socr && SOC) SOC.mount(socr);
+    var nlr = document.getElementById("nl-root");
+    if (nlr && NL) NL.mount(nlr);
     var zr = document.getElementById("zam-root");
     if (zr && ZAM) ZAM.mount(zr);
     var cpr = document.getElementById("cp-root");
@@ -765,6 +771,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (KNIHA) KNIHA.nastavDb(null, null);
     if (VP) VP.nastavDb(null, null);
     if (SOC) SOC.nastavDb(null, null);
+    if (NL) NL.nastavDb(null, null);
       if (VYB) VYB.nastavDb(null, null);
       if (ULO) ULO.nastavDb(null, null);
       if (ZAM) ZAM.nastavDb(null, null);
@@ -829,6 +836,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (KNIHA) KNIHA.nastavDb(null, null);
     if (VP) VP.nastavDb(null, null);
     if (SOC) SOC.nastavDb(null, null);
+    if (NL) NL.nastavDb(null, null);
       if (VYB) VYB.nastavDb(null, null);
       if (ULO) ULO.nastavDb(null, null);
       if (ZAM) ZAM.nastavDb(null, null);
@@ -857,6 +865,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (KNIHA) KNIHA.nastavDb(db, stav.rola);
       if (VP) VP.nastavDb(interny() ? db : null, stav.rola);
       if (SOC) SOC.nastavDb(interny() ? db : null, stav.rola);
+      if (NL) NL.nastavDb(interny() ? db : null, stav.rola);
       if (VYB) VYB.nastavDb(db, stav.rola);
       if (ULO) ULO.nastavDb(db, stav.rola);
       // skratky z ikony appky (dlhé podržanie): ?akcia=vybavit / ?akcia=uloha

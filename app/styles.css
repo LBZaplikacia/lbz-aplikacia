@@ -1494,3 +1494,18 @@ section.card { grid-template-columns: minmax(0, 1fr); }
 .d-vyber-zam select, .cp-vyber-zam select { width: 100%; min-height: 48px; font-size: 18px; font-weight: 700; color: #583934; background: #fff; border: 2px solid #583934; border-radius: 10px; padding: 6px 10px; }
 .zam-banner { display: flex; align-items: center; gap: 8px; background: #583934; color: #fff; border-radius: 12px; padding: 10px 14px; font-size: 17px; margin: 10px 0 0; }
 .zam-banner b { color: #ffe7a8; }
+
+/* ---------- Newsletter (v0.30.59) ---------- */
+.nl { display: grid; gap: 14px; }
+.nl-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; }
+.nl-auto { display: grid; gap: 12px; }
+.nl-a { border-top: 1px solid var(--line); padding-top: 10px; display: grid; gap: 4px; }
+.nl-a:first-child { border-top: 0; padding-top: 0; }
+.nl-a-h { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.nl-a-k { font-size: 13px; }
+.nl-a-p { font-size: 14px; line-height: 1.45; }
+.nl-r { align-items: center; flex-wrap: wrap; }
+.nl-r-p { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.nl-mini { padding: 2px 8px; font-size: 12px; min-height: 0; height: auto; line-height: 1.4; border-radius: 6px; }
+.nl-frame { width: 100%; height: 1500px; border: 1px solid var(--line); border-radius: var(--radius); background: #fff; }
+@media (max-width: 620px) { .nl-frame { height: 2600px; } }
