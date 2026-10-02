@@ -1,11 +1,11 @@
-// LBZ aplikácia – ✉️ Email (Gmail) – zákaznícky servis (eshop@), CEO a IT (ceo@) – s107, vzhľad ako Gmail v0.30.70
+// LBZ aplikácia – ✉️ Email (Gmail) – zákaznícky servis (eshop@), CEO a IT (ceo@) – s107, vzhľad ako Gmail v0.30.71 (priečinky v menu)
 // Celá schránka cez Edge Function „gmail“ (servisný účet s delegovaním). Odosiela sa len kliknutím človeka.
 (function () {
   "use strict";
 
   var DB = null, ROLA = null, koren = null;
   var S = { stitok: "INBOX", hladaj: "", d: null, dalej: null, nacitavam: false, chyba: null, vlakno: null, nacitavamV: false,
-            pis: null, posielam: false, sprava: null, schranka: "", kat: "", obj: {}, navrhujem: false, pocty: null };
+            pis: null, posielam: false, sprava: null, schranka: "", kat: "", obj: {}, navrhujem: false, pocty: null, menu: false };
   var KAT = { objednavka: ["Objednávka", "#2e7d32"], reklamacia: ["Reklamácia", "#c62828"], otazka: ["Otázka", "#1565c0"], faktura: ["Faktúra", "#6d4c41"],
              spolupraca: ["Spolupráca", "#8e24aa"], newsletter: ["Newsletter", "#757575"], spam: ["Spam", "#9e9e9e"], ine: ["Iné", "#9e9e9e"] };
   // [štítok, názov, ikona, ktorý počet ukázať (ako Gmail: pri Doručených neprečítané, inde celkový počet)]
@@ -14,6 +14,14 @@
   var FARBY = ["#c0392b", "#8e44ad", "#2471a3", "#138d75", "#b9770e", "#6d4c41", "#ad1457", "#00838f"];
   function farba(t) { var h = 0; t = String(t || ""); for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return FARBY[Math.abs(h) % FARBY.length]; }
   function inicial(od) { var m = meno(od).replace(/[^A-Za-zÀ-ž0-9]/g, ""); return (m.charAt(0) || "?").toUpperCase(); }
+  function cislo(n) { return Number(n || 0).toLocaleString("sk-SK"); }
+  // počet pri priečinku: pri Doručených a Spame tučne neprečítané / všetky, inde všetky vlákna
+  function pocetHtml(s, kratko) {
+    var p = S.pocty && S.pocty[s[0]]; if (!p) return "";
+    var nep = (s[0] === "INBOX" || s[0] === "SPAM") && p.neprec ? p.neprec : 0;
+    if (kratko) return ' <b class="em-poc">' + cislo(nep || p.spolu) + "</b>";
+    return (nep ? "<b>" + cislo(nep) + "</b> / " : "") + cislo(p.spolu);
+  }
   var RE_OBJ = /\b[Ff][Oo0]\d{6}\b/g;   // čísla objednávok FO003654 (aj fo… / F0…)
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -140,14 +148,15 @@
   function hlaska() { return S.sprava ? '<div class="em-hlaska em-' + S.sprava.typ + '">' + esc(S.sprava.text) + ' <button class="em-x" data-em="zavri" aria-label="Zavrieť">×</button></div>' : ""; }
   function kresliZoznam() {
     var schr = S.schranka || (ROLA === "zakaznicky_servis" ? "eshop@legendarnebuchty.sk" : "ceo@legendarnebuchty.sk");
-    var h = '<form class="em-hladaj" data-em-form="hladaj" role="search"><span class="em-lupa" aria-hidden="true">🔍</span>' +
-      '<input id="em-q" type="search" aria-label="Hľadať v pošte" placeholder="Hľadať v pošte · ' + esc(schr) + '" value="' + esc(S.hladaj) + '">' +
-      (S.hladaj ? '<button class="em-x" type="button" data-em="zrushladaj" aria-label="Zrušiť hľadanie">×</button>' : "") + "</form>" + hlaska();
-    h += '<div class="em-filtre em-pas">' + STITKY.map(function (s) {
-      var p = S.pocty && s[3] && S.pocty[s[0]] ? S.pocty[s[0]][s[3]] : 0;
-      return '<button class="chip em-st' + (S.stitok === s[0] && !S.hladaj ? " active" : "") + '" data-em-stitok="' + s[0] + '">' + s[2] + " " + s[1] +
-        (p ? ' <b class="em-poc">' + (p > 999 ? "999+" : p) + "</b>" : "") + "</button>";
-    }).join("") + "</div>";
+    var akt = STITKY.filter(function (s) { return s[0] === S.stitok; })[0] || STITKY[0];
+    var h = '<div class="em-lista"><div class="em-menu-w"><button class="em-menu-b" type="button" data-em="menu" aria-haspopup="menu" aria-expanded="' + (S.menu ? "true" : "false") + '">' +
+      (S.hladaj ? "🔍 Výsledky" : akt[2] + " " + akt[1] + pocetHtml(akt, true)) + ' <span aria-hidden="true">▾</span></button>' +
+      (S.menu ? '<div class="em-menu" role="menu"><div class="em-menu-s">' + esc(schr) + "</div>" + STITKY.map(function (s) {
+        return '<button role="menuitem" class="em-mi' + (S.stitok === s[0] && !S.hladaj ? " active" : "") + '" data-em-stitok="' + s[0] + '"><span>' + s[2] + " " + s[1] + '</span><span class="em-mi-p">' + pocetHtml(s) + "</span></button>";
+      }).join("") + "</div>" : "") + "</div>" +
+      '<form class="em-hladaj" data-em-form="hladaj" role="search"><span class="em-lupa" aria-hidden="true">🔍</span>' +
+      '<input id="em-q" type="search" aria-label="Hľadať v pošte ' + esc(schr) + '" placeholder="Hľadať v pošte" value="' + esc(S.hladaj) + '">' +
+      (S.hladaj ? '<button class="em-x" type="button" data-em="zrushladaj" aria-label="Zrušiť hľadanie">×</button>' : "") + "</form></div>" + hlaska();
     if (S.chyba) return h + '<p class="em-chyba">' + esc(S.chyba) + "</p>";
     if (!S.d) return h + '<p class="muted">Načítavam…</p>';
     if (!S.d.length) return h + '<div class="em-prazdne">Žiadne e-maily.</div>';
@@ -224,8 +233,10 @@
 
   // ---------- udalosti ----------
   function klik(e) {
+    if (S.menu && !e.target.closest(".em-menu-w")) { S.menu = false; kresli(); }
     var t = e.target.closest("[data-em],[data-em-id],[data-em-koncept],[data-em-stitok],[data-em-pril],[data-em-zrus],[data-em-kat],[data-em-obj]"); if (!t || !koren.contains(t)) return;
     var d = t.dataset;
+    if (S.menu && d.em !== "menu") S.menu = false;
     if (d.emKat !== undefined) { S.kat = d.emKat; kresli(); return; }
     if (d.emObj) { var c = d.emObj; S.obj[c] = "…"; kresli();
       volaj({ akcia: "objednavka", cislo: c }).then(function (o) { S.obj[c] = o; kresli(); }).catch(function (er) { S.obj[c] = { ok: false, text: chyba(er) }; kresli(); }); return; }
@@ -243,6 +254,7 @@
     switch (d.em) {
       case "spat": S.vlakno = null; S.pis = null; S.sprava = null; kresli(); if (!S.d) nacitaj(); return;
       case "zavri": S.sprava = null; kresli(); return;
+      case "menu": S.menu = !S.menu; kresli(); return;
       case "zrushladaj": S.hladaj = ""; S.kat = ""; nacitaj(); return;
       case "dalsie": nacitaj(true); return;
       case "novy": S.vlakno = null; novy("novy"); return;
@@ -281,6 +293,12 @@
     ".em-fab{position:fixed;right:18px;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:6;border:0;border-radius:16px;padding:14px 20px;font:inherit;font-weight:700;cursor:pointer;" +
     "background:var(--accent-soft,#f5ecd9);color:inherit;box-shadow:0 3px 10px rgba(0,0,0,.25)}@media (min-width:761px){.em-fab{bottom:28px;right:32px}}" +
     ".em{padding-bottom:80px}" +
+    ".em-lista{display:flex;gap:8px;align-items:center;margin-bottom:8px}.em-lista .em-hladaj{flex:1;margin:0;min-width:0}" +
+    ".em-menu-w{position:relative;flex:0 0 auto}.em-menu-b{border:1px solid var(--line);background:var(--surface);color:inherit;border-radius:24px;padding:10px 12px;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.06)}" +
+    ".em-menu{position:absolute;left:0;top:calc(100% + 4px);z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.18);min-width:250px;padding:6px}" +
+    ".em-menu-s{font-size:.8em;color:var(--muted);padding:4px 12px 6px}.em-mi{all:unset;box-sizing:border-box;display:flex;justify-content:space-between;gap:16px;width:100%;padding:9px 12px;border-radius:8px;cursor:pointer}" +
+    ".em-mi:hover,.em-mi.active{background:var(--accent-soft)}.em-mi.active{font-weight:700}.em-mi-p{color:var(--muted);white-space:nowrap}.em-mi-p b{color:var(--text,inherit)}" +
+    ".em-kat{margin-bottom:6px}.em-kat .chip{padding:3px 10px;font-size:.8em;min-height:0;line-height:1.6}" +
     ".em-hladaj input,.em-pis input,.em-pis textarea{flex:1;width:100%;box-sizing:border-box;font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:inherit}" +
     ".em-zoznam{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}" +
     ".em-pol{all:unset;cursor:pointer;display:block;padding:9px 12px;border-bottom:1px solid var(--line)}.em-pol:last-child{border-bottom:0}.em-pol:focus-visible{outline:2px solid var(--accent)}" +
