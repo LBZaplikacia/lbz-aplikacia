@@ -661,7 +661,7 @@ else if (live && live.ok === false) info = '<p class="f-sprava f-chyba">' + esc(
 else if (!a) info = '<p class="muted">📍 Poloha furmana zatiaľ nie je. Zobrazí sa, keď furman v deň rozvozu otvorí trasu v appke (po potvrdení súhlasu).' + (live ? "" : " Načítavam…") + "</p>";
 else {
 var vek = Math.round((Date.now() - new Date(a.kedy).getTime()) / 60000);
-info = '<p>📍 Poloha auta z <b class="num">' + esc(cas(a.kedy)) + "</b>" + (vek >= 5 ? ' <span class="b-st b-st-odl">⚠️ pred ' + vek + " min – furman možno nemá otvorenú appku alebo je bez signálu</span>" : ' <span class="muted">· obnovuje sa každých 30 s</span>') + "</p>";
+info = '<p>📍 Poloha auta z <b class="num">' + esc(cas(a.kedy)) + "</b>" + (a.zdroj === "gps_auta" ? ' <span class="b-st">📡 z GPS v aute – telefón furmana teraz polohu neposiela</span>' : "") + (vek >= 5 ? ' <span class="b-st b-st-odl">⚠️ pred ' + vek + " min – furman možno nemá otvorenú appku alebo je bez signálu</span>" : ' <span class="muted">· obnovuje sa každých 30 s</span>') + "</p>";
 }
 var m = live && live.meskanie_s != null ? Math.round(live.meskanie_s / 60) : null, posun = m ? m * 60000 : 0;
 var dal = live && live.dalsia ? najdi(live.dalsia) : null;
@@ -706,7 +706,7 @@ html: '<span style="display:flex;align-items:center;justify-content:center;width
 });
 if (caka.length > 1) L.polyline(caka, { color: "#583934", weight: 2, opacity: 0.5, dashArray: "6 6" }).addTo(ZM.vrstva);
 if (live && live.cesta) { var c = dekoduj(live.cesta); L.polyline(c, { color: "#583934", weight: 8, opacity: 0.3 }).addTo(ZM.vrstva); L.polyline(c, { color: "#d1a73a", weight: 5, opacity: 0.95 }).addTo(ZM.vrstva); }
-if (a) { var pa = [a.lat, a.lng]; body.push(pa); L.marker(pa, { icon: L.icon({ iconUrl: FIAT, iconSize: [72, 68], iconAnchor: [36, 60] }), zIndexOffset: 1000 }).bindTooltip("Furman · poloha z " + esc(cas(a.kedy))).addTo(ZM.vrstva); }
+if (a) { var pa = [a.lat, a.lng]; body.push(pa); L.marker(pa, { icon: L.icon({ iconUrl: FIAT, iconSize: [72, 68], iconAnchor: [36, 60] }), zIndexOffset: 1000 }).bindTooltip("Furman · poloha z " + esc(cas(a.kedy)) + (a.zdroj === "gps_auta" ? " (GPS v aute)" : "")).addTo(ZM.vrstva); }
 var kluc = T.id + (a ? "a" : "");
 if (ZM.fitId !== kluc && body.length) { ZM.fitId = kluc; if (body.length === 1) ZM.mapa.setView(body[0], 13, { animate: false }); else ZM.mapa.fitBounds(body, { padding: [30, 30], maxZoom: 15, animate: false }); }
 }
