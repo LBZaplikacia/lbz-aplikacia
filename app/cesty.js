@@ -162,12 +162,15 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
     var p = C.pod || {}, cp = (p.cp && p.cp.podpisy) || [], ho = (p.hot && p.hot.podpisy) || [];
     var ma = function (l, rola) { return l.filter(function (x) { return x.rola === rola; }).slice(-1)[0]; };
     var txt = function (x) { return x ? "✅ " + esc(x.meno || "") + " " + esc(new Date(x.cas).toLocaleDateString("sk-SK")) : "–"; };
-    var zz = ma(cp, "zamestnanec"), zv = ma(cp, "zamestnavatel"), hz = ma(ho, "zamestnanec");
+    var zz = ma(cp, "zamestnanec"), zv = ma(cp, "zamestnavatel"), hz = ma(ho, "zamestnanec"), pv = ma((p.pov && p.pov.podpisy) || [], "zamestnavatel");
     return '<section class="card cp-podpisy"><h3>✍️ Podpisy – ' + esc(meno()) + " – " + esc(mesiacNazov(C.m)) + "</h3>" +
-      '<div class="rows"><div class="row"><span>Cestovný príkaz – zamestnanec</span><span>' + txt(zz) + "</span></div>" +
+      '<div class="rows"><div class="row"><span>Povolenie ciest na mesiac (vopred) – zamestnávateľ</span><span>' + txt(pv) + "</span></div>" +
+      '<div class="row"><span>Cestovný príkaz – zamestnanec</span><span>' + txt(zz) + "</span></div>" +
       '<div class="row"><span>Cestovný príkaz – schválil (zamestnávateľ)</span><span>' + txt(zv) + "</span></div>" +
       '<div class="row"><span>Stravné ' + eur(sumStr) + " prevzaté v hotovosti</span><span>" + txt(hz) + "</span></div></div>" +
       '<div class="cp-akcie">' +
+        (d.spravca && !pv ? '<button class="btn btn-primary" data-cp="podpis-pov">✍️ Podpísať povolenie ciest na ' + esc(mesiacNazov(C.m)) + "</button>" : "") +
+        (p.pov && p.pov.pdf ? '<button class="btn" data-cp="pdf-pov">📄 Povolenie ciest (PDF)</button>' : "") +
         (zz ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Podpísané</span>' : zmenyMes().length ? '<span class="muted">⏳ Podpis až po schválení úprav (' + zmenyMes().length + ")</span>" : '<button class="btn btn-primary" data-cp="podpis-cp">✍️ Podpísať cestovný príkaz</button>') +
         (d.spravca && zmenyMes().length && !zv ? '<span class="muted">⏳ Najprv schváľ alebo zamietni úpravy hore</span>' : d.spravca ? (zv ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Schválené zamestnávateľom</span>' : '<button class="btn" data-cp="podpis-cp-v">✍️ Schváliť a podpísať za zamestnávateľa</button>') : "") +
         (Number(sumStr) > 0 ? (hz ? '<span class="cp-podpisane" style="color:#2e7d32;font-weight:600;white-space:nowrap">✅ Hotovosť prevzatá</span>' : '<button class="btn" data-cp="podpis-hot">💶 Potvrdiť prevzatie hotovosti</button>') : "") +
@@ -329,6 +332,8 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
     else if (a === "podpis-cp-v") { if (lbzPotvrd("Podpisuješ za zamestnávateľa cestovný príkaz: " + meno() + " – " + mesiacNazov(C.m) + ". Pokračovať?")) podpis("cp", "zamestnavatel"); }
     else if (a === "podpis-hot") podpis("hotovost", "zamestnanec");
     else if (a === "podpis-hot-v") { if (lbzPotvrd("Potvrdzuješ vyplatenie stravného: " + meno() + " – " + mesiacNazov(C.m) + ". Pokračovať?")) podpis("hotovost", "zamestnavatel"); }
+    else if (a === "podpis-pov") { if (lbzPotvrd("Podpisuješ povolenie pracovných ciest na " + mesiacNazov(C.m) + ": " + meno() + ". Pokračovať?")) podpis("cp_povolenie", "zamestnavatel"); }
+    else if (a === "pdf-pov" && C.pod && C.pod.pov && C.pod.pov.pdf) lbzPodpis.otvor(DB, C.pod.pov.pdf.cesta, C.pod.pov.pdf.nazov);
     else if (a === "pdf-cp" && C.pod && C.pod.cp && C.pod.cp.pdf) lbzPodpis.otvor(DB, C.pod.cp.pdf.cesta, C.pod.cp.pdf.nazov);
     else if (a === "pdf-hot" && C.pod && C.pod.hot && C.pod.hot.pdf) lbzPodpis.otvor(DB, C.pod.hot.pdf.cesta, C.pod.hot.pdf.nazov);
   }
@@ -345,13 +350,14 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
   // dokumenty na podpis: cp:<osoba>:<YYYY-MM> (cestovný príkaz) a hotovost:<osoba>:<YYYY-MM> (prevzatie stravného v hotovosti)
   function dokCp() { return "cp:" + C.d.osoba_id + ":" + C.m.slice(0, 7); }
   function dokHot() { return "hotovost:" + C.d.osoba_id + ":" + C.m.slice(0, 7); }
+  function dokPov() { return "cp_povolenie:" + C.d.osoba_id + ":" + C.m.slice(0, 7); }
   function sucetStr() { return ((C.d && C.d.cesty) || []).reduce(function (s, c) { return s + Number(c.stravne || 0); }, 0); }
   function nacitajPodpisy() {
     if (!window.lbzPodpis || !C.d || !C.d.osoba_id) return;
     var m = C.m, os = C.d.osoba_id;
-    Promise.all([lbzPodpis.nacitaj(DB, dokCp()), lbzPodpis.nacitaj(DB, dokHot())]).then(function (r) {
+    Promise.all([lbzPodpis.nacitaj(DB, dokCp()), lbzPodpis.nacitaj(DB, dokHot()), lbzPodpis.nacitaj(DB, dokPov())]).then(function (r) {
       if (C.m !== m || !C.d || C.d.osoba_id !== os) return;
-      C.pod = { cp: r[0] && r[0].ok ? r[0] : null, hot: r[1] && r[1].ok ? r[1] : null, kluc: m + os }; kresli();
+      C.pod = { cp: r[0] && r[0].ok ? r[0] : null, hot: r[1] && r[1].ok ? r[1] : null, pov: r[2] && r[2].ok ? r[2] : null, kluc: m + os }; kresli();
     }).catch(function () { /* */ });
   }
   function obsahCp() { return JSON.stringify(((C.d && C.d.cesty) || []).map(function (c) { return [c.datum, c.zaciatok, c.koniec, c.km, c.stravne, (c.body || []).map(function (b) { return [b.miesto, b.min || 0]; })]; })); }
@@ -365,6 +371,14 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
     });
   }
   function podpisMoznosti(typ, rola) {
+    if (typ === "cp_povolenie") return {
+      db: DB, typ: typ, rola: "zamestnavatel", osoba: C.d.osoba_id, dokument: dokPov(),
+      nazov: "Povolenie pracovných ciest " + mesiacNazov(C.m) + " – " + meno(), subor: "povolenie_ciest_" + C.m.slice(0, 7),
+      titul: "Povolenie pracovných ciest", vyhlasenie: "Povoľujem zamestnancovi " + meno() + " opakované pracovné cesty na " + mesiacNazov(C.m) + " za podmienok uvedených v povolení.",
+      obsah: "povolenie|" + C.d.osoba_id + "|" + C.m.slice(0, 7),
+      html: function (pod) { return povolenieHtml(pod); },
+      poPodpise: null
+    };
     var hot = typ === "hotovost", suma = eur(sucetStr());
     return {
       db: DB, typ: typ, rola: rola, osoba: C.d.osoba_id, dokument: hot ? dokHot() : dokCp(),
@@ -382,17 +396,36 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
   function dokument(osoba, mesiac, typ, rola) {
     return rpc("cp_mesiac", { p_mesiac: mesiac, p_osoba: osoba }).then(function (d) {
       if (!d || !d.ok) throw new Error((d && d.text) || "Nenačítané");
-      function s(fn) { var b = { d: C.d, m: C.m }; C.d = d; C.m = mesiac; try { return fn(); } finally { C.d = b.d; C.m = b.m; } }
+      function s(fn) { var b = { d: C.d, m: C.m, p: C.pod }; C.d = d; C.m = mesiac; C.pod = null; try { return fn(); } finally { C.d = b.d; C.m = b.m; C.pod = b.p; } }
       return {
-        html: function (pod) { return s(function () { return typ === "hotovost" ? hotovostHtml(pod) : tlacHtml(pod); }); },
+        html: function (pod) { return s(function () { return typ === "cp_povolenie" ? povolenieHtml(pod) : typ === "hotovost" ? hotovostHtml(pod) : tlacHtml(pod); }); },
         podpisat: function () {
           var o = s(function () { return podpisMoznosti(typ, rola || "zamestnanec"); });
-          o.html = function (pod) { return s(function () { return typ === "hotovost" ? hotovostHtml(pod) : tlacHtml(pod); }); };
+          o.html = function (pod) { return s(function () { return typ === "cp_povolenie" ? povolenieHtml(pod) : typ === "hotovost" ? hotovostHtml(pod) : tlacHtml(pod); }); };
           o.poPodpise = null;
           return lbzPodpis.podpisat(o);
         }
       };
     });
+  }
+  // povolenie pracovných ciest na mesiac – zamestnávateľ podpisuje vopred (§ 3 ods. 1 a 3 z. 283/2002 Z. z.), Terézia 2. 10. 2026
+  function povolenieHtml(pod) {
+    var P = window.lbzPodpis, o = (C.d && C.d.osoba) || {};
+    var sl = function (rola, popis) { return P ? P.slot(pod, rola, popis) : '<span class="pdp-slot">.............................................<br>' + esc(popis) + "</span>"; };
+    var p = C.m.split("-"), od = new Date(+p[0], +p[1] - 1, 1), doo = new Date(+p[0], +p[1], 0);
+    var dt = function (d) { return d.getDate() + ". " + (d.getMonth() + 1) + ". " + d.getFullYear(); };
+    var r = function (a, b) { return "<tr><th style=\"width:38%\">" + a + "</th><td>" + b + "</td></tr>"; };
+    return "<h1>POVOLENIE PRACOVNÝCH CIEST</h1><p>hromadné na mesiac <b>" + esc(mesiacNazov(C.m)) + "</b> – opakované pracovné cesty (§ 3 ods. 1 a 3 zákona č. 283/2002 Z. z. o cestovných náhradách)</p>" +
+      "<table>" + r("Zamestnávateľ", esc(ZAMESTNAVATEL)) + r("Zamestnanec", "<b>" + esc(meno()) + "</b>" + (o.bydlisko ? ", " + esc(o.bydlisko) : "")) +
+      r("Obdobie", dt(od) + " – " + dt(doo)) +
+      r("Miesto začiatku a skončenia cesty", "Sedlo Zbojská (Zbojská 1960/14, Tisovec)") +
+      r("Miesto plnenia pracovných úloh", "miesta doručenia podľa rozpisu trás (rozvoz objednávok) na území Slovenskej republiky, prípadne nákup tovaru a materiálu") +
+      r("Účel cesty", "rozvoz tovaru (buchty) zákazníkom, nákup tovaru a materiálu") +
+      r("Čas začiatku a skončenia", "podľa rozpisu smien a trás na daný deň; skutočný čas sa zaznamená v cestovnom príkaze (vyúčtovaní)") +
+      r("Dopravný prostriedok", "služobné motorové vozidlo – náhrada za km sa neposkytuje") +
+      r("Stravné", "podľa § 5 zákona č. 283/2002 Z. z.") + r("Ubytovanie", "neposkytuje sa (cesty sú jednodňové)") + r("Preddavok", "0,00 €") + "</table>" +
+      "<p>Vyúčtovanie jednotlivých ciest sa vykonáva hromadne v cestovnom príkaze za mesiac.</p>" +
+      '<div class="pdp-riadok"><span></span>' + sl("zamestnavatel", "dátum a podpis zamestnávateľa, ktorý cesty povolil") + "</div>";
   }
   function hotovostHtml(pod) {
     var suma = eur(sucetStr());
@@ -446,8 +479,9 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
       "<thead><tr><th>Začiatok cesty (miesto, dátum, hodina)</th><th>Miesto rokovania (trasa)</th><th>Účel cesty</th><th>Koniec cesty (miesto, dátum)</th></tr></thead><tbody>" + povolenie + "</tbody></table>" +
       '<div class="cp-tl-blok"><table class="cp-tl-info"><tr><th>Spolucestujúci</th><td>–</td><th>Určený dopravný prostriedok</th><td>' + esc(doprava) + " – náhrada za km sa neposkytuje</td></tr>" +
       "<tr><th>Predpokladaná suma výdavkov</th><td>stravné podľa § 5 zákona č. 283/2002 Z. z.</td><th>Povolený preddavok</th><td>0,00 €</td></tr></table>" +
-      // povolenie: každá cesta je povolená automaticky (Terézia 2. 10. 2026) – zamestnávateľ podpisuje len vyúčtovanie raz za mesiac
-      '<div class="pdp-riadok"><span></span><span class="pdp-slot"><b>Povolené automaticky</b> – každá cesta podľa rozpisu trás<br>za zamestnávateľa: ' + esc(ZAMESTNAVATEL.split(",")[0]) + "</span></div></div>" +
+      // povolenie: samostatný dokument cp_povolenie podpísaný zamestnávateľom na začiatku mesiaca (s106)
+      '<div class="pdp-riadok"><span></span>' + (C.pod && C.pod.pov && C.pod.pov.podpisy && C.pod.pov.podpisy.length && P ? P.slot(C.pod.pov.podpisy, "zamestnavatel", "povolené vopred – samostatné povolenie ciest na mesiac") :
+        '<span class="pdp-slot">Povolené vopred samostatným povolením pracovných ciest na ' + esc(mesiacNazov(C.m)) + "<br>(podpis zamestnávateľa)</span>") + "</div></div>" +
       '<div class="cp-tl-blok"><h2>2. Správa o výsledku pracovných ciest</h2>' +
       '<p class="cp-tl-p">Rozvoz objednávok zákazníkom podľa trás – ' + cesty.length + " ciest, spolu " + esc(kmSpolu) + ". Tovar bol doručený podľa trás uvedených vyššie.</p>" +
       '<div class="pdp-riadok"><span></span>' + sl("zamestnanec", "dátum a podpis zamestnanca") + "</div></div>" +

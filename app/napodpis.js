@@ -11,7 +11,7 @@
   var MES = ["január", "február", "marec", "apríl", "máj", "jún", "júl", "august", "september", "október", "november", "december"];
   var MIESTA = { "ZBOJSKÁ": "Zbojská", "ROZVOZ": "Rozvoz", "SLUŽOBKA": "Služobka", "OBCHOD": "Služobka", "BUCHTOMOBIL": "Buchťáč", "ADMINISTRATÍVA": "Administratíva" };
   var TYPY = { praca: "Odpracované", dovolenka: "Dovolenka", pn: "PN", ocr: "OČR", lekar: "Lekár", nv: "Náhradné voľno" };
-  var IKONA = { dochadzka: "🕒", stravne: "🍽️", cp: "🧾", hotovost: "💶", absencia: "🏖️", dokument: "📄" };
+  var IKONA = { dochadzka: "🕒", stravne: "🍽️", cp: "🧾", cp_povolenie: "🧾", hotovost: "💶", absencia: "🏖️", dokument: "📄" };
   var DRUH_PODPIS = [["zmluva", "Pracovná zmluva"], ["dohoda", "Dohoda"], ["dodatok", "Dodatok"], ["gdpr", "GDPR / súhlas"], ["oboznamenie", "Oboznámenie (predpis, pravidlá)"], ["ine", "Iný dokument"]];
   var DRUH_NAHRAJ = ["Potvrdenie o návšteve školy", "Súhlas zákonného zástupcu", "Priepustka od lekára", "Potvrdenie o zdravotnej spôsobilosti / zdravotný preukaz",
     "Potvrdenie z úradu práce / Sociálnej poisťovne", "Vyhlásenie na zdaňovanie (NČZD)"];
@@ -79,7 +79,7 @@
         '<p class="muted np-pozn">Zamestnanec už podpísal. Otvor dokument, skontroluj ho, ak treba ✏️ uprav a potom podpíš prstom.</p><div class="np-zoz">' +
         zv.map(function (x, i) {
           return '<button type="button" class="np-pol" data-np-otvorv="' + i + '"><span class="np-ik" aria-hidden="true">' + (IKONA[x.typ] || "📄") + "</span>" +
-            '<span class="np-t"><b>' + esc(x.meno || "") + " · " + esc(nazov(x)) + "</b><small>" + esc(x.typ === "hotovost" ? "potvrď vyplatenie" : "zamestnanec podpísal " + (x.podpisal ? new Date(x.podpisal).toLocaleDateString("sk-SK") : "")) +
+            '<span class="np-t"><b>' + esc(x.meno || "") + " · " + esc(nazov(x)) + "</b><small>" + esc(x.typ === "hotovost" ? "potvrď vyplatenie" : x.typ === "cp_povolenie" ? "podpíš vopred – raz za mesiac" : "zamestnanec podpísal " + (x.podpisal ? new Date(x.podpisal).toLocaleDateString("sk-SK") : "")) +
             '</small></span><span class="np-sip">›</span></button>';
         }).join("") + "</div>";
     }
@@ -188,7 +188,7 @@
     var o = S.o, x = o.x, os = osM(), p;
     if (x.typ === "dochadzka") p = rpc("dochadzka_mesiac", { p_osoba: os, p_mesiac: x.mesiac }).then(function (d) { if (!d || d.ok === false) throw new Error((d && d.text) || "Nenačítané"); return d; });
     else if (x.typ === "stravne") p = rpc("mesacny_list", { p_osoba: os, p_mesiac: x.mesiac }).then(function (l) { if (!l || !l.ok) throw new Error((l && l.text) || "Nenačítané"); return l; });
-    else if (x.typ === "cp" || x.typ === "hotovost") p = window.LBZ_CESTY && LBZ_CESTY.dokument ? LBZ_CESTY.dokument(os, x.mesiac, x.typ, o.v ? "zamestnavatel" : "zamestnanec") : Promise.reject(new Error("Obnov appku"));
+    else if (x.typ === "cp" || x.typ === "hotovost" || x.typ === "cp_povolenie") p = window.LBZ_CESTY && LBZ_CESTY.dokument ? LBZ_CESTY.dokument(os, x.mesiac, x.typ, o.v ? "zamestnavatel" : "zamestnanec") : Promise.reject(new Error("Obnov appku"));
     else if (x.typ === "absencia") p = Promise.resolve({ a: { id: x.id, typ: x.druh, od: x.od, do: x.do, cas_od: x.cas_od, cas_do: x.cas_do, poznamka: x.poznamka, stav: x.stav } });
     else if (x.typ === "dokument") p = DB.storage.from("zamestnanci").download(x.cesta).then(function (r) {
       if (r.error || !r.data) throw r.error || new Error("Súbor sa nenašiel");
@@ -206,7 +206,7 @@
     if (d) {
       if (x.typ === "dochadzka") h = dochHtml(x, d.riadky || [], null, !o.hotovo && !o.v);
       else if (x.typ === "stravne") h = stravHtml(d, null);
-      else if (x.typ === "cp" || x.typ === "hotovost") h = d.html(null);
+      else if (x.typ === "cp" || x.typ === "hotovost" || x.typ === "cp_povolenie") h = d.html(null);
       else if (x.typ === "absencia") h = window.LBZ_DOCHADZKA && LBZ_DOCHADZKA.listokHtml ? LBZ_DOCHADZKA.listokHtml(d.a, meno(), null) : "";
       else if (x.typ === "dokument") h = '<div class="np-pdf" id="np-pdf"><p class="muted">Načítavam dokument…</p></div>' +
         (papier(x) ? '<p class="np-papier">📄 Tento dokument si len prečítaj a potvrď. <b>Originál podpíšeš vlastnoručne na papieri</b> – pripraví ti ho vedenie.</p>' : "") +
@@ -311,7 +311,7 @@
         obsah: JSON.stringify([d.dokument, s.skutocne, s.zaloha, s.zaloha_dalsi, ((s.plan_dalsi || {}).smeny || []).map(function (r) { return [r.datum, r.miesto, r.min, r.suma]; })]),
         html: function (pod) { return stravHtml(d, pod); } }));
     }
-    else if (x.typ === "cp" || x.typ === "hotovost") pr = d.podpisat();
+    else if (x.typ === "cp" || x.typ === "hotovost" || x.typ === "cp_povolenie") pr = d.podpisat();
     else if (x.typ === "absencia") pr = window.LBZ_DOCHADZKA && LBZ_DOCHADZKA.listokPodpis ? LBZ_DOCHADZKA.listokPodpis(d.a, m, os, zak.rola) : Promise.resolve({ ok: false, text: "Obnov appku" });
     else if (x.typ === "dokument") pr = P.podpisat(Object.assign(zak, { typ: "dokument", dokument: x.dokument, nazov: x.nazov + " – " + m, subor: "dokument_" + x.id,
       titul: papier(x) ? "Potvrdenie o prečítaní" : oboz(x) ? "Potvrdenie o oboznámení" : "Podpis dokumentu",
@@ -454,7 +454,7 @@
   function vUpravit(x) {
     zavri(true);
     if ((x.typ === "dochadzka" || x.typ === "stravne") && window.LBZ_DOCHADZKA && LBZ_DOCHADZKA.otvorOsobu) { LBZ_DOCHADZKA.otvorOsobu(x.osoba_id, x.mesiac); if (window.lbzOtvorModul) lbzOtvorModul("dochadzka"); }
-    else if ((x.typ === "cp" || x.typ === "hotovost") && window.LBZ_CESTY && LBZ_CESTY.otvor) { LBZ_CESTY.otvor(x.osoba_id, x.mesiac); if (window.lbzOtvorModul) lbzOtvorModul("cestovne"); }
+    else if ((x.typ === "cp" || x.typ === "hotovost" || x.typ === "cp_povolenie") && window.LBZ_CESTY && LBZ_CESTY.otvor) { LBZ_CESTY.otvor(x.osoba_id, x.mesiac); if (window.lbzOtvorModul) lbzOtvorModul("cestovne"); }
   }
 
   // ---------- kliky ----------
