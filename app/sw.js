@@ -3,7 +3,7 @@
 const VERZIA = "0.30.31";
 const CACHE = "lbz-v" + VERZIA;
 const SUPABASE = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
-const SUBORY = ["./", "index.html", "styles.css", "app.js", "sklad.js", "furmanky.js", "rozpis.js", "objednavky.js", "balenie.js", "trasa.js", "dochadzka.js", "mesacny.js", "kniha.js", "vozpark.js", "vybavit.js", "zamestnanci.js", "cesty.js", "ulohy.js", "chat.js", "lib/qr.js", "lib/dialog.js", "lib/diktat.js", "lib/pdfview.js", "lib/push.js", "lib/aktivita.js", "lib/sviatky.js", "lib/podpis.js", "config.js", "manifest.webmanifest", "icons/logo.svg", "icons/icon-192.png", "icons/badge-96.png", "icons/monochrome-192.png", "vybavit.html", "manifest-vybavit.webmanifest"];
+const SUBORY = ["./", "index.html", "styles.css", "app.js", "sklad.js", "furmanky.js", "rozpis.js", "objednavky.js", "balenie.js", "trasa.js", "dochadzka.js", "mesacny.js", "kniha.js", "vozpark.js", "vybavit.js", "zamestnanci.js", "cesty.js", "napodpis.js", "ulohy.js", "chat.js", "lib/qr.js", "lib/dialog.js", "lib/diktat.js", "lib/pdfview.js", "lib/push.js", "lib/aktivita.js", "lib/sviatky.js", "lib/podpis.js", "config.js", "manifest.webmanifest", "icons/logo.svg", "icons/icon-192.png", "icons/badge-96.png", "icons/monochrome-192.png", "vybavit.html", "manifest-vybavit.webmanifest"];
 self.addEventListener("install", e => {
   self.skipWaiting(); // nová verzia sa zapne hneď, nečaká na zatvorenie appky
   e.waitUntil(caches.open(CACHE).then(c => {

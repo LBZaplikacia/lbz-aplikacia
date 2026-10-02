@@ -521,7 +521,9 @@
       var kPush = kartaPush();
       var moje = mojeModuly(), kody = moje.map(function (m) { return m.kod; });
       if (dochadzkaZapnuta()) kh.dochadzka = DOCH.karta();
-      if (dochadzkaZapnuta() && window.LBZ_MESACNY) { var kPm = LBZ_MESACNY.karta(); if (kPm) kh.podpis = kPm; }
+      // mesačné listy – prehľad tímu pre vedenie; zamestnanec podpisuje v karte „Máš podpísať“ (napodpis.js)
+      if (dochadzkaZapnuta() && window.LBZ_MESACNY && (spravca() || !window.LBZ_NAPODPIS)) { var kPm = LBZ_MESACNY.karta(); if (kPm) kh.podpis = kPm; }
+      var kNp = window.LBZ_NAPODPIS ? LBZ_NAPODPIS.karta() : "";
       if (ULO) kh.ulohy = ULO.karta();
       if (kody.indexOf("sklad") > -1) kh.sklad = kartaSklad();
       if (kody.indexOf("rozpis") > -1 && rozpisZapnuty()) kh.rozpis = ROZ.karta();
@@ -542,6 +544,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
         '<p class="muted" style="margin:0">Ráta sa, kým máš appku otvorenú a pracuješ v nej. Po 5 min nečinnosti, minimalizovaní alebo zavretí sa zastaví.</p></section>';
       var por = poradieKariet(Object.keys(kh).filter(function (k) { return kh[k]; }));
       var karty = (kh.schvalenie ? ["schvalenie"] : []).concat(por.viditelne.filter(function (k) { return k !== "schvalenie"; })).map(function (k) { return kh[k]; });
+      if (kNp) karty.unshift(kNp);   // „Máš podpísať“ vždy hore
       if (kPush) karty.unshift(kPush);
       var kStart = OSTRY ? kartaStart() : ""; if (kStart) karty.unshift(kStart);
       var kZn = VP && VP.kartaZnamka ? VP.kartaZnamka() : ""; if (kZn) karty.unshift(kZn);
@@ -753,6 +756,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (BAL) BAL.nastavDb(null, null);
       if (TRA) TRA.nastavDb(null, null);
       if (DOCH) DOCH.nastavDb(null, null);
+      if (window.LBZ_NAPODPIS) LBZ_NAPODPIS.nastavDb(null, null);
       if (KNIHA) KNIHA.nastavDb(null, null);
     if (VP) VP.nastavDb(null, null);
       if (VYB) VYB.nastavDb(null, null);
@@ -815,6 +819,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (BAL) BAL.nastavDb(null, null);
       if (TRA) TRA.nastavDb(null, null);
       if (DOCH) DOCH.nastavDb(null, null);
+      if (window.LBZ_NAPODPIS) LBZ_NAPODPIS.nastavDb(null, null);
       if (KNIHA) KNIHA.nastavDb(null, null);
     if (VP) VP.nastavDb(null, null);
       if (VYB) VYB.nastavDb(null, null);
@@ -841,6 +846,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (BAL) BAL.nastavDb(interny() ? db : null, stav.rola);
       if (TRA) TRA.nastavDb(interny() ? db : null, stav.rola, session.user.email);
       if (DOCH) DOCH.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
+      if (window.LBZ_NAPODPIS) LBZ_NAPODPIS.nastavDb(stav.rola !== "zakaznik" ? db : null, stav.rola);
       if (KNIHA) KNIHA.nastavDb(db, stav.rola);
       if (VP) VP.nastavDb(interny() ? db : null, stav.rola);
       if (VYB) VYB.nastavDb(db, stav.rola);
@@ -883,6 +889,8 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
   // moduly si dotiahli údaje pre kartu na Prehľade
   root.addEventListener("toggle", function (e) { if (e.target.classList && e.target.classList.contains("prisposobit")) stav.prisposobit = e.target.open; }, true);
   window.addEventListener("lbz-prekresli", function () { if (stav.rola && stav.modul === "prehlad") render(); });
+  // otvorenie modulu z iného súboru (napr. z okna „Máš podpísať“ → Cestovné príkazy)
+  window.lbzOtvorModul = function (kod) { if (!stav.rola) return; stav.modul = kod; stav.viac = false; stav.sprava = null; render(); window.scrollTo(0, 0); };
   window.addEventListener("lbz-aktivita", function () { if (stav.rola && stav.modul === "prehlad" && !document.querySelector(".f-dialog, .lbz-dlg")) render(); });
 
   render();

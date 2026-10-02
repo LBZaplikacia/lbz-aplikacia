@@ -332,8 +332,15 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
   function meno() { var o = (C.d && C.d.osoba) || {}; return [o.priezvisko, o.meno, o.titul].filter(Boolean).join(" ") || o.prezyvka || ""; }
   function podpis(typ, rola) {
     if (!window.lbzPodpis) { lbzInfo("Podpis nie je dostupný – obnovte appku."); return; }
+    lbzPodpis.podpisat(podpisMoznosti(typ, rola)).then(function (r) {
+      if (r.zrusene) return;
+      C.sprava = r.ok ? { typ: "ok", text: "Podpísané – PDF je uložené v dokumentoch zamestnanca" } : { typ: "chyba", text: r.text || "Nepodarilo sa" };
+      nacitajPodpisy(); kresli();
+    });
+  }
+  function podpisMoznosti(typ, rola) {
     var hot = typ === "hotovost", suma = eur(sucetStr());
-    lbzPodpis.podpisat({
+    return {
       db: DB, typ: typ, rola: rola, osoba: C.d.osoba_id, dokument: hot ? dokHot() : dokCp(),
       nazov: (hot ? "Prevzatie hotovosti – stravné " : "Cestovný príkaz ") + mesiacNazov(C.m) + " – " + meno(),
       subor: (hot ? "hotovost_" : "cestovny_prikaz_") + C.m.slice(0, 7),
@@ -343,10 +350,22 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
       obsah: obsahCp() + "|" + suma,
       html: function (pod) { return hot ? hotovostHtml(pod) : tlacHtml(pod); },
       poPodpise: function () { if (typ === "cp") nacitaj(); }
-    }).then(function (r) {
-      if (r.zrusene) return;
-      C.sprava = r.ok ? { typ: "ok", text: "Podpísané – PDF je uložené v dokumentoch zamestnanca" } : { typ: "chyba", text: r.text || "Nepodarilo sa" };
-      nacitajPodpisy(); kresli();
+    };
+  }
+  // dokument pre kartu „Máš podpísať“ (napodpis.js): údaje inej osoby/mesiaca bez zmeny stavu modulu
+  function dokument(osoba, mesiac, typ) {
+    return rpc("cp_mesiac", { p_mesiac: mesiac, p_osoba: osoba }).then(function (d) {
+      if (!d || !d.ok) throw new Error((d && d.text) || "Nenačítané");
+      function s(fn) { var b = { d: C.d, m: C.m }; C.d = d; C.m = mesiac; try { return fn(); } finally { C.d = b.d; C.m = b.m; } }
+      return {
+        html: function (pod) { return s(function () { return typ === "hotovost" ? hotovostHtml(pod) : tlacHtml(pod); }); },
+        podpisat: function () {
+          var o = s(function () { return podpisMoznosti(typ, "zamestnanec"); });
+          o.html = function (pod) { return s(function () { return typ === "hotovost" ? hotovostHtml(pod) : tlacHtml(pod); }); };
+          o.poPodpise = null;
+          return lbzPodpis.podpisat(o);
+        }
+      };
     });
   }
   function hotovostHtml(pod) {
@@ -444,6 +463,8 @@ window.LBZ_CESTY = {
     nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; C.d = null; C.osoba = null; C.uprav = null; C.f = null; C.karta = null; },
     mozem: mozem,
     karta: karta,
+    dokument: dokument,
+    nastavMesiac: function (m) { C.m = String(m).slice(0, 8) + "01"; C.uprav = null; C.f = null; C.sprava = null; C.filter = null; },
     mount: function (el) {
       koren = el; if (!C.m) C.m = dnes().slice(0, 8) + "01";
       el.addEventListener("click", klik); el.addEventListener("change", zmena); el.addEventListener("keydown", klaves);

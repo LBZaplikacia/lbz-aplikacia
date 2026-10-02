@@ -283,7 +283,7 @@
       (d.spravca ? ziadostiHtml((d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }), false) :
         (d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }).map(function (z) { return '<div class="card zm-caka">⏳ <b>Žiadosť o zmenu čaká na schválenie</b>' + zmenyHtml(z.zmeny, null) + "</div>"; }).join("") +
         (d.ziadosti || []).filter(function (z) { return z.stav !== "ziadost"; }).slice(0, 2).map(function (z) { return '<p class="muted zm-vybavena">' + (z.stav === "schvalena" ? "✅ Tvoja žiadosť o zmenu bola schválená" : "✖ Tvoja žiadosť o zmenu bola zamietnutá") + " (" + esc(datum(z.kedy)) + ")</p>"; }).join("")) +
-      (zdravOk() || !zdravTreba() ? "" : zdravSekcia()) + dkSekcia() + (zdravOk() && zdravTreba() ? zdravSekcia() : "") + paSekcia() +
+      (zdravOk() || !zdravTreba() ? "" : zdravSekcia()) + dkSekcia() + (zdravOk() && zdravTreba() ? zdravSekcia() : "") + npSekcia() + paSekcia() +
       '<div class="zm-sekcie">' + sekcie.map(sekciaHtml).join("") + "</div>" +
       (citatel() && (d.log || []).length ? '<details class="card zm-log"><summary>🕘 História zmien</summary><div class="rows">' + d.log.map(function (l) {
         return '<div class="row"><span>' + esc(new Date(l.kedy).toLocaleString("sk-SK", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })) + " · " + esc(l.kto || "") + '</span><span class="muted">' + esc((l.polia || []).join(", ")) + "</span></div>";
@@ -328,6 +328,12 @@
       (url ? '<a class="btn" href="' + esc(url) + '" target="_blank" rel="noopener">📁 Priečinok</a>' : "") +
       (url ? '<button class="btn" type="button" data-zm="pa-dok"' + (PA.prace ? " disabled" : "") + ">🔄 Dokumenty z Disku do appky</button>" : "") +
       (st.row && url ? '<button class="btn" type="button" data-zm="pa-mzdarke"' + (PA.prace ? " disabled" : "") + ">📧 Poslať mzdárke</button>" : "") + "</div></section>";
+  }
+  // nahraté dokumenty zamestnanca + poslanie dokumentu na podpis (napodpis.js)
+  function npSekcia() {
+    var d = Z.detail, z = (d && d.z) || {};
+    if (!d || d.kontrola || !window.LBZ_NAPODPIS) return "";
+    return LBZ_NAPODPIS.sekcia(Z.osoba, { ja: !!d.ja, spravca: !!d.spravca, meno: [z.meno, z.priezvisko].filter(Boolean).join(" ") || z.prezyvka || "" });
   }
   // ---------- dokumenty zamestnanca (PDF v úložisku zamestnanci/<osoba>/dokumenty/) ----------
   function dkNacitaj() {

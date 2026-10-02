@@ -247,16 +247,19 @@
       "<tr><th>Poznámka</th><td>" + esc(a.poznamka || "") + "</td></tr><tr><th>Stav</th><td>" + esc(a.stav === "schvalena" ? "schválená" : a.stav === "zamietnuta" ? "zamietnutá" : "čaká na schválenie") + "</td></tr></table>" +
       '<div class="pdp-riadok" style="display:flex;justify-content:space-between;margin:10mm 0 0">' + sl("zamestnanec", "podpis zamestnanca") + sl("zamestnavatel", "schválil – za zamestnávateľa") + "</div>";
   }
-  function podpisListka(a, meno, osoba, rola) {
-    if (!window.lbzPodpis) { lbzInfo("Podpis nie je dostupný – obnovte appku."); return; }
-    lbzPodpis.podpisat({
+  function listokMoznosti(a, meno, osoba, rola) {
+    return {
       db: DB, typ: "absencia", rola: rola, osoba: osoba, dokument: "absencia:" + a.id,
       nazov: (a.typ === "dovolenka" ? "Dovolenkový lístok " : (TYPY[a.typ] || "Žiadosť") + " ") + denSk(a.od) + " – " + meno, subor: "listok_" + a.id,
       titul: a.typ === "dovolenka" ? "Podpis dovolenkového lístka" : "Podpis žiadosti",
       vyhlasenie: rola === "zamestnanec" ? "Žiadam o " + String(TYPY[a.typ] || "").toLowerCase() + " " + denSk(a.od) + (a.do !== a.od ? " – " + denSk(a.do) : "") + "." : "Schvaľujem žiadosť.",
       obsah: JSON.stringify([a.id, a.typ, a.od, a.do, a.cas_od, a.cas_do]),
       html: function (pod) { return listokHtml(a, meno, pod); }
-    }).then(function (r) { if (r.zrusene) return; D.sprava = r.ok ? { typ: "ok", text: "Podpísané – PDF je v dokumentoch zamestnanca" } : { typ: "chyba", text: r.text }; kresli(); });
+    };
+  }
+  function podpisListka(a, meno, osoba, rola) {
+    if (!window.lbzPodpis) { lbzInfo("Podpis nie je dostupný – obnovte appku."); return; }
+    lbzPodpis.podpisat(listokMoznosti(a, meno, osoba, rola)).then(function (r) { if (r.zrusene) return; D.sprava = r.ok ? { typ: "ok", text: "Podpísané – PDF je v dokumentoch zamestnanca" } : { typ: "chyba", text: r.text }; kresli(); });
   }
   function zmensi(file) {
     return new Promise(function (ok, zle) {
@@ -632,6 +635,9 @@
     },
     zalozka: function (z) { D.zalozka = z; D.sprava = null; },
     karta: function () { return kartaHtml(); },
+    // pre kartu „Máš podpísať“ (napodpis.js)
+    listokHtml: function (a, meno, pod) { return listokHtml(a, meno, pod); },
+    listokPodpis: function (a, meno, osoba) { return window.lbzPodpis ? lbzPodpis.podpisat(listokMoznosti(a, meno, osoba, "zamestnanec")) : Promise.resolve({ ok: false, text: "Obnov appku" }); },
     maKartu: function () { return !D.moja || !!(D.moja && (D.moja.osoba || D.moja.chyba)); }
   };
 })();
