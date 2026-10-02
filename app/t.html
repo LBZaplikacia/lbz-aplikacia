@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>Kde je furman – Legendárne buchty Zbojská</title>
+<style>body{font-family:Montserrat,system-ui,sans-serif;background:#fbf6ec;color:#2b211f;margin:0;padding:32px 20px;text-align:center}</style>
+</head>
+<body>
+<p id="s">Načítavam…</p>
+<script src="config.js"></script>
+<script>
+// krátky odkaz zo SMS: app.legendarnebuchty.sk/t?KOD (8 znakov) → sledovanie.html?t=<token>
+(function () {
+  var k = (location.search || "").replace(/^\?/, "").split("&")[0].replace(/^t=/, ""), c = window.LBZ_CONFIG || {};
+  function zle() { document.getElementById("s").innerHTML = "Odkaz nie je platný alebo už vypršal.<br>Ak potrebujete pomôcť, napíšte nám na eshop@legendarnebuchty.sk."; }
+  if (!/^[A-Za-z0-9]{8}$/.test(k) || !c.supabaseUrl) { zle(); return; }
+  var h = { "Content-Type": "application/json", apikey: c.supabaseAnonKey };
+  if (!/^sb_/.test(c.supabaseAnonKey || "")) h.Authorization = "Bearer " + c.supabaseAnonKey;
+  fetch(c.supabaseUrl + "/rest/v1/rpc/sledovanie_z_kodu", { method: "POST", headers: h, body: JSON.stringify({ p_kod: k }) })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (t) { if (t) location.replace("sledovanie.html?t=" + encodeURIComponent(t)); else zle(); })
+    .catch(zle);
+})();
+</script>
+</body>
+</html>

@@ -100,15 +100,18 @@
   }
   // ---------- SMS deň vopred (GoSMS) – text a časové okno ako v starom skripte: ETA −15 min až +90 min ----------
   function hm(d) { return d.toLocaleTimeString("sk-SK", { hour: "2-digit", minute: "2-digit" }); }
-  function smsText(x, datum) {
-    var eta = new Date(x.eta), od = new Date(eta.getTime() - 15 * 60000), po = new Date(eta.getTime() + 90 * 60000);
-    var p = String(datum).slice(0, 10).split("-"), den = +p[2] + "." + +p[1] + "." + p[0];
-    var dob = x.platba !== "ZAPLATENÉ" && x.platba !== "NA FAKTÚRU";
-    return "Dobrý deň " + (x.meno || x.firma || "") + ", vaša objednávka Legendárnych buchiet Zbojská č. " + x.cislo + " bude doručená na adresu " + (x.adresa || "") +
-      " dňa " + den + " v čase " + hm(od) + " - " + hm(po) + "." + (dob ? " Suma na úhradu je " + eur(x.suma) + ". Možná platba kartou aj v hotovosti." : "") +
-      " S pozdravom Tím Legendárne buchty ZBOJSKÁ";
-  }
-  function smsKandidati() {
+  function smsBezDia(t) { return String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7E]/g, "").replace(/\s+/g, " ").trim(); }
+// SMS deň vopred: bez diakritiky, najviac 160 znakov (1 účtovaná SMS); pri zaplatenej bez sumy
+function smsText(x, datum) {
+var eta = new Date(x.eta), od = new Date(eta.getTime() - 15 * 60000), po = new Date(eta.getTime() + 90 * 60000);
+var p = String(datum).slice(0, 10).split("-"), den = +p[2] + "." + +p[1] + ".";
+var dob = x.platba !== "ZAPLATENÉ" && x.platba !== "NA FAKTÚRU", suma = Number(x.suma || 0).toFixed(2).replace(".", ",");
+var zaklad = "Legendarne buchty: obj. " + x.cislo + " dorucime " + den + " medzi " + hm(od) + "-" + hm(po) + ".";
+var varianty = [zaklad + (dob ? " Suma " + suma + " EUR, karta aj hotovost." : "") + " Dakujeme!", zaklad + (dob ? " Suma " + suma + " EUR, karta aj hotovost." : ""), zaklad + (dob ? " Suma " + suma + " EUR." : "")];
+for (var i = 0; i < varianty.length; i++) { var t = smsBezDia(varianty[i]); if (t.length <= 160) return t; }
+return smsBezDia(varianty[varianty.length - 1]).slice(0, 160);
+}
+function smsKandidati() {
     var z = (F.trasa && F.trasa.zastavky) || [];
     return z.filter(function (x) { return x.eta && x.telefon && x.stav === "caka" && !x.sms_den; });
   }
