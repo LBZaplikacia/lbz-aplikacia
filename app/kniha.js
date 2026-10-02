@@ -34,7 +34,7 @@ function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace
     if (!DB) return Promise.resolve();
     return rpc("jazdy_stav", { p_vozidlo: K.stav && K.stav.vozidlo_id || null }).then(function (d) {
       K.stav = d && d.ok ? d : { chyba: (d && d.text) || "Nenačítané" };
-      if (!K.form.vodic) { var pv = window.lbzPamat && lbzPamat.nacitaj("kniha_vodic"); if (pv && (K.stav.vodici || []).indexOf(pv.meno) >= 0) K.form.vodic = pv.meno; }
+      if (!K.form.vodic) { var vz = K.stav.vodici || []; K.form.vodic = vz.indexOf("Falťanová") >= 0 ? "Falťanová" : (vz[0] || ""); }
       kresli();
     }).catch(function (e) { K.stav = { chyba: chybaText(e) }; kresli(); });
   }
@@ -87,7 +87,7 @@ function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace
     var vlastny = f.ucel && ucely.indexOf(f.ucel) === -1 && ine.indexOf(f.ucel) === -1 || f.ineUcel;
     return '<form class="k-nova" id="k-form" autocomplete="off">' +
       '<section class="k-krok"><div class="k-krok-hl"><span class="k-cislo">1</span>Šofér</div><div class="k-vodici">' +
-      (s.vodici || []).map(function (v) { return '<button type="button" class="k-vodic" data-k-vodic="' + esc(v) + '" aria-pressed="' + (f.vodic === v) + '"><span class="k-avatar">' + esc(v.charAt(0)) + "</span>" + esc(v) + "</button>"; }).join("") + "</div></section>" +
+      '<select id="k-vodic-sel" class="k-voz" style="width:100%;font-size:1rem;padding:10px 12px">' + (s.vodici || []).map(function (v) { return '<option value="' + esc(v) + '"' + (f.vodic === v ? " selected" : "") + ">" + esc(v) + "</option>"; }).join("") + "</select></div></section>" +
       '<section class="k-krok"><div class="k-krok-hl"><span class="k-cislo">2</span>Tachometer<span class="k-tach-posl">posledný <b class="num">' + km(s.tach) + ' km</b></span></div>' +
       '<label class="field"><span class="label">Stav tachometra teraz</span>' +
       '<input id="k-tach" class="k-tach" inputmode="decimal" enterkeyhint="next" placeholder="napr. ' + esc(km(Math.ceil((s.tach || 0) + 50))) + '" value="' + esc(f.tach || "") + '"></label>' +
@@ -275,6 +275,7 @@ function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace
   }
   function zmena(e) {
     if (e.target.id === "k-voz") { K.stav.vozidlo_id = +e.target.value; K.form = { navrat: true, ucel: "" }; obnov(); }
+    if (e.target.id === "k-vodic-sel") { citajForm(); K.form.vodic = e.target.value; prekresli(); return; }
     else if (e.target.id === "k-navrat") { citajForm(); prekresli(); }
   }
   function odoslanie(e) {
