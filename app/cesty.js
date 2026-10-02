@@ -162,7 +162,7 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
       '<div class="cp-miesta">' + (m.length ? esc(m.join(" → ")) : "<i>bez miest – doplň</i>") + "</div>" +
       (c.poznamka ? '<div class="cp-miesta">📝 ' + esc(c.poznamka) + "</div>" : "") +
       '<div class="cp-akcie"><button class="btn' + (c.stav === "navrh" ? " btn-primary" : "") + '" data-cp-uprav="' + c.id + '">' + (c.uzamknute ? "🔍 Pozrieť" : c.stav === "navrh" ? "✅ Skontrolovať" : "✏️ Upraviť / pozrieť") + "</button>" +
-      (C.d.spravca && c.stav !== "schvalene" ? '<button class="btn" data-cp-schval="' + c.id + '" data-ano="1">✔ Schváliť</button>' : "") +
+
       (C.d.spravca && c.stav === "schvalene" && !c.uzamknute ? '<button class="btn" data-cp-schval="' + c.id + '" data-ano="0">Zrušiť schválenie</button>' : "") + "</div></section>";
   }
   function casVal(t) { return t ? hm(t) : ""; }
@@ -420,7 +420,8 @@ else if (cesty.some(function (c) { return c.zdroj === "import"; })) nove = '<p c
       "<thead><tr><th>Začiatok cesty (miesto, dátum, hodina)</th><th>Miesto rokovania (trasa)</th><th>Účel cesty</th><th>Koniec cesty (miesto, dátum)</th></tr></thead><tbody>" + povolenie + "</tbody></table>" +
       '<div class="cp-tl-blok"><table class="cp-tl-info"><tr><th>Spolucestujúci</th><td>–</td><th>Určený dopravný prostriedok</th><td>' + esc(doprava) + " – náhrada za km sa neposkytuje</td></tr>" +
       "<tr><th>Predpokladaná suma výdavkov</th><td>stravné podľa § 5 zákona č. 283/2002 Z. z.</td><th>Povolený preddavok</th><td>0,00 €</td></tr></table>" +
-      '<div class="pdp-riadok"><span></span>' + sl("zamestnavatel", "dátum a podpis zamestnávateľa, ktorý cesty povolil") + "</div></div>" +
+      // povolenie: každá cesta je povolená automaticky (Terézia 2. 10. 2026) – zamestnávateľ podpisuje len vyúčtovanie raz za mesiac
+      '<div class="pdp-riadok"><span></span><span class="pdp-slot"><b>Povolené automaticky</b> – každá cesta podľa rozpisu trás<br>za zamestnávateľa: ' + esc(ZAMESTNAVATEL.split(",")[0]) + "</span></div></div>" +
       '<div class="cp-tl-blok"><h2>2. Správa o výsledku pracovných ciest</h2>' +
       '<p class="cp-tl-p">Rozvoz objednávok zákazníkom podľa trás – ' + cesty.length + " ciest, spolu " + esc(kmSpolu) + ". Tovar bol doručený podľa trás uvedených vyššie.</p>" +
       '<div class="pdp-riadok"><span></span>' + sl("zamestnanec", "dátum a podpis zamestnanca") + "</div></div>" +
