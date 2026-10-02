@@ -218,7 +218,7 @@ function jazdaHtml(t) {
         '<label class="btn t-foto-tl">📷 Fotka<input type="file" accept="image/*" capture="environment" data-t-foto="' + esc(a.cislo) + '" hidden></label>' +
         (!vybav ? '<button class="btn" data-t="preskocit">⏭️ Preskočiť</button>' : '<button class="btn" data-t-akcia="spat" data-c="' + esc(a.cislo) + '">↩️ Späť</button>') + "</div>") +
       "</section>" +
-      '<p class="muted t-akt-stav">Vybavené ' + hotovo + " z " + z.length + (T.gpsChyba ? " · GPS vypnuté – „Som na mieste“ stlačte ručne" : "") + (rozvozBezi() ? " · 📱 nechaj appku otvorenú a obrazovku zapnutú" : "") + "</p>";
+      '<p class="muted t-akt-stav">Vybavené ' + hotovo + " z " + z.length + (T.gpsChyba ? " · GPS vypnuté – „Som na mieste“ stlačte ručne" : "") + (rozvozBezi() ? " · 📱 nechaj obrazovku zapnutú" : "") + "</p>";
   }
   function pohladTrasa() {
     var d = T.data, t = d && d.trasa;
@@ -513,26 +513,24 @@ var obal = document.getElementById("tlac-oblast");
     gpsId = null; T.gps = null;
     try { if (zamok) zamok.release(); } catch (e) {} zamok = null;
   }
-  // pripomienka: obrazovka počas rozvozu vypnutá > 2 min → hláška, vibrácia a zvuk (zvuk funguje, ak sa furman v appke už niečoho dotkol)
-var AUD = null, SKRYTE = 0;
-document.addEventListener("click", function () { try { if (!AUD) AUD = new (window.AudioContext || window.webkitAudioContext)(); if (AUD.state === "suspended") AUD.resume(); } catch (e) {} }, true);
-function pipni() {
-try { if (navigator.vibrate) navigator.vibrate([400, 150, 400, 150, 400]); } catch (e) {}
-try {
-if (!AUD) return; if (AUD.state === "suspended") AUD.resume();
-[0, 0.35, 0.7].forEach(function (k) { var o = AUD.createOscillator(), g = AUD.createGain(); o.frequency.value = 880; g.gain.value = 0.25; o.connect(g); g.connect(AUD.destination); o.start(AUD.currentTime + k); o.stop(AUD.currentTime + k + 0.22); });
-} catch (e) {}
-}
+  // pripomienka: obrazovka počas rozvozu vypnutá ≥ 3 min mimo zastávky → krátka hláška (po 8 s sama zmizne) a krátka vibrácia, bez zvuku.
+  // Nepripomína pri zákazníkovi (do 300 m od zastávky) ani keď furman odišiel z appky cez odkaz na navigáciu alebo telefonát.
+var SKRYTE = 0, SKRYTE_OK = false, ODKAZ_KLIK = 0, SPRAVA_CAS = null;
+document.addEventListener("click", function (e) { var a = e.target && e.target.closest && e.target.closest("a[href]"); if (a && /google\.[a-z.]+\/maps|maps\.google|maps\.app\.goo\.gl|waze\.com|^geo:|^tel:|^intent:/i.test(a.getAttribute("href") || "")) ODKAZ_KLIK = Date.now(); }, true);
 function rozvozBezi() {
 var tr = T.data && T.data.trasa;
 return ROLA === "furman" && sluzobny() && T.id != null && tr && tr.stav !== "ukoncena" && String(tr.datum).slice(0, 10) === dnesIso() && zastavky().some(function (x) { return x.stav === "caka"; });
 }
 document.addEventListener("visibilitychange", function () {
-if (document.hidden) { SKRYTE = Date.now(); return; }
-var min = SKRYTE ? Math.round((Date.now() - SKRYTE) / 60000) : 0; SKRYTE = 0;
-if (min >= 2 && rozvozBezi()) {
-T.sprava = { typ: "chyba", text: "⚠️ Obrazovka bola vypnutá " + min + " min – zákazníci ani zákaznícky servis nevideli, kde si. Počas rozvozu nechaj appku otvorenú a obrazovku zapnutú (navigácia ide v aute cez Android Auto)." };
-prekresli(); pipni();
+if (document.hidden) {
+var vz = null; try { var az = T.gps && T.data ? aktualna() : null; vz = az ? vzdialenost(az) : null; } catch (e) {}
+SKRYTE = Date.now(); SKRYTE_OK = Date.now() - ODKAZ_KLIK < 10000 || (vz != null && vz < 300); return;
+}
+var min = SKRYTE ? Math.round((Date.now() - SKRYTE) / 60000) : 0, ok = SKRYTE_OK; SKRYTE = 0; SKRYTE_OK = false;
+if (min >= 3 && !ok && rozvozBezi()) {
+var s = { typ: "chyba", text: "📱 Obrazovka bola vypnutá " + min + " min – počas jazdy ju nechaj zapnutú." };
+T.sprava = s; prekresli(); try { if (navigator.vibrate) navigator.vibrate(200); } catch (e) {}
+clearTimeout(SPRAVA_CAS); SPRAVA_CAS = setTimeout(function () { if (T.sprava === s) { T.sprava = null; prekresli(); } }, 8000);
 }
 if (T.id != null && koren && koren.isConnected) zapniJazdu();
 });
