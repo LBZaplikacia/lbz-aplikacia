@@ -1,6 +1,6 @@
 // Service worker: appka sa otvorí aj pri slabom signáli (uložené základné súbory).
 // Pri každej novej verzii appky zvýš číslo VERZIA – zariadenia si ju stiahnu samé.
-const VERZIA = "0.30.31";
+const VERZIA = "0.30.32";
 const CACHE = "lbz-v" + VERZIA;
 const SUPABASE = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js";
 const SUBORY = ["./", "index.html", "styles.css", "app.js", "sklad.js", "furmanky.js", "rozpis.js", "objednavky.js", "balenie.js", "trasa.js", "dochadzka.js", "mesacny.js", "kniha.js", "vozpark.js", "vybavit.js", "zamestnanci.js", "cesty.js", "napodpis.js", "ulohy.js", "chat.js", "lib/qr.js", "lib/dialog.js", "lib/diktat.js", "lib/pdfview.js", "lib/push.js", "lib/aktivita.js", "lib/sviatky.js", "lib/podpis.js", "config.js", "manifest.webmanifest", "icons/logo.svg", "icons/icon-192.png", "icons/badge-96.png", "icons/monochrome-192.png", "vybavit.html", "manifest-vybavit.webmanifest"];
