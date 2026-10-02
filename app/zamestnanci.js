@@ -209,9 +209,10 @@
         '<p class="muted" style="margin:0">' + (zle ? zle + " prepadnutých · " : "") + (chyba ? chyba + " bez zadaného preukazu" : "") + "</p>" +
         '<button class="btn" data-mod="zamestnanci">Otvoriť Ľudí</button></section>';
     }
-    if (!m || !m.osoba_id || m.netreba) return "";
-    if (m.do && m.do >= plus30()) return "";
-    return '<section class="card zm-zdrav-karta"><h3>🩺 Zdravotný preukaz</h3>' + zdravPill(m.do) +
+    var kU = (m && m.osoba_id && m.udaje === false) ? '<section class="card zm-udaje-karta" style="border:2px solid #CBA75B"><h3>🪪 Skontroluj svoje údaje</h3><p class="muted" style="margin:0 0 10px">' + (m.zp === false ? "Doplň <b>zdravotnú poisťovňu</b>, s" : "S") + 'kontroluj svoje osobné údaje a potvrď tlačidlom <b>„Moje údaje sú správne“</b>.</p><button class="btn btn-primary" data-mod="zamestnanci">🪪 Otvoriť moje údaje</button></section>' : "";
+    if (!m || !m.osoba_id || m.netreba) return kU;
+    if (m.do && m.do >= plus30()) return kU;
+    return kU + '<section class="card zm-zdrav-karta"><h3>🩺 Zdravotný preukaz</h3>' + zdravPill(m.do) +
       '<p class="muted" style="margin:0">' + (!m.do ? "Odfoť svoj platný zdravotný preukaz a zadaj dátum platnosti." : m.do < dnesIso() ? "Preukaz je prepadnutý – vybav si nový a nahraj ho." : "Preukaz čoskoro končí – vybav si obnovu.") + "</p>" +
       '<button class="btn btn-primary" data-mod="zamestnanci">📷 Nahrať preukaz</button></section>';
   }
