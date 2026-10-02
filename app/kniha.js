@@ -62,7 +62,7 @@ function norm(s) { return String(s || "").toLowerCase().normalize("NFD").replace
     var s = K.stav || {}, voz = (s.vozidla || []).filter(function (v) { return v.id === s.vozidlo_id; })[0];
     var z = K.zalozka;
     return '<div class="head"><div><h2>Kniha jázd</h2><div class="sub">' + esc(voz ? voz.nazov + (voz.spz ? " · " + voz.spz : "") : "") +
-      (s.tach != null ? ' · tachometer <b class="num">' + km(s.tach) + " km</b>" : "") + "</div></div>" +
+      (s.tach != null ? ' · tachometer <b class="num">' + km(s.tach) + " km</b>" : (voz ? ' · <b>zatiaľ bez stavu tachometra</b> – prvý zápis uloží počiatočný stav (zadaj aktuálny stav tachometra)' : "")) + "</div></div>" +
       ((s.vozidla || []).length > 1 ? '<select id="k-voz" class="k-voz">' + s.vozidla.map(function (v) { return '<option value="' + v.id + '"' + (v.id === s.vozidlo_id ? " selected" : "") + ">" + esc(v.nazov) + "</option>"; }).join("") + "</select>" : "") +
       "</div>" +
       '<div class="f-seg k-zalozky" role="group"><button data-k-zal="nova" aria-pressed="' + (z === "nova") + '">➕ Nová jazda</button>' +
