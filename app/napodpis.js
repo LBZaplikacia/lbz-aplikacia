@@ -93,9 +93,10 @@
       }).join("");
     }
     if (nh.length) {
-      h += '<h4 class="np-h4">📎 Nahraté dokumenty (7 dní)</h4><div class="np-zoz">' + nh.map(function (x) {
-        return '<button type="button" class="np-pol" data-np-sub="' + esc(x.cesta) + '" data-nazov="' + esc(x.nazov) + '"><span class="np-ik">📎</span><span class="np-t"><b>' + esc(x.nazov) + "</b><small>" +
-          esc(x.meno) + " · " + esc(new Date(x.cas).toLocaleDateString("sk-SK")) + '</small></span><span class="np-sip">›</span></button>';
+      h += '<h4 class="np-h4">📎 Nahraté dokumenty – skontroluj <span class="pill warn num">' + nh.length + '</span></h4><p class="muted np-pozn">Otvor dokument a keď je v poriadku, daj ✅ Skontrolované – zmizne z Prehľadu (ostáva v karte zamestnanca).</p><div class="np-zoz">' + nh.map(function (x) {
+        return '<div class="np-nh"><button type="button" class="np-pol" data-np-sub="' + esc(x.cesta) + '" data-nazov="' + esc(x.nazov) + '"><span class="np-ik">📎</span><span class="np-t"><b>' + esc(x.nazov) + "</b><small>" +
+          esc(x.meno) + " · " + esc(new Date(x.cas).toLocaleDateString("sk-SK")) + '</small></span><span class="np-sip">›</span></button>' +
+          '<button type="button" class="btn np-nh-ok" data-np-nok="' + x.id + '">✅ Skontrolované</button></div>';
       }).join("") + "</div>";
     }
     return h + "</section>";
@@ -458,13 +459,18 @@
 
   // ---------- kliky ----------
   document.addEventListener("click", function (e) {
-    var t = e.target && e.target.closest && e.target.closest("[data-np-otvor],[data-np-otvorv],[data-np],[data-np-opr],[data-np-vybav],[data-np-sub],[data-np-sek],[data-np-nzmaz],[data-np-dzrus],[data-np-obr-x]");
+    var t = e.target && e.target.closest && e.target.closest("[data-np-otvor],[data-np-otvorv],[data-np],[data-np-opr],[data-np-vybav],[data-np-nok],[data-np-sub],[data-np-sek],[data-np-nzmaz],[data-np-dzrus],[data-np-obr-x]");
     if (!t || !DB) return;
     var d = t.dataset, o = S.o;
     if (d.npOtvor != null) { e.preventDefault(); otvor(+d.npOtvor); return; }
     if (d.npOtvorv != null) { e.preventDefault(); otvor(+d.npOtvorv, true); return; }
     if (d.npObrX) { var w = t.closest(".np-obr"); if (w) w.remove(); return; }
     if (d.npSub) { e.preventDefault(); otvorSubor(d.npSub, d.nazov || "Dokument"); return; }
+    if (d.npNok) {
+      t.disabled = true;
+      rpc("dokument_nahrany_skontroluj", { p_id: +d.npNok }).then(function () { obnovKartu(); }).catch(function (x) { t.disabled = false; lbzInfo(chyba(x)); });
+      return;
+    }
     if (d.npVybav) {
       if (!lbzPotvrd("Označiť pripomienku ako vybavenú? Zamestnancovi príde upozornenie.")) return;
       rpc("podpis_pripomienka_vybav", { p_id: +d.npVybav, p_odpoved: null }).then(function () { fronta(); obnovKartu(); }).catch(function (x) { lbzInfo(chyba(x)); });
@@ -514,7 +520,7 @@
   st.textContent = ".np-karta{border:2px solid var(--gold,#CBA75B)}.np-pozn{margin:0 0 8px;font-size:13px}.np-zoz{display:flex;flex-direction:column;gap:6px}" +
     ".np-pol{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid var(--line,#e6dccb);border-radius:12px;background:var(--surface,#fff);color:inherit;padding:10px 12px;font:inherit;cursor:pointer;min-height:52px}" +
     ".np-pol.np-po{border-color:#c62828;background:#fdecea}.np-pol.np-po small{color:#b71c1c;font-weight:600}.np-ik{font-size:22px}.np-t{flex:1;min-width:0;display:flex;flex-direction:column}.np-t small{color:var(--muted,#6b5b55)}.np-sip{font-size:20px;color:var(--muted,#6b5b55)}" +
-    ".np-h4{margin:14px 0 6px}.np-pr{display:flex;gap:8px;align-items:center;justify-content:space-between;border-top:1px dashed var(--line,#e6dccb);padding:8px 0}.np-pr-t{font-style:italic}" +
+    ".np-nh{display:flex;flex-direction:column;gap:6px}.np-nh-ok{align-self:flex-end}.np-h4{margin:14px 0 6px}.np-pr{display:flex;gap:8px;align-items:center;justify-content:space-between;border-top:1px dashed var(--line,#e6dccb);padding:8px 0}.np-pr-t{font-style:italic}" +
     ".np-okno{position:fixed;inset:0;z-index:2000;background:var(--bg,#faf6ee);display:flex;flex-direction:column}" +
     ".np-hl{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line,#e6dccb);background:var(--surface,#fff)}.np-hl b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}" +
     ".np-telo{flex:1;overflow:auto;padding:12px;-webkit-overflow-scrolling:touch}.np-dok{background:#fff;color:#222;border-radius:12px;padding:14px;max-width:900px;margin:0 auto;box-shadow:0 1px 4px rgba(0,0,0,.08)}" +
