@@ -356,10 +356,18 @@ var zm = document.getElementById("t-zs-miesto"); if (zm) { mapaZsUkaz(zm); if (D
   function posliPolohu(p) {
     if (ROLA !== "furman" || T.suhlas !== true || T.id == null || !T.data || !T.data.trasa) return;
     var tr = T.data.trasa; if (tr.stav === "ukoncena" || String(tr.datum).slice(0, 10) !== dnesIso()) return;
-    var teraz = Date.now(); if (teraz - POLOHA.posledna < 30000) return; POLOHA.posledna = teraz;
+    var teraz = Date.now(); if (teraz - POLOHA.posledna < (blizkoZakaznika(p) ? 3000 : 30000)) return; POLOHA.posledna = teraz;
     rpc("trasa_poloha", { p_id: T.id, p_lat: p.coords.latitude, p_lng: p.coords.longitude, p_presnost: p.coords.accuracy || null }).catch(function () { POLOHA.posledna = 0; });
   }
-  function suhlasHtml() {
+  // do ~8 km (≈ 10 min jazdy) od ďalšieho zákazníka sa poloha posiela každé 3 s (zákazník vidí auto plynulo), inak každých 30 s
+function blizkoZakaznika(p) {
+var a = T.akt && najdi(T.akt); if (!a || a.stav !== "caka") a = dalsiaCaka(null);
+if (!a || a.lat == null || a.lng == null) return false;
+var r = 6371000, f1 = p.coords.latitude * Math.PI / 180, f2 = a.lat * Math.PI / 180, df = (a.lat - p.coords.latitude) * Math.PI / 180, dl = (a.lng - p.coords.longitude) * Math.PI / 180;
+var x = Math.sin(df / 2) * Math.sin(df / 2) + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+return 2 * r * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)) < 8000;
+}
+function suhlasHtml() {
     if (ROLA !== "furman" || T.suhlas !== false) return "";
     return '<section class="card t-suhlas"><h3>📍 Sledovanie polohy počas rozvozu</h3><p>' + esc(SUHLAS_TEXT) + "</p>" +
       '<button class="btn btn-primary" data-t="suhlas">✅ Beriem na vedomie a súhlasím</button></section>';
@@ -496,7 +504,7 @@ var obal = document.getElementById("tlac-oblast");
             var mm = document.getElementById("t-gmapa-miesto"); if (mm) mapaUkaz(mm);
           } else prekresli();
         }
-      }, function () { T.gpsChyba = true; }, { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 });
+      }, function () { T.gpsChyba = true; }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 30000 });
     }
     try { if (navigator.wakeLock && !zamok) navigator.wakeLock.request("screen").then(function (z) { zamok = z; z.addEventListener("release", function () { zamok = null; }); }).catch(function () {}); } catch (e) {}
   }

@@ -104,10 +104,13 @@
   }
   function skryMapu() { mapaEl.style.display = "none"; }
 
-  function vykresli(d) {
+  var RYCHLO = false; // posledných ~10 min pred príchodom (ste na rade) sa poloha obnovuje každé 3 s
+function vykresli(d) {
+RYCHLO = false;
     if (!d || d.ok === false) { skryMapu(); info.innerHTML = "<h1>Odkaz nie je platný</h1><p>Skontrolujte, či ste otvorili celý odkaz zo SMS. Ak potrebujete pomôcť, odpovedzte nám na SMS alebo napíšte na eshop@legendarnebuchty.sk.</p>"; return false; }
     var c = d.cislo ? " č. " + esc(d.cislo) : "";
     var prichod = d.eta_live || d.eta;
+RYCHLO = d.stav === "na_ceste" && !d.pred_vami && !!prichod && new Date(prichod).getTime() - Date.now() < 10 * 60000;
     switch (d.stav) {
       case "stare": skryMapu(); info.innerHTML = "<h1>Rozvoz už prebehol</h1><p>Sledovanie je dostupné len v deň rozvozu.</p>"; return false;
       case "dorucene": skryMapu(); info.innerHTML = '<h1 class="ok">✓ Objednávka' + c + " je doručená</h1>" + (d.cas ? "<p>Doručené o " + esc(cas(d.cas)) + ".</p>" : "") + "<p>Ďakujeme a dobrú chuť! 🥮</p>"; return false;
@@ -140,7 +143,7 @@
       .then(function (d) { var dalej = vykresli(d); if (dalej) planuj(); })
       .catch(function () { info.innerHTML = '<p class="muted">Bez pripojenia – skúsim znova o chvíľu.</p>'; planuj(); });
   }
-  function planuj() { clearTimeout(casovac); casovac = setTimeout(nacitaj, document.hidden ? 60000 : 20000); }
+  function planuj() { clearTimeout(casovac); casovac = setTimeout(nacitaj, document.hidden ? 60000 : RYCHLO ? 3000 : 20000); }
 
   // ukážka (?demo=1): auto ide po skutočnej trase Brezno → Banská Bystrica zrýchlene (celá cesta za ~90 s)
   function ukazka() {
