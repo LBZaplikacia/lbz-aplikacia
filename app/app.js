@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.30.65 BETA";
+  var VERZIA = "0.30.66 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -34,6 +34,7 @@
     { kod: "cestovne",        nazov: "Cestovné príkazy" },
     { kod: "objednavky",      nazov: "Objednávky" },
     { kod: "komentare",       nazov: "Sociálne siete FB/IG" },
+    { kod: "email",           nazov: "Email" },
     { kod: "zamestnanci",     nazov: "Zamestnanci" },
     { kod: "exporty",         nazov: "Exporty pre účtovníctvo" },
     { kod: "moje_objednavky", nazov: "Moje objednávky" },
@@ -44,7 +45,7 @@
   // ikony modulov (bočná lišta na PC, spodná lišta v mobile)
   var IKONY = {
     prehlad: "🏠", chat: "💬", sklad: "🧊", furmanky: "🚚", balenie: "📦", trasa: "🗺️", rozpis: "📅", dochadzka: "🕒", kniha_jazd: "🚗", vozovy_park: "🚐",
-    objednavky: "🧾", cestovne: "🧾", komentare: "💬", zamestnanci: "👥", exporty: "📊", moje_objednavky: "🛍️", sledovanie: "📍", newsletter: "📰", nastavenia: "⚙️"
+    objednavky: "🧾", cestovne: "🧾", komentare: "💬", email: "✉️", zamestnanci: "👥", exporty: "📊", moje_objednavky: "🛍️", sledovanie: "📍", newsletter: "📰", nastavenia: "⚙️"
   };
   // jednotné čiarové ikony (SVG) – lišta na PC aj v mobile
   var P = {
@@ -61,6 +62,7 @@
     cestovne: '<path d="M7 3h8l4 4v14H7z"/><path d="M15 3v4h4M10 11h6M10 15h6M10 19h3"/>',
     objednavky: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
     komentare: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    email: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',
     zamestnanci: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
     exporty: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
     moje_objednavky: '<path d="M6 7h12l-1 14H7z"/><path d="M9 7a3 3 0 0 1 6 0"/>',
@@ -75,10 +77,10 @@
     it: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "kniha_jazd"], ceo: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "kniha_jazd"],
     prevadzkar: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "rozpis"], prevadzka: ["prehlad", "chat", "sklad", "balenie"],
     zamestnanec: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "rozpis"], furman: ["prehlad", "chat", "trasa", "dochadzka"],
-    zakaznicky_servis: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "objednavky"], uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci"],
+    zakaznicky_servis: ["aktivita", "odbery", "prehlad", "chat", "email", "dochadzka", "objednavky"], uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci"],
     majitelka_arealu: ["aktivita", "odbery", "prehlad", "kniha_jazd"], zakaznik: ["prehlad", "moje_objednavky", "sledovanie"]
   };
-  var KRATKO = { cestovne: "Cesťák", rozpis: "Rozpis", balenie: "Balenie", trasa: "Trasa", dochadzka: "Dochádzka", kniha_jazd: "Jazdy", zamestnanci: "Ľudia", komentare: "Komentáre",
+  var KRATKO = { cestovne: "Cesťák", rozpis: "Rozpis", balenie: "Balenie", trasa: "Trasa", dochadzka: "Dochádzka", kniha_jazd: "Jazdy", zamestnanci: "Ľudia", komentare: "Komentáre", email: "Email",
     exporty: "Exporty", newsletter: "Newsletter", moje_objednavky: "Objednávky", sledovanie: "Furmanka", nastavenia: "Účet" };
 
   var PRISTUPY = {
@@ -87,7 +89,7 @@
     prevadzka: ["aktivita", "odbery", "prehlad", "chat", "sklad", "balenie", "dochadzka", "kniha_jazd", "zamestnanci", "nastavenia"],
     zamestnanec: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "nastavenia"],
     furman: ["aktivita", "odbery", "prehlad", "chat", "trasa", "cestovne", "dochadzka", "rozpis", "zamestnanci", "nastavenia"],
-    zakaznicky_servis: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "objednavky", "furmanky", "trasa", "komentare", "zamestnanci", "nastavenia"],
+    zakaznicky_servis: ["aktivita", "odbery", "prehlad", "chat", "email", "dochadzka", "objednavky", "furmanky", "trasa", "komentare", "zamestnanci", "nastavenia"],
     uctovnicka: ["prehlad", "chat", "dochadzka", "zamestnanci", "cestovne", "nastavenia"],
     prevadzkar: ["aktivita", "odbery", "prehlad", "chat", "dochadzka", "rozpis", "sklad", "balenie", "kniha_jazd", "zamestnanci", "nastavenia"],
     majitelka_arealu: ["aktivita", "odbery", "prehlad", "kniha_jazd", "nastavenia"],
@@ -117,6 +119,7 @@
   var KNIHA = window.LBZ_KNIHA || null;
   var VP = window.LBZ_VOZPARK || null;
   var SOC = window.LBZ_SOCIALNE || null;
+  var EML = window.LBZ_EMAIL || null;
   var NL = window.LBZ_NEWSLETTER || null;
   var VYB = window.LBZ_VYBAVIT || null;
   var ULO = window.LBZ_ULOHY || null;
@@ -352,6 +355,7 @@
       if (m.kod === "kniha_jazd") m.aktivny = knihaZapnuta();
       if (m.kod === "vozovy_park") m.aktivny = !!(VP && VP.mozem());
       if (m.kod === "komentare") m.aktivny = !!(SOC && SOC.mozem());
+      if (m.kod === "email") m.aktivny = !!(EML && EML.mozem());
       if (m.kod === "newsletter") m.aktivny = !!(NL && NL.mozem());
       if (m.kod === "cestovne") m.aktivny = cestyZapnute();
       if (m.kod === "chat") m.aktivny = chatZapnuty();
@@ -586,6 +590,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
     if (knihaZapnuta() && stav.modul === "kniha_jazd") return '<div id="kniha-root"></div>';
       if (VP && VP.mozem() && stav.modul === "vozovy_park") return '<div id="vp-root"></div>';
       if (SOC && SOC.mozem() && stav.modul === "komentare") return '<div id="soc-root"></div>';
+      if (EML && EML.mozem() && stav.modul === "email") return '<div id="em-root"></div>';
       if (NL && NL.mozem() && stav.modul === "newsletter") return '<div id="nl-root"></div>';
     if (zamZapnute() && stav.modul === "zamestnanci") return '<div id="zam-root"></div>';
     if (cestyZapnute() && stav.modul === "cestovne") return '<div id="cp-root"></div>';
@@ -693,6 +698,8 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
     if (vpr && VP) VP.mount(vpr);
     var socr = document.getElementById("soc-root");
     if (socr && SOC) SOC.mount(socr);
+    var emr = document.getElementById("em-root");
+    if (emr && EML) EML.mount(emr);
     var nlr = document.getElementById("nl-root");
     if (nlr && NL) NL.mount(nlr);
     var zr = document.getElementById("zam-root");
@@ -771,6 +778,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (KNIHA) KNIHA.nastavDb(null, null);
     if (VP) VP.nastavDb(null, null);
     if (SOC) SOC.nastavDb(null, null);
+    if (EML) EML.nastavDb(null, null);
     if (NL) NL.nastavDb(null, null);
       if (VYB) VYB.nastavDb(null, null);
       if (ULO) ULO.nastavDb(null, null);
@@ -836,6 +844,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (KNIHA) KNIHA.nastavDb(null, null);
     if (VP) VP.nastavDb(null, null);
     if (SOC) SOC.nastavDb(null, null);
+    if (EML) EML.nastavDb(null, null);
     if (NL) NL.nastavDb(null, null);
       if (VYB) VYB.nastavDb(null, null);
       if (ULO) ULO.nastavDb(null, null);
@@ -865,6 +874,7 @@ else if (kody.indexOf("trasa") > -1 && TRA && TRA.lenNahlad && TRA.lenNahlad()) 
       if (KNIHA) KNIHA.nastavDb(db, stav.rola);
       if (VP) VP.nastavDb(interny() ? db : null, stav.rola);
       if (SOC) SOC.nastavDb(interny() ? db : null, stav.rola);
+      if (EML) EML.nastavDb(interny() ? db : null, stav.rola);
       if (NL) NL.nastavDb(interny() ? db : null, stav.rola);
       if (VYB) VYB.nastavDb(db, stav.rola);
       if (ULO) ULO.nastavDb(db, stav.rola);
