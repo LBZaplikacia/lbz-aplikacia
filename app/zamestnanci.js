@@ -85,8 +85,32 @@
   function otvor(id) {
     Z.osoba = id; Z.detail = null; Z.uprav = null; Z.ukazCitlive = false; ZD.foto = null; kresli();
     if (window.lbzPamat) lbzPamat.uloz("zam", { osoba: id });
-    return rpc("zam_detail", { p_osoba: id }).then(function (d) { Z.detail = d && d.ok ? d : { chyba: (d && d.text) || "Nenačítané" }; kresli(); })
+    return rpc("zam_detail", { p_osoba: id }).then(function (d) {
+      if (d && d.ok && kontrola()) d = lenNahlad(d);   // spoločný účet Prevádzka: vždy len meno, pozícia a zdravotný preukaz (aj keď je účet prepojený s kartou)
+      Z.detail = d && d.ok ? d : { chyba: (d && d.text) || "Nenačítané" }; kresli();
+      if (Z.detail.kontrola && ((Z.detail.z || {}).zdrav_preukaz_foto || (Z.detail.z || {}).zdrav_preukaz_foto2)) zdravFotky(true);
+    })
       .catch(function (e) { Z.detail = { chyba: chybaText(e) }; kresli(); });
+  }
+
+  function lenNahlad(d) {
+    var o = d.osoba || {}, z = d.z || {};
+    return { ok: true, ja: false, spravca: false, kontrola: true, ucet: true, c: {}, ziadosti: [], log: [],
+      osoba: { id: o.id, prezyvka: o.prezyvka, farba: o.farba, aktivny: o.aktivny },
+      z: { meno: z.meno, priezvisko: z.priezvisko, titul: z.titul, pozicia: z.pozicia, zdrav_preukaz_do: z.zdrav_preukaz_do,
+        zdrav_netreba: z.zdrav_netreba != null ? z.zdrav_netreba : /^Rozvozár/.test(z.pozicia || ""),
+        zdrav_preukaz_foto: !!z.zdrav_preukaz_foto, zdrav_preukaz_foto2: !!z.zdrav_preukaz_foto2 } };
+  }
+  function zdravFotky(tiho) {
+    var os = Z.osoba;
+    rpc("zam_zdrav_fotky", { p_osoba: os }).then(function (c) {
+      return Promise.all((c || []).map(function (x) { return x ? DB.storage.from("zamestnanci").createSignedUrl(x, 300).then(function (r) { return r && r.data ? r.data.signedUrl : null; }) : null; }));
+    }).then(function (u) {
+      if (Z.osoba !== os) return;
+      u = (u || []).filter(Boolean);
+      if (!u.length) { if (!tiho) lbzInfo("Fotky preukazu sa nepodarilo načítať. Skús to znova alebo nahraj fotky nanovo."); return; }
+      ZD.foto = u; prekresli();
+    }).catch(function (x) { if (!tiho) lbzInfo(chybaText(x)); });
   }
 
   // ---------- zoznam ----------
@@ -113,7 +137,7 @@
         var vypl = Math.round(Math.min(11, x.vyplnene || 0) / 11 * 100);
         return '<button class="zm-karta' + (x.stav === "ukonceny" || !x.aktivny ? " zm-ukonc" : "") + '" data-zm-osoba="' + x.osoba_id + '">' + avatar(x) +
           '<span class="zm-k-txt"><b>' + esc(celeMeno(x)) + "</b>" + (celeMeno(x) !== x.prezyvka ? ' <span class="muted">(' + esc(x.prezyvka) + ")</span>" : "") +
-          (kontrola() ? "" : '<span class="zm-k-pod">' + esc([x.pozicia, x.typ_vztahu].filter(Boolean).join(" · ") || "doplň pracovný pomer") + "</span>") +
+          (kontrola() ? (x.pozicia ? '<span class="zm-k-pod">' + esc(x.pozicia) + "</span>" : "") : '<span class="zm-k-pod">' + esc([x.pozicia, x.typ_vztahu].filter(Boolean).join(" · ") || "doplň pracovný pomer") + "</span>") +
           '<span class="zm-k-stitky">' + (x.stav === "uchadzac" ? '<span class="pill info">pred nástupom</span>' : "") +
           (!x.ucet && !kontrola() ? '<span class="pill warn">bez účtu</span>' : "") + (x.dotaznik && !kontrola() ? '<span class="pill ok">✓ údaje potvrdené</span>' : "") + (kontrola() ? (x.zdrav_netreba ? '<span class="pill info">🩺 preukaz netreba</span>' : zdravPill(x.zdrav_do)) : zdravZoznam(x.osoba_id)) + "</span></span>" +
           (kontrola() ? "" : '<span class="zm-k-vypl" title="Vyplnené údaje"><i style="width:' + vypl + '%"></i></span>') + "</button>";
@@ -156,7 +180,7 @@
     if (z.zdrav_netreba) return '<section class="card zm-sekcia"><div class="zm-s-hl"><h3>🩺 Zdravotný preukaz</h3><span class="pill info">pri tejto práci netreba</span></div></section>';
     return '<section class="card zm-sekcia"><div class="zm-s-hl"><h3>🩺 Zdravotný preukaz</h3>' + zdravPill(z.zdrav_preukaz_do) + "</div>" +
       (ZD.foto ? '<div class="zm-zd-fotky">' + ZD.foto.map(function (u) { return u ? '<img class="zm-zd-img" src="' + esc(u) + '" alt="Zdravotný preukaz">' : ""; }).join("") + "</div>"
-        : z.zdrav_preukaz_foto || z.zdrav_preukaz_foto2 ? '<button type="button" class="btn-link" data-zm="zd-ukaz">🖼 Zobraziť fotky preukazu</button>' : '<p class="muted" style="margin:0">Fotka preukazu nie je nahraná.</p>') + "</section>";
+        : z.zdrav_preukaz_foto || z.zdrav_preukaz_foto2 ? '<p class="muted" style="margin:0">Načítavam fotky preukazu… <button type="button" class="btn-link" data-zm="zd-ukaz">🖼 Zobraziť</button></p>' : '<p class="muted" style="margin:0">Fotka preukazu nie je nahraná.</p>') + "</section>";
   }
   function zdravForm(d) {
     var doD = (d.z || {}).zdrav_preukaz_do, foto = (d.z || {}).zdrav_preukaz_foto || (d.z || {}).zdrav_preukaz_foto2, neurc = doD && doD >= NEURCITO;
@@ -202,7 +226,7 @@
   }
   function kartaZdrav() {
     var st = ZD.stav; if (!st) return "";
-    var m = st.moj;
+    var m = kontrola() ? null : st.moj;   // spoločný účet Prevádzka: žiadne osobné karty (ani keď je účet prepojený s kartou zamestnanca)
     if (st.spravca) {
       var l = st.ludia || []; if (!l.length) return "";
       var zle = l.filter(function (x) { return x.do && x.do < dnesIso(); }).length, chyba = l.filter(function (x) { return !x.do; }).length;
@@ -277,7 +301,7 @@
     var x = { farba: o.farba, meno: z.meno, prezyvka: o.prezyvka };
     var sekcie = SEKCIE.filter(function (s) { return d.kontrola ? false : !(s.id === "dokumenty" && !citatel()); });
     return spat + '<div class="zm-hlava">' + avatar(x, true) + '<div><h2>' + esc(celeMeno({ priezvisko: z.priezvisko, meno: z.meno, prezyvka: o.prezyvka })) + "</h2>" +
-      (d.kontrola ? "" : '<div class="sub">' + esc([o.prezyvka !== celeMeno({ priezvisko: z.priezvisko, meno: z.meno, prezyvka: o.prezyvka }) ? "v rozpise „" + o.prezyvka + "“" : "", z.pozicia, z.typ_vztahu, z.nastup ? "od " + datum(z.nastup) : ""].filter(Boolean).join(" · ")) + "</div>") +
+      (d.kontrola ? (z.pozicia ? '<div class="sub">' + esc(z.pozicia) + "</div>" : "") : '<div class="sub">' + esc([o.prezyvka !== celeMeno({ priezvisko: z.priezvisko, meno: z.meno, prezyvka: o.prezyvka }) ? "v rozpise „" + o.prezyvka + "“" : "", z.pozicia, z.typ_vztahu, z.nastup ? "od " + datum(z.nastup) : ""].filter(Boolean).join(" · ")) + "</div>") +
       (d.kontrola ? '<div class="zm-k-stitky"><span class="pill info">👁 len na nahliadnutie</span></div></div></div>' :
       '<div class="zm-k-stitky">' + (d.ucet ? '<span class="pill ok">má účet v appke</span>' : '<span class="pill warn">bez účtu v appke</span>') +
       (z.dotaznik ? '<span class="pill ok">údaje potvrdené ' + esc(datum(z.dotaznik)) + "</span>" : '<span class="pill info">údaje nepotvrdené</span>') + "</div>" +
@@ -285,7 +309,7 @@
       (d.ja && !z.dotaznik ? '<div class="card zm-vyzva"><b>📝 Skontroluj a doplň svoje údaje</b><p class="muted">Potrebujeme ich na pracovnú zmluvu a mzdy. Vidí ich len vedenie a účtovníčka.</p>' +
         '<label class="k-prepinac"><input type="checkbox" id="zm-suhlas"> <span>Súhlasím so spracúvaním osobných údajov na účely pracovnoprávneho vzťahu (V sedle u Falťanov s.r.o.).</span></label>' +
         '<button class="btn btn-primary" data-zm="potvrd">✅ Moje údaje sú správne</button></div>' : "") +
-      (d.spravca ? ziadostiHtml((d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }), false) :
+      (d.kontrola ? "" : d.spravca ? ziadostiHtml((d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }), false) :
         (d.ziadosti || []).filter(function (z) { return z.stav === "ziadost"; }).map(function (z) { return '<div class="card zm-caka">⏳ <b>Žiadosť o zmenu čaká na schválenie</b>' + zmenyHtml(z.zmeny, null) + "</div>"; }).join("") +
         (d.ziadosti || []).filter(function (z) { return z.stav !== "ziadost"; }).slice(0, 2).map(function (z) { return '<p class="muted zm-vybavena">' + (z.stav === "schvalena" ? "✅ Tvoja žiadosť o zmenu bola schválená" : "✖ Tvoja žiadosť o zmenu bola zamietnutá") + " (" + esc(datum(z.kedy)) + ")</p>"; }).join("")) +
       (zdravOk() || !zdravTreba() ? "" : zdravSekcia()) + dkSekcia() + (zdravOk() && zdravTreba() ? zdravSekcia() : "") + npSekcia() + paSekcia() +
@@ -487,11 +511,7 @@
     else if (a === "pa-zavri") { PA.dialog = false; prekresli(); }
     else if (a === "pa-mzdarke") paMzdarke();
     else if (a === "pa-dok") paNacitajDok();
-    else if (a === "zd-ukaz") {
-      rpc("zam_zdrav_fotky", { p_osoba: Z.osoba }).then(function (c) {
-        return Promise.all((c || []).map(function (x) { return x ? DB.storage.from("zamestnanci").createSignedUrl(x, 300).then(function (r) { return r && r.data ? r.data.signedUrl : null; }) : null; }));
-      }).then(function (u) { u = (u || []).filter(Boolean); if (!u.length) { lbzInfo("Fotky preukazu sa nepodarilo načítať. Skús to znova alebo nahraj fotky nanovo."); return; } ZD.foto = u; prekresli(); }).catch(function (x) { lbzInfo(chybaText(x)); });
-    }
+    else if (a === "zd-ukaz") zdravFotky(false);
     else if (a === "potvrd") {
       var s = document.getElementById("zm-suhlas");
       if (!s || !s.checked) { lbzInfo("Najprv zaškrtni súhlas so spracúvaním osobných údajov."); return; }
