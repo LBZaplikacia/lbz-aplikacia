@@ -22,6 +22,11 @@
     if (kratko) return ' <b class="em-poc">' + cislo(nep || p.spolu) + "</b>";
     return (nep ? "<b>" + cislo(nep) + "</b> / " : "") + cislo(p.spolu);
   }
+  // názov a farba štítku pri e-maile: AI kategória alebo záložka (vlastný štítok schránky)
+  function katInfo(k) {
+    if (!k || k === "-") return null; if (KAT[k]) return KAT[k];
+    var z = (S.zlozky || []).filter(function (x) { return x[0] === k; })[0]; return z ? [z[1], farba(z[1])] : null;
+  }
   var RE_OBJ = /\b[Ff][Oo0]\d{6}\b/g;   // čísla objednávok FO003654 (aj fo… / F0…)
 
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
@@ -49,10 +54,8 @@
   function nacitajZlozky() {
     if (S.zlozky) return;
     S.zlozky = [];
-    volaj({ akcia: "stitky" }).then(function (d) {
-      S.zlozky = (d.stitky || []).filter(function (l) { return l.type === "user"; })
-        .map(function (l) { return ["" + l.id, l.name, "🏷️", ""]; })
-        .sort(function (a, b) { return a[1].localeCompare(b[1], "sk"); });
+    volaj({ akcia: "zalozky" }).then(function (d) {
+      S.zlozky = (d.zalozky || []).map(function (l) { return ["" + l.id, l.nazov, "🏷️", "", l.popis || ""]; });
       kresli();
     }).catch(function () { S.zlozky = null; });
   }
@@ -198,6 +201,25 @@
     kresli();
     volaj({ akcia: "upravit", id: k.id, obnov: true, pridaj: k.odkial ? [k.odkial] : [] }).then(function () { nacitajPocty(); }).catch(function (er) { S.sprava = { typ: "chyba", text: "Nevrátené: " + chyba(er) }; nacitaj(); });
   }
+  // správa záložiek: premenovať, popis pre AI, zmazať, pridať; schránka bez záložiek si ich môže vytvoriť z AI kategórií
+  function kresliZlSpravu() {
+    var z = S.zlozky || [];
+    return '<div class="em-zls"><div class="em-r1"><b>🏷️ Záložky schránky</b><button class="em-x" data-em="zlsprava" aria-label="Zavrieť">×</button></div>' +
+      '<p class="muted" style="margin:4px 0 8px;font-size:.85em">AI triedi nové e-maily do týchto záložiek podľa názvu, popisu a e-mailov, ktoré v nich už sú. E-mail ostane v Doručených, pridá sa mu záložka (aj v Gmaile).</p>' +
+      (!z.length ? '<p style="margin:0 0 8px">Schránka zatiaľ nemá záložky.</p><button class="btn" data-em="zlzai"' + (S.zlPrace ? " disabled" : "") + ">✨ Vytvoriť záložky podľa AI kategórií</button>" : "") +
+      z.map(function (x) {
+        return '<div class="em-zlr"><input data-zl-n="' + esc(x[0]) + '" value="' + esc(x[1]) + '" aria-label="Názov záložky">' +
+          '<input data-zl-p="' + esc(x[0]) + '" value="' + esc(x[4] || "") + '" placeholder="popis pre AI (čo sem patrí)" aria-label="Popis pre AI">' +
+          '<button class="btn ghost" data-em-zluloz="' + esc(x[0]) + '" title="Uložiť"' + (S.zlPrace ? " disabled" : "") + '>💾</button><button class="btn ghost" data-em-zlzmaz="' + esc(x[0]) + '" title="Zmazať záložku"' + (S.zlPrace ? " disabled" : "") + ">🗑️</button></div>";
+      }).join("") +
+      '<div class="em-zlr"><input data-zl-n="" placeholder="Nová záložka – názov"><input data-zl-p="" placeholder="popis pre AI (čo sem patrí)">' +
+      '<button class="btn" data-em-zluloz="new"' + (S.zlPrace ? " disabled" : "") + ">➕ Pridať</button></div></div>";
+  }
+  function zlAkcia(telo, ok) {
+    S.zlPrace = true; S.sprava = null; kresli();
+    volaj(telo).then(function (d) { S.zlPrace = false; S.zlozky = null; S.d = null; S.sprava = { typ: "ok", text: d.text || ok }; nacitajZlozky(); nacitaj(); })
+      .catch(function (e) { S.zlPrace = false; S.sprava = { typ: "chyba", text: chyba(e) }; kresli(); });
+  }
   function kresliZoznam() {
     var schr = S.schranka || (ROLA === "zakaznicky_servis" ? "eshop@legendarnebuchty.sk" : "ceo@legendarnebuchty.sk");
     var akt = STITKY.concat(S.zlozky || []).filter(function (s) { return s[0] === S.stitok; })[0] || STITKY[0];
@@ -207,16 +229,17 @@
         return '<button role="menuitem" class="em-mi' + (S.stitok === s[0] && !S.hladaj ? " active" : "") + '" data-em-stitok="' + s[0] + '"><span>' + s[2] + " " + s[1] + '</span><span class="em-mi-p">' + pocetHtml(s) + "</span></button>";
       }).join("") + ((S.zlozky || []).length ? '<div class="em-menu-s">Záložky</div>' + S.zlozky.map(function (s) {
         return '<button role="menuitem" class="em-mi' + (S.stitok === s[0] && !S.hladaj ? " active" : "") + '" data-em-stitok="' + esc(s[0]) + '"><span>' + s[2] + " " + esc(s[1]) + "</span></button>";
-      }).join("") : "") + "</div>" : "") + "</div>" +
+      }).join("") : "") + '<button role="menuitem" class="em-mi" data-em="zlsprava"><span>⚙️ Upraviť záložky</span></button>' + "</div>" : "") + "</div>" +
       '<form class="em-hladaj" data-em-form="hladaj" role="search"><span class="em-lupa" aria-hidden="true">🔍</span>' +
       '<input id="em-q" type="search" aria-label="Hľadať v pošte ' + esc(schr) + '" placeholder="Hľadať v pošte" value="' + esc(S.hladaj) + '">' +
       (S.hladaj ? '<button class="em-x" type="button" data-em="zrushladaj" aria-label="Zrušiť hľadanie">×</button>' : "") + "</form></div>" + hlaska();
+    if (S.zlSprava) h += kresliZlSpravu();
     if (S.chyba) return h + '<p class="em-chyba">' + esc(S.chyba) + "</p>";
     if (!S.d) return h + '<p class="muted">Načítavam…</p>';
     if (!S.d.length) return h + '<div class="em-prazdne">Žiadne e-maily.</div>';
     var pocty = {}; S.d.forEach(function (v) { if (v.kategoria) pocty[v.kategoria] = (pocty[v.kategoria] || 0) + 1; });
     if (Object.keys(pocty).length) h += '<div class="em-filtre em-pas em-kat"><button class="chip' + (!S.kat ? " active" : "") + '" data-em-kat="">Všetko <b class="em-poc">' + S.d.length + "</b></button>" +
-      Object.keys(KAT).filter(function (k) { return pocty[k]; }).map(function (k) { return '<button class="chip' + (S.kat === k ? " active" : "") + '" data-em-kat="' + k + '"><i class="em-bod" style="background:' + KAT[k][1] + '"></i>' + KAT[k][0] + ' <b class="em-poc">' + pocty[k] + "</b></button>"; }).join("") + "</div>";
+      Object.keys(pocty).filter(function (k) { return katInfo(k); }).sort(function (a, b) { return pocty[b] - pocty[a]; }).map(function (k) { var ki = katInfo(k); return '<button class="chip' + (S.kat === k ? " active" : "") + '" data-em-kat="' + esc(k) + '"><i class="em-bod" style="background:' + ki[1] + '"></i>' + esc(ki[0]) + ' <b class="em-poc">' + pocty[k] + "</b></button>"; }).join("") + "</div>";
     var lst = S.kat ? S.d.filter(function (v) { return v.kategoria === S.kat; }) : S.d;
     h += '<div class="em-zoznam">' + lst.map(function (v) {
       if (v.koncept) return '<button class="em-pol" data-em-koncept="' + esc(v.id) + '"><span class="em-av" style="background:#9e9e9e">📝</span><span class="em-telo">' +
@@ -225,7 +248,7 @@
       return '<button class="em-pol' + (v.neprecitane ? " em-nep" : "") + '" data-em-id="' + esc(v.id) + '">' +
         '<span class="em-av" style="background:' + farba(adresa(v.od)) + '">' + esc(inicial(v.od)) + '</span><span class="em-telo">' +
         '<div class="em-r1"><span class="em-od">' + esc(meno(v.od)) + (v.pocet > 1 ? ' <small>(' + v.pocet + ")</small>" : "") + "</span><small>" + (v.prilohy ? "📎 " : "") + esc(kedy(v.datum)) + "</small></div>" +
-        '<div class="em-pred">' + (v.kategoria && KAT[v.kategoria] ? '<span class="em-stit" style="background:' + KAT[v.kategoria][1] + '">' + KAT[v.kategoria][0] + "</span> " : "") +
+        '<div class="em-pred">' + (katInfo(v.kategoria) ? '<span class="em-stit" style="background:' + katInfo(v.kategoria)[1] + '">' + esc(katInfo(v.kategoria)[0]) + "</span> " : "") +
         ((v.objednavky || []).length ? '<span class="em-objc">📦 ' + esc(v.objednavky.join(", ")) + "</span> " : "") + esc(v.predmet || "(bez predmetu)") + "</div><div class=\"em-uk\">" + esc(v.ukazka || "") + "</div></span></button>";
     }).join("") + "</div>";
     h += '<button class="em-fab" data-em="novy" aria-label="Napísať nový e-mail">✏️ Napísať</button>';
@@ -293,8 +316,19 @@
   function klik(e) {
     if (Date.now() - poTahu < 450) { e.preventDefault(); return; }   // klik hneď po potiahnutí neotvára e-mail
     if (S.menu && !e.target.closest(".em-menu-w")) { S.menu = false; kresli(); }
-    var t = e.target.closest("[data-em],[data-em-id],[data-em-koncept],[data-em-stitok],[data-em-pril],[data-em-zrus],[data-em-kat],[data-em-obj],[data-em-zl]"); if (!t || !koren.contains(t)) return;
+    var t = e.target.closest("[data-em],[data-em-id],[data-em-koncept],[data-em-stitok],[data-em-pril],[data-em-zrus],[data-em-kat],[data-em-obj],[data-em-zl],[data-em-zluloz],[data-em-zlzmaz]"); if (!t || !koren.contains(t)) return;
     var d = t.dataset;
+    if (d.emZluloz) {
+      var idz = d.emZluloz === "new" ? "" : d.emZluloz, sel = function (a) { return koren.querySelector("[" + a + '="' + (window.CSS && CSS.escape ? CSS.escape(idz) : idz) + '"]'); };
+      var nz = sel("data-zl-n"), pz = sel("data-zl-p"), nazov = nz ? nz.value.trim() : "";
+      if (!nazov) { S.sprava = { typ: "chyba", text: "Napíš názov záložky." }; kresli(); return; }
+      zlAkcia({ akcia: "zalozka_uloz", id: idz || null, nazov: nazov, popis: pz ? pz.value.trim() : "" }, idz ? "Záložka uložená." : "Záložka pridaná."); return;
+    }
+    if (d.emZlzmaz) {
+      var zz = (S.zlozky || []).filter(function (x) { return x[0] === d.emZlzmaz; })[0];
+      if (!(window.lbzPotvrd || window.confirm)("Zmazať záložku „" + (zz ? zz[1] : "") + "“? E-maily sa nezmažú, len stratia túto záložku (aj v Gmaile).")) return;
+      zlAkcia({ akcia: "zalozka_zmaz", id: d.emZlzmaz }, "Záložka zmazaná."); return;
+    }
     if (d.emZl) {
       var zl = (S.zlozky || []).filter(function (x) { return x[0] === d.emZl; })[0]; S.vyberZl = false;
       var odober = ["INBOX"]; if (S.stitok && S.stitok !== d.emZl && STITKY.every(function (x) { return x[0] !== S.stitok; })) odober.push(S.stitok);   // presun z inej záložky
@@ -336,6 +370,8 @@
       case "archiv": uprav({ odober: ["INBOX"] }, "Archivované."); return;
       case "neprec": uprav({ pridaj: ["UNREAD"] }, "Označené ako neprečítané."); return;
       case "kos": uprav({ kos: true }, "Presunuté do koša."); return;
+      case "zlsprava": S.zlSprava = !S.zlSprava; S.menu = false; if (S.zlSprava) nacitajZlozky(); kresli(); return;
+      case "zlzai": zlAkcia({ akcia: "zalozky_z_ai" }, "Záložky vytvorené."); return;
       case "zlozka": S.vyberZl = !S.vyberZl; if (S.vyberZl) nacitajZlozky(); kresli(); return;
     }
   }
@@ -346,6 +382,8 @@
 
   var st = document.createElement("style");
   st.textContent =
+    ".em-zls{margin:0 0 10px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}.em-zlr{display:flex;gap:6px;align-items:center;margin-top:6px}" +
+    ".em-zlr input{min-width:0;flex:1}.em-zlr input[data-zl-p]{flex:1.6}@media (max-width:600px){.em-zlr{flex-wrap:wrap}.em-zlr input{flex:1 1 100%}}" +
     ".em-zl{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}.em-zl .em-menu-s{width:100%}" +
     ".em-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.em-schr{margin:0 0 8px;font-size:.85em}" +
     ".em-filtre{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.em-hladaj{display:flex;gap:6px;margin-bottom:10px}" +
