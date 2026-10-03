@@ -45,7 +45,19 @@
   }
 
   // ---------- načítanie ----------
+  // vlastné záložky (štítky) schránky – zobrazia sa v menu priečinkov a dá sa do nich presunúť e-mail (návrh Natálie 3. 10.)
+  function nacitajZlozky() {
+    if (S.zlozky) return;
+    S.zlozky = [];
+    volaj({ akcia: "stitky" }).then(function (d) {
+      S.zlozky = (d.stitky || []).filter(function (l) { return l.type === "user"; })
+        .map(function (l) { return ["" + l.id, l.name, "🏷️", ""]; })
+        .sort(function (a, b) { return a[1].localeCompare(b[1], "sk"); });
+      kresli();
+    }).catch(function () { S.zlozky = null; });
+  }
   function nacitajPocty() {
+    nacitajZlozky();
     volaj({ akcia: "pocty" }).then(function (d) { S.pocty = d.pocty || null; S.schranka = d.schranka || S.schranka; kresli(); }).catch(function () { /* počty sú bonus */ });
   }
   function nacitaj(dalsie) {
@@ -188,12 +200,14 @@
   }
   function kresliZoznam() {
     var schr = S.schranka || (ROLA === "zakaznicky_servis" ? "eshop@legendarnebuchty.sk" : "ceo@legendarnebuchty.sk");
-    var akt = STITKY.filter(function (s) { return s[0] === S.stitok; })[0] || STITKY[0];
+    var akt = STITKY.concat(S.zlozky || []).filter(function (s) { return s[0] === S.stitok; })[0] || STITKY[0];
     var h = '<div class="em-lista"><div class="em-menu-w"><button class="em-menu-b" type="button" data-em="menu" aria-haspopup="menu" aria-expanded="' + (S.menu ? "true" : "false") + '">' +
       (S.hladaj ? "🔍 Výsledky" : akt[2] + " " + akt[1] + pocetHtml(akt, true)) + ' <span aria-hidden="true">▾</span></button>' +
       (S.menu ? '<div class="em-menu" role="menu"><div class="em-menu-s">' + esc(schr) + "</div>" + STITKY.map(function (s) {
         return '<button role="menuitem" class="em-mi' + (S.stitok === s[0] && !S.hladaj ? " active" : "") + '" data-em-stitok="' + s[0] + '"><span>' + s[2] + " " + s[1] + '</span><span class="em-mi-p">' + pocetHtml(s) + "</span></button>";
-      }).join("") + "</div>" : "") + "</div>" +
+      }).join("") + ((S.zlozky || []).length ? '<div class="em-menu-s">Záložky</div>' + S.zlozky.map(function (s) {
+        return '<button role="menuitem" class="em-mi' + (S.stitok === s[0] && !S.hladaj ? " active" : "") + '" data-em-stitok="' + esc(s[0]) + '"><span>' + s[2] + " " + esc(s[1]) + "</span></button>";
+      }).join("") : "") + "</div>" : "") + "</div>" +
       '<form class="em-hladaj" data-em-form="hladaj" role="search"><span class="em-lupa" aria-hidden="true">🔍</span>' +
       '<input id="em-q" type="search" aria-label="Hľadať v pošte ' + esc(schr) + '" placeholder="Hľadať v pošte" value="' + esc(S.hladaj) + '">' +
       (S.hladaj ? '<button class="em-x" type="button" data-em="zrushladaj" aria-label="Zrušiť hľadanie">×</button>' : "") + "</form></div>" + hlaska();
@@ -222,7 +236,11 @@
     var v = S.vlakno;
     var h = '<div class="em-hlava"><button class="btn ghost" data-em="spat">← Späť</button><span class="em-akcie">' +
       '<button class="btn ghost" data-em="archiv" title="Archivovať">🗄️</button><button class="btn ghost" data-em="neprec" title="Označiť ako neprečítané">✉️</button>' +
-      '<button class="btn ghost" data-em="kos" title="Do koša">🗑️</button></span></div>' + hlaska();
+      '<button class="btn ghost" data-em="zlozka" title="Presunúť do záložky">📁</button>' +
+      '<button class="btn ghost" data-em="kos" title="Do koša">🗑️</button></span></div>' + hlaska() +
+      (S.vyberZl ? '<div class="em-zl"><div class="em-menu-s">📁 Presunúť do záložky</div>' + ((S.zlozky || []).length ? S.zlozky.map(function (s) {
+        return '<button class="chip" data-em-zl="' + esc(s[0]) + '">🏷️ ' + esc(s[1]) + "</button>"; }).join("") : '<span class="muted">Schránka nemá žiadne záložky.</span>') +
+        ' <button class="btn ghost" data-em="zlozka">Zrušiť</button></div>' : "");
     if (!v.spravy) return h + '<p class="muted">Načítavam…</p>';
     h += '<h3 class="em-nadpis">' + esc((v.spravy[0] && v.spravy[0].predmet) || "(bez predmetu)") + "</h3>";
     h += v.spravy.map(function (m, i) {
@@ -275,8 +293,13 @@
   function klik(e) {
     if (Date.now() - poTahu < 450) { e.preventDefault(); return; }   // klik hneď po potiahnutí neotvára e-mail
     if (S.menu && !e.target.closest(".em-menu-w")) { S.menu = false; kresli(); }
-    var t = e.target.closest("[data-em],[data-em-id],[data-em-koncept],[data-em-stitok],[data-em-pril],[data-em-zrus],[data-em-kat],[data-em-obj]"); if (!t || !koren.contains(t)) return;
+    var t = e.target.closest("[data-em],[data-em-id],[data-em-koncept],[data-em-stitok],[data-em-pril],[data-em-zrus],[data-em-kat],[data-em-obj],[data-em-zl]"); if (!t || !koren.contains(t)) return;
     var d = t.dataset;
+    if (d.emZl) {
+      var zl = (S.zlozky || []).filter(function (x) { return x[0] === d.emZl; })[0]; S.vyberZl = false;
+      var odober = ["INBOX"]; if (S.stitok && S.stitok !== d.emZl && STITKY.every(function (x) { return x[0] !== S.stitok; })) odober.push(S.stitok);   // presun z inej záložky
+      uprav({ pridaj: [d.emZl], odober: odober }, "📁 Presunuté do záložky " + (zl ? zl[1] : "") + "."); return;
+    }
     if (S.menu && d.em !== "menu") S.menu = false;
     if (d.emKat !== undefined) { S.kat = d.emKat; kresli(); return; }
     if (d.emObj) { var c = d.emObj; S.obj[c] = "…"; kresli();
@@ -293,7 +316,7 @@
     if (d.emPril) { var x = d.emPril.split(":"), m = S.vlakno.spravy[+x[0]]; stiahni(m.id, m.prilohy[+x[1]]); return; }
     if (d.emZrus) { citajPole(); S.pis.prilohy.splice(+d.emZrus, 1); kresli(); return; }
     switch (d.em) {
-      case "spat": S.vlakno = null; S.pis = null; S.sprava = null; kresli(); if (!S.d) nacitaj(); return;
+      case "spat": S.vyberZl = false; S.vlakno = null; S.pis = null; S.sprava = null; kresli(); if (!S.d) nacitaj(); return;
       case "zavri": S.sprava = null; S.kos = null; kresli(); return;
       case "vratkos": vratZKosa(); return;
       case "menu": S.menu = !S.menu; kresli(); return;
@@ -313,6 +336,7 @@
       case "archiv": uprav({ odober: ["INBOX"] }, "Archivované."); return;
       case "neprec": uprav({ pridaj: ["UNREAD"] }, "Označené ako neprečítané."); return;
       case "kos": uprav({ kos: true }, "Presunuté do koša."); return;
+      case "zlozka": S.vyberZl = !S.vyberZl; if (S.vyberZl) nacitajZlozky(); kresli(); return;
     }
   }
   function odoslanieFormu(e) {
@@ -322,6 +346,7 @@
 
   var st = document.createElement("style");
   st.textContent =
+    ".em-zl{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}.em-zl .em-menu-s{width:100%}" +
     ".em-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.em-schr{margin:0 0 8px;font-size:.85em}" +
     ".em-filtre{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.em-hladaj{display:flex;gap:6px;margin-bottom:10px}" +
     ".em-hladaj{position:relative;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:28px;padding:2px 8px 2px 14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}" +
@@ -360,7 +385,7 @@
   document.head.appendChild(st);
 
   window.LBZ_EMAIL = {
-    nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; S.d = null; S.vlakno = null; S.pis = null; S.sprava = null; },
+    nastavDb: function (klient, rola) { DB = klient || null; ROLA = klient ? rola : null; S.d = null; S.vlakno = null; S.pis = null; S.sprava = null; S.zlozky = null; S.vyberZl = false; },
     mozem: mozem,
     mount: function (el) {
       if (koren !== el) {

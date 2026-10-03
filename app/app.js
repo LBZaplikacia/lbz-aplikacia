@@ -5,7 +5,7 @@
 (function () {
   "use strict";
 
-  var VERZIA = "0.30.75 BETA";
+  var VERZIA = "0.30.76 BETA";
 
   // ---------- roly a moduly (v ostrom režime prídu z databázy: rpc('moje_moduly')) ----------
   var ROLY = {
@@ -391,8 +391,18 @@
     var viacAktivne = ostatne.some(function (m) { return m.kod === stav.modul; });
     var spodna = hlavne.map(function (m) { return polozka(m, "bi"); }).join("") +
       (ostatne.length ? '<button class="bi" data-viac="1"' + (viacAktivne ? ' aria-current="page"' : "") + ' aria-expanded="' + !!stav.viac + '"><span class="ri-ik">' + ikona("viac") + "</span><span>Viac</span></button>" : "");
-    var panel = stav.viac && ostatne.length ? '<button class="viac-pozadie" data-viac="0" aria-label="Zavrieť"></button><div class="viac-panel" role="dialog" aria-label="Ďalšie moduly">' +
-      ostatne.map(function (m) { return polozka(m, "vp"); }).join("") + "</div>" : "";
+    // panel Viac: moduly zoradené do skupín s nadpisom (Terézia 3. 10.)
+    var SKUPINY = [["Objednávky a výroba", ["objednavky", "furmanky", "balenie", "sklad", "trasa"]], ["Komunikácia", ["chat", "email", "komentare", "newsletter"]],
+      ["Ľudia a práca", ["dochadzka", "rozpis", "zamestnanci", "cestovne"]], ["Autá", ["kniha_jazd", "vozovy_park"]], ["Ostatné", []]];
+    var skup = function (k) { for (var i = 0; i < SKUPINY.length - 1; i++) { var j = SKUPINY[i][1].indexOf(k); if (j > -1) return i * 100 + j; } return (SKUPINY.length - 1) * 100 + (k === "nastavenia" ? 99 : 0); };
+    var zor = ostatne.map(function (m, i) { return { m: m, k: skup(m.kod) * 1000 + i }; }).sort(function (x, y) { return x.k - y.k; });
+    var poslSk = -1;
+    var panel = stav.viac && ostatne.length ? '<button class="viac-pozadie" data-viac="0" aria-label="Zavrieť"></button><div class="viac-panel" role="dialog" aria-label="Ďalšie moduly" style="max-height:72vh;overflow-y:auto">' +
+      zor.map(function (z) {
+        var g = Math.floor(z.k / 100000), nad = "";
+        if (g !== poslSk) { poslSk = g; nad = '<div style="grid-column:1/-1;font:700 11px var(--font-body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:' + (z === zor[0] ? "2px" : "8px") + ' 4px 0">' + SKUPINY[g][0] + "</div>"; }
+        return nad + polozka(z.m, "vp");
+      }).join("") + "</div>" : "";
     var rolaNazov = (ROLY[stav.rola] || {}).nazov || stav.rola;
 
     el(
