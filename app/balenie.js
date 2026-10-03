@@ -246,7 +246,7 @@
 
   function pohladObjednavka() {
     var o = B.obj; if (!o) return "";
-    var head = '<div class="head"><div><button class="btn-link spat" data-b="spat-furmanka">← ' + esc((B.fData && B.fData.furmanka && B.fData.furmanka.nazov) || "Furmanka") + "</button>" +
+    var head = '<div class="head"><div>' + (B.odber ? '<button class="btn-link spat" data-b="spat-prehlad">← Prehľad</button>' : '<button class="btn-link spat" data-b="spat-furmanka">← ' + esc((B.fData && B.fData.furmanka && B.fData.furmanka.nazov) || "Furmanka") + "</button>") +
       "<h2>" + esc(o.meno || o.firma || "-") + "</h2>" +
       '<div class="sub">obj. ' + esc(o.cislo) + " · " + esc(o.mesto || "") + " · " + esc(o.platba || "DOBIERKA") + " " + esc(suma(o.suma)) + "</div></div>" +
       '<span class="head-tl"><button class="btn" data-b="stitok-jeden" title="Vytlačiť štítok len tejto objednávky">🖨️ Štítok</button>' + stavPill(o.stav, o.dovod) + "</span></div>";
@@ -272,8 +272,9 @@
       (o.stav === "odlozena" && o.dovod ? '<p class="s-varovanie">Odložená: ' + esc(o.dovod) + "</p>" : "") +
       skenBox("Naskenujte balík") + posl + "<!--KAM-->" +
       '<section class="card b-polozky">' + (pol || '<p class="muted" style="margin:0">Objednávka nemá položky.</p>') + "</section>" + baliky +
-      '<div class="b-akcie"><button class="btn b-tl-odl" data-b="odlozit">⏸️ ODLOŽIŤ</button>' +
-      '<button class="btn b-tl-hotovo" data-b="hotovo"' + (o.kompletne && o.stav !== "zabalena" ? "" : " disabled") + ">✅ HOTOVO</button></div>" +
+      (B.odber ? '<p class="muted" style="margin:8px 0 0">🛍️ Osobný odber: buchty s kódom naskenujte (odpíšu sa zo skladu), ostatné potvrďte tlačidlom ✓ všetko. Potom VYDANÉ – objednávka zmizne z Osobných odberov.</p>' : "") +
+      '<div class="b-akcie">' + (B.odber ? "" : '<button class="btn b-tl-odl" data-b="odlozit">⏸️ ODLOŽIŤ</button>') +
+      '<button class="btn b-tl-hotovo" data-b="hotovo"' + (o.kompletne && o.stav !== "zabalena" ? "" : " disabled") + ">" + (B.odber ? "✅ VYDANÉ – uzavrieť" : "✅ HOTOVO") + "</button></div>" +
       '<p class="b-znova"><button class="btn-link" data-b="znova">Začať odznova (vráti všetky balíky na sklad)</button></p>';
   }
 
@@ -381,6 +382,7 @@
       case "zavri": B.dialog = null; prekresli(); break;
       case "obnov": B.sprava = null; if (B.pohlad === "zoznam") nacitajZoznam(); else nacitajFurmanku(); break;
       case "spat-zoznam": vypniKameru(); B.pohlad = "zoznam"; B.fId = null; B.fData = null; B.sprava = null; nacitajZoznam(); break;
+      case "spat-prehlad": vypniKameru(); B.odber = false; B.pohlad = "zoznam"; B.cislo = null; B.obj = null; B.sprava = null; B.posledny = null; var ph = document.querySelector('[data-mod="prehlad"]'); if (ph) ph.click(); else prekresli(); break;
       case "spat-furmanka": B.pohlad = "furmanka"; B.cislo = null; B.obj = null; B.sprava = null; B.posledny = null; prekresli(); nacitajFurmanku(true); obal(); break;
       case "kamera": zapniKameru(d.smer); break;
       case "kamera-stop": vypniKameru(); break;
@@ -399,6 +401,9 @@
       case "stitok-jeden": if (B.obj) tlacStitkyPre([B.obj.cislo]); break;
       case "hotovo":
         po(rpc("balenie_stav", { p_cislo: B.obj.cislo, p_stav: "zabalena" }), "Zabalené: " + (B.obj.meno || B.obj.cislo)).then(function (r) {
+          if (r && r.ok && B.odber) { pip(true); vypniKameru(); B.odber = false; B.pohlad = "zoznam"; B.cislo = null; B.obj = null; B.posledny = null; B.sprava = null;
+            if (window.LBZ_OBJEDNAVKY && window.LBZ_OBJEDNAVKY.obnovOdbery) window.LBZ_OBJEDNAVKY.obnovOdbery();
+            var pr = document.querySelector('[data-mod="prehlad"]'); if (pr) pr.click(); else prekresli(); return; }
           if (r && r.ok) { pip(true); B.pohlad = "furmanka"; B.cislo = null; B.obj = null; B.posledny = null; prekresli(); nacitajFurmanku(true); obal(); }
         });
         break;
@@ -440,8 +445,11 @@
       el.addEventListener("submit", odoslanie);
       el.addEventListener("keydown", klaves);
       prekresli();
+      if (B.cakaOdber) { var c = B.cakaOdber; B.cakaOdber = null; otvorObjednavku(c); return; }
       if (B.pohlad === "zoznam") nacitajZoznam(); else nacitajFurmanku(true);
     },
+    // osobný odber z Prehľadu: rovnaké balenie (sken / ✓ všetko), bez furmanky; VYDANÉ ju uzavrie
+    odber: function (cislo) { B.odber = true; B.cakaOdber = cislo; B.fId = null; B.fData = null; B.cislo = null; B.obj = null; B.sprava = null; B.posledny = null; B.dialog = null; B.pohlad = "objednavka"; },
     odchod: function () { if (kamera || kameraStav !== "vyp") vypniKameru(); },
     karta: function () {
       if (!B.karta && DB) {

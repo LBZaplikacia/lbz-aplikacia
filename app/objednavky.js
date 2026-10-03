@@ -454,6 +454,7 @@ if (f.id === "o-stav") {
         '<span style="display:block;margin-top:4px">' + (o.polozky || []).map(function (p) { return '<span style="display:flex;gap:8px;padding:1px 0"><b style="min-width:2.6em;text-align:right;white-space:nowrap">' + esc(p.ks) + '×</b><span>' + esc(p.nazov) + "</span></span>"; }).join("") + "</span>" +
         window.LBZ_POZN(o.poznamka, o.upozornenie) + "</span>" +
         '<span class="num">' + esc(eur(o.suma)) + "<br>" + esc(o.platba || "") + (o.telefon ? '<br><a href="tel:' + esc(o.telefon) + '">📞</a>' : "") +
+        (window.LBZ_BALENIE && window.LBZ_BALENIE.mozem() ? '<br><button type="button" class="btn btn-primary" style="min-height:36px;padding:6px 10px;margin-top:6px" data-mod="balenie" data-c="' + esc(o.cislo) + '" onclick="window.LBZ_BALENIE.odber(this.dataset.c)">📦 Vydať</button>' : "") +
         '<br><button type="button" class="btn" style="min-height:36px;padding:6px 10px;margin-top:6px" data-c="' + esc(o.cislo) + '" onclick="window.LBZ_OBJ_STITOK && window.LBZ_OBJ_STITOK(this.dataset.c)">🏷️ Štítok</button>' + "</span></div>";
     }).join("") + "</div></section>";
   }
